@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'supabase_service.dart';
+import 'admin_auth_service.dart';
+import 'auth_page.dart';
 
 void main() {
   runApp(const ShamFlixApp());
@@ -101,11 +103,7 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
       child: Row(
         children: [
-          Container(
-            width: 4,
-            height: 22,
-            color: gold,
-          ),
+          Container(width: 4, height: 22, color: gold),
           const SizedBox(width: 9),
           Text(
             title,
@@ -278,11 +276,7 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
             child: Row(
               children: [
-                const Icon(
-                  Icons.movie_filter,
-                  color: gold,
-                  size: 32,
-                ),
+                const Icon(Icons.movie_filter, color: gold, size: 32),
                 const SizedBox(width: 9),
                 const Text(
                   'Sham',
@@ -314,7 +308,6 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
@@ -384,9 +377,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-
           sectionTitle('التصنيفات'),
-
           SizedBox(
             height: 43,
             child: ListView.builder(
@@ -423,19 +414,8 @@ class _HomePageState extends State<HomePage> {
               },
             ),
           ),
-
-          mediaSection(
-            'أحدث الأفلام',
-            movies,
-            isSeries: false,
-          ),
-
-          mediaSection(
-            'المسلسلات',
-            series,
-            isSeries: true,
-          ),
-
+          mediaSection('أحدث الأفلام', movies, isSeries: false),
+          mediaSection('المسلسلات', series, isSeries: true),
           const SizedBox(height: 30),
         ],
       ),
@@ -445,11 +425,7 @@ class _HomePageState extends State<HomePage> {
   Widget moviesPage() {
     return ListView(
       children: [
-        mediaSection(
-          'الأفلام',
-          movies,
-          isSeries: false,
-        ),
+        mediaSection('الأفلام', movies, isSeries: false),
       ],
     );
   }
@@ -457,11 +433,7 @@ class _HomePageState extends State<HomePage> {
   Widget tvPage() {
     return ListView(
       children: [
-        mediaSection(
-          'المسلسلات',
-          series,
-          isSeries: true,
-        ),
+        mediaSection('المسلسلات', series, isSeries: true),
       ],
     );
   }
@@ -515,9 +487,7 @@ class _HomePageState extends State<HomePage> {
                     backgroundColor: bg,
                     backgroundImage:
                         valueOf(channel['logo_url']).isNotEmpty
-                            ? NetworkImage(
-                                valueOf(channel['logo_url']),
-                              )
+                            ? NetworkImage(valueOf(channel['logo_url']))
                             : null,
                     child: valueOf(channel['logo_url']).isEmpty
                         ? const Icon(Icons.live_tv, color: gold)
@@ -556,31 +526,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget otherPage(String title, IconData icon) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: gold, size: 65),
-          const SizedBox(height: 15),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 23,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'سيتم تجهيز هذا القسم قريباً',
-            style: TextStyle(color: Colors.white54),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -588,7 +533,8 @@ class _HomePageState extends State<HomePage> {
       moviesPage(),
       tvPage(),
       channelsPage(),
-      otherPage('المفضلة', Icons.favorite),
+      const FavoritesPage(),
+      const AccountPage(),
     ];
 
     return Directionality(
@@ -631,7 +577,289 @@ class _HomePageState extends State<HomePage> {
               icon: Icon(Icons.favorite_outline),
               label: 'المفضلة',
             ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person, color: gold),
+              label: 'حسابي',
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class AccountPage extends StatefulWidget {
+  const AccountPage({super.key});
+
+  @override
+  State<AccountPage> createState() => _AccountPageState();
+}
+
+class _AccountPageState extends State<AccountPage> {
+  bool loading = false;
+
+  Future<void> openLogin() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AuthPage(),
+      ),
+    );
+
+    if (mounted) setState(() {});
+  }
+
+  Future<void> logout() async {
+    setState(() => loading = true);
+
+    try {
+      await AuthService.signOut();
+
+      if (!mounted) return;
+
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تسجيل الخروج')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر تسجيل الخروج')),
+      );
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Widget accountTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    VoidCallback? onTap,
+  }) {
+    return Card(
+      color: panel,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ListTile(
+        leading: Icon(icon, color: gold),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        subtitle: subtitle == null
+            ? null
+            : Text(
+                subtitle,
+                style: const TextStyle(color: Colors.white54),
+              ),
+        trailing: const Icon(Icons.chevron_left, color: gold),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loggedIn = AuthService.isLoggedIn;
+
+    return ListView(
+      padding: const EdgeInsets.all(18),
+      children: [
+        const SizedBox(height: 25),
+        const Icon(Icons.account_circle, color: gold, size: 85),
+        const SizedBox(height: 12),
+        const Center(
+          child: Text(
+            'حسابي',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 25,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(height: 25),
+
+        if (!loggedIn) ...[
+          const Center(
+            child: Text(
+              'أهلاً بك في ShamFlix',
+              style: TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 52,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: gold,
+                foregroundColor: Colors.black,
+              ),
+              onPressed: openLogin,
+              icon: const Icon(Icons.login),
+              label: const Text(
+                'تسجيل الدخول أو إنشاء حساب',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const SizedBox(height: 15),
+          accountTile(
+            icon: Icons.favorite_outline,
+            title: 'المفضلة',
+            subtitle: 'احفظ أفلامك ومسلسلاتك المفضلة',
+          ),
+          accountTile(
+            icon: Icons.history,
+            title: 'سجل المشاهدة',
+            subtitle: 'تابع ما شاهدته',
+          ),
+        ] else ...[
+          Card(
+            color: panel,
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  const Icon(Icons.account_circle, color: gold, size: 55),
+                  const SizedBox(height: 10),
+                  Text(
+                    AuthService.userEmail ?? 'مستخدم ShamFlix',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF493B25),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      AuthService.isAdmin ? 'مدير' : 'مستخدم',
+                      style: const TextStyle(
+                        color: gold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (AuthService.isAdmin)
+            accountTile(
+              icon: Icons.admin_panel_settings,
+              title: 'إدارة ShamFlix',
+              subtitle: 'إعدادات وأدوات الإدارة',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AdminPlaceholderPage(),
+                  ),
+                );
+              },
+            ),
+          accountTile(
+            icon: Icons.favorite_outline,
+            title: 'المفضلة',
+            subtitle: 'قريباً: قائمة محتواك المفضل',
+          ),
+          accountTile(
+            icon: Icons.history,
+            title: 'سجل المشاهدة',
+            subtitle: 'قريباً: آخر ما شاهدته',
+          ),
+          const SizedBox(height: 15),
+          SizedBox(
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: loading ? null : logout,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: gold,
+                side: const BorderSide(color: gold),
+              ),
+              icon: loading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        color: gold,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.logout),
+              label: const Text('تسجيل الخروج'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class FavoritesPage extends StatelessWidget {
+  const FavoritesPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.favorite_outline, color: gold, size: 65),
+          SizedBox(height: 15),
+          Text(
+            'المفضلة',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 23,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'سنربط المفضلة بحسابك في الخطوة القادمة',
+            style: TextStyle(color: Colors.white54),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AdminPlaceholderPage extends StatelessWidget {
+  const AdminPlaceholderPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(
+          backgroundColor: bg,
+          title: const Text('إدارة ShamFlix'),
+        ),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(25),
+            child: Text(
+              'تم التحقق من صلاحية المدير.\nسنجهّز أدوات إدارة المحتوى في الخطوات القادمة.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 17,
+                height: 1.8,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -667,9 +895,7 @@ class DetailsPage extends StatelessWidget {
     if (!context.mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم نسخ رابط التشغيل'),
-      ),
+      const SnackBar(content: Text('تم نسخ رابط التشغيل')),
     );
   }
 
@@ -728,7 +954,6 @@ class DetailsPage extends StatelessWidget {
                         },
                       ),
               ),
-
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -742,9 +967,7 @@ class DetailsPage extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 12),
-
                     Wrap(
                       spacing: 16,
                       runSpacing: 8,
@@ -778,9 +1001,7 @@ class DetailsPage extends StatelessWidget {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 25),
-
                     const Text(
                       'القصة والوصف',
                       style: TextStyle(
@@ -789,9 +1010,7 @@ class DetailsPage extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 10),
-
                     Text(
                       description,
                       style: const TextStyle(
@@ -800,9 +1019,7 @@ class DetailsPage extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
-
                     const SizedBox(height: 30),
-
                     if (valueOf(item['stream_url']).isNotEmpty)
                       SizedBox(
                         width: double.infinity,
@@ -816,9 +1033,7 @@ class DetailsPage extends StatelessWidget {
                           icon: const Icon(Icons.play_arrow),
                           label: const Text(
                             'نسخ رابط التشغيل',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
@@ -937,8 +1152,7 @@ class ShamFlixSearch extends SearchDelegate {
             final item = items[index];
             final poster = valueOf(item['poster_url']);
 
-            final isSeries = item.containsKey('tmdb_id') &&
-                item['stream_url'] == null;
+            final isSeries = item['stream_url'] == null;
 
             return ListTile(
               leading: SizedBox(
