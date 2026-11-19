@@ -1,6 +1,7 @@
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
   static const String _projectUrl =
@@ -11,6 +12,9 @@ class AuthService {
 
   static const String _redirectUrl =
       'shamflix://login-callback';
+
+  static const String _accessKey = 'shamflix_access_token';
+  static const String _refreshKey = 'shamflix_refresh_token';
 
   static String? accessToken;
   static String? refreshToken;
@@ -37,7 +41,58 @@ class AuthService {
     }
   }
 
-  // إنشاء حساب جديد مع توجيه رسالة التأكيد إلى التطبيق
+  static Future<void> _saveSession(
+      Map<String, dynamic> data) async {
+    final user = data['user'] ?? {};
+    final metadata = user['app_metadata'];
+    final role = metadata is Map ? metadata['role'] : null;
+
+    accessToken = data['access_token'];
+    refreshToken = data['refresh_token'];
+    userId = user['id'];
+    userEmail = user['email'];
+    isAdmin = role == 'admin';
+
+    final prefs = await SharedPreferences.getInstance();
+
+    if (accessToken != null && refreshToken != null) {
+      await prefs.setString(_accessKey, accessToken!);
+      await prefs.setString(_refreshKey, refreshToken!);
+    }
+  }
+
+  static Future<bool> restoreSession() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final savedRefresh = prefs.getString(_refreshKey);
+
+    if (savedRefresh == null || savedRefresh.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse(
+          '$_projectUrl/auth/v1/token?grant_type=refresh_token',
+        ),
+        headers: _headers,
+        body: jsonEncode({
+          'refresh_token': savedRefresh,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        await signOut();
+        return false;
+      }
+
+      await _saveSession(jsonDecode(response.body));
+      return isLoggedIn;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<String> signUp({
     required String email,
     required String password,
@@ -67,14 +122,13 @@ class AuthService {
     final data = jsonDecode(response.body);
 
     if (data['access_token'] == null) {
-      return 'تم إنشاء الحساب. افتح بريدك واضغط رابط التأكيد للعودة إلى التطبيق.';
+      return 'تم إنشاء الحساب. افتح بريدك واضغط رابط التأكيد.';
     }
 
-    _saveSession(data);
+    await _saveSession(data);
     return 'تم إنشاء الحساب وتسجيل الدخول بنجاح.';
   }
 
-  // تسجيل الدخول
   static Future<void> signIn({
     required String email,
     required String password,
@@ -94,11 +148,9 @@ class AuthService {
       throw Exception(_errorMessage(response));
     }
 
-    final data = jsonDecode(response.body);
-    _saveSession(data);
+    await _saveSession(jsonDecode(response.body));
   }
 
-  // استقبال رابط تأكيد البريد
   static Future<void> handleAuthDeepLink(Uri uri) async {
     if (uri.scheme != 'shamflix' ||
         uri.host != 'login-callback') {
@@ -145,39 +197,31 @@ class AuthService {
 
     final user = jsonDecode(response.body);
 
-    _saveSession({
+    await _saveSession({
       'access_token': token,
       'refresh_token': refresh,
       'user': user,
     });
   }
 
-  static void _saveSession(Map<String, dynamic> data) {
-    final user = data['user'] ?? {};
-
-    final metadata = user['app_metadata'];
-    final role = metadata is Map ? metadata['role'] : null;
-
-    accessToken = data['access_token'];
-    refreshToken = data['refresh_token'];
-    userId = user['id'];
-    userEmail = user['email'];
-    isAdmin = role == 'admin';
-  }
-
-  // تسجيل الخروج
   static Future<void> signOut() async {
     final token = accessToken;
 
     if (token != null) {
-      await http.post(
-        Uri.parse('$_projectUrl/auth/v1/logout'),
-        headers: {
-          ..._headers,
-          'Authorization': 'Bearer $token',
-        },
-      );
+      try {
+        await http.post(
+          Uri.parse('$_projectUrl/auth/v1/logout'),
+          headers: {
+            ..._headers,
+            'Authorization': 'Bearer $token',
+          },
+        );
+      } catch (_) {}
     }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_accessKey);
+    await prefs.remove(_refreshKey);
 
     accessToken = null;
     refreshToken = null;

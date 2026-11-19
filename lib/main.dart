@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,8 +12,17 @@ final GlobalKey<ScaffoldMessengerState> messengerKey =
 
 final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // استعادة جلسة المستخدم المحفوظة قبل تشغيل التطبيق
+  try {
+    await AuthService.restoreSession().timeout(
+      const Duration(seconds: 12),
+      onTimeout: () => false,
+    );
+  } catch (_) {}
+
   runApp(const ShamFlixApp());
 }
 
@@ -59,7 +69,9 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
 
           messengerKey.currentState?.showSnackBar(
             const SnackBar(
-              content: Text('تم تأكيد البريد الإلكتروني وتسجيل الدخول بنجاح'),
+              content: Text(
+                'تم تأكيد البريد الإلكتروني وتسجيل الدخول بنجاح',
+              ),
               backgroundColor: Colors.green,
               duration: Duration(seconds: 4),
             ),
