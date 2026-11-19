@@ -6,6 +6,7 @@ import 'package:app_links/app_links.dart';
 import 'supabase_service.dart';
 import 'admin_auth_service.dart';
 import 'auth_page.dart';
+import 'admin_page.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -15,7 +16,6 @@ final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // استعادة جلسة المستخدم المحفوظة قبل تشغيل التطبيق
   try {
     await AuthService.restoreSession().timeout(
       const Duration(seconds: 12),
@@ -37,7 +37,6 @@ String valueOf(dynamic value, [String fallback = '']) {
   return value.toString();
 }
 
-// استقبال روابط تأكيد البريد الإلكتروني
 class ShamFlixApp extends StatefulWidget {
   const ShamFlixApp({super.key});
 
@@ -850,7 +849,7 @@ class _AccountPageState extends State<AccountPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const AdminPlaceholderPage(),
+                    builder: (_) => const AdminPage(),
                   ),
                 );
               },
@@ -919,38 +918,6 @@ class FavoritesPage extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class AdminPlaceholderPage extends StatelessWidget {
-  const AdminPlaceholderPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: bg,
-        appBar: AppBar(
-          backgroundColor: bg,
-          title: const Text('إدارة ShamFlix'),
-        ),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(25),
-            child: Text(
-              'تم التحقق من صلاحية المدير.\nسنجهّز أدوات إدارة المحتوى في الخطوات القادمة.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 17,
-                height: 1.8,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
