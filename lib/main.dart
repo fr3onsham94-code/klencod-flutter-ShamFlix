@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'tmdb_service.dart';
 
 void main() {
   runApp(const ShamFlixApp());
@@ -37,7 +38,14 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final TmdbService tmdb = TmdbService();
+
   int selectedTab = 0;
+  int selectedCategory = 0;
+
+  late Future<List<dynamic>> popularMovies;
+  late Future<List<dynamic>> latestMovies;
+  late Future<List<dynamic>> popularTv;
 
   final List<String> categories = [
     'الكل',
@@ -48,62 +56,28 @@ class _HomePageState extends State<HomePage> {
     'خيال علمي',
   ];
 
-  int selectedCategory = 0;
+  @override
+  void initState() {
+    super.initState();
+    loadData();
+  }
 
-  final List<Map<String, dynamic>> movies = [
-    {'title': 'فيلم الأكشن', 'type': 'أكشن', 'icon': Icons.movie},
-    {'title': 'رحلة الغموض', 'type': 'غموض', 'icon': Icons.theater_comedy},
-    {'title': 'عالم الخيال', 'type': 'خيال علمي', 'icon': Icons.rocket},
-    {'title': 'قصة حب', 'type': 'دراما', 'icon': Icons.favorite},
-  ];
+  void loadData() {
+    popularMovies = tmdb.getPopularMovies();
+    latestMovies = tmdb.getNowPlayingMovies();
+    popularTv = tmdb.getPopularTv();
+  }
 
-  final List<String> channels = [
-    'قناة الأخبار',
-    'قناة الرياضة',
-    'قناة الأفلام',
-    'قناة المسلسلات',
-  ];
+  void refreshData() {
+    setState(() {
+      loadData();
+    });
+  }
 
-  Widget movieCard(Map<String, dynamic> movie) {
-    return Container(
-      width: 135,
-      margin: const EdgeInsets.only(left: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 175,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF493B25), Color(0xFF151515)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Center(
-              child: Icon(
-                movie['icon'] as IconData,
-                color: gold,
-                size: 48,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            movie['title'] as String,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            movie['type'] as String,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-        ],
-      ),
-    );
+  String mediaTitle(Map<String, dynamic> item) {
+    return item['title'] ??
+        item['name'] ??
+        'بدون عنوان';
   }
 
   Widget sectionTitle(String title) {
@@ -130,196 +104,346 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget homeContent() {
-    return ListView(
+  Widget movieCard(Map<String, dynamic> movie) {
+    final poster = TmdbService.getPoster(
+      movie['poster_path'],
+    );
+
+    return Container(
+      width: 135,
+      margin: const EdgeInsets.only(left: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: 135,
+              height: 175,
+              child: poster == null
+                  ? Container(
+                      color: panel,
+                      child: const Icon(
+                        Icons.movie,
+                        color: gold,
+                        size: 48,
+                      ),
+                    )
+                  : Image.network(
+                      poster,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) {
+                        return Container(
+                          color: panel,
+                          child: const Icon(
+                            Icons.movie,
+                            color: gold,
+                            size: 48,
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            mediaTitle(movie),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            movie['release_date'] ??
+                movie['first_air_date'] ??
+                'ShamFlix',
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget mediaSection(
+    String title,
+    Future<List<dynamic>> future,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
-          child: Row(
-            children: [
-              const Icon(Icons.movie_filter, color: gold, size: 32),
-              const SizedBox(width: 9),
-              const Text(
-                'Sham',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
+        sectionTitle(title),
+        SizedBox(
+          height: 220,
+          child: FutureBuilder<List<dynamic>>(
+            future: future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState ==
+                  ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(
+                    color: gold,
+                  ),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return const Center(
+                  child: Text(
+                    'تعذر تحميل البيانات',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                );
+              }
+
+              final items = snapshot.data ?? [];
+
+              if (items.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'لا توجد بيانات حالياً',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
                 ),
-              ),
-              const Text(
-                'Flix',
-                style: TextStyle(
-                  color: gold,
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: () {
-                  showSearch(
-                    context: context,
-                    delegate: MovieSearch(),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  return movieCard(
+                    Map<String, dynamic>.from(items[index]),
                   );
                 },
-                icon: const Icon(Icons.search, color: Colors.white),
-              ),
-              const Icon(Icons.notifications_none, color: gold),
-            ],
-          ),
-        ),
-
-        // Featured movie
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Container(
-            height: 220,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF604821), Color(0xFF211A10), panel],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Stack(
-              children: [
-                const Positioned(
-                  left: 20,
-                  top: 30,
-                  child: Icon(
-                    Icons.local_movies,
-                    color: Color(0x44FFFFFF),
-                    size: 130,
-                  ),
-                ),
-                Positioned(
-                  right: 18,
-                  bottom: 20,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'ShamFlix ORIGINAL',
-                        style: TextStyle(
-                          color: gold,
-                          fontSize: 12,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'اكتشف عالم السينما',
-                        style: TextStyle(
-                          fontSize: 23,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: gold,
-                          foregroundColor: Colors.black,
-                        ),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('سيتم تفعيل المشاهدة قريباً'),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('استكشف الآن'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        sectionTitle('التصنيفات'),
-
-        SizedBox(
-          height: 43,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            reverse: true,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: categories.length,
-            itemBuilder: (context, index) {
-              final active = selectedCategory == index;
-              return GestureDetector(
-                onTap: () => setState(() => selectedCategory = index),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  decoration: BoxDecoration(
-                    color: active ? gold : panel,
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    categories[index],
-                    style: TextStyle(
-                      color: active ? Colors.black : Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
               );
             },
           ),
         ),
+      ],
+    );
+  }
 
-        sectionTitle('أحدث الأفلام'),
-
-        SizedBox(
-          height: 220,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            reverse: true,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: movies.map(movieCard).toList(),
+  Widget homeContent() {
+    return RefreshIndicator(
+      color: gold,
+      backgroundColor: panel,
+      onRefresh: () async {
+        refreshData();
+      },
+      child: ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              18, 15, 18, 15,
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.movie_filter,
+                  color: gold,
+                  size: 32,
+                ),
+                const SizedBox(width: 9),
+                const Text(
+                  'Sham',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 25,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text(
+                  'Flix',
+                  style: TextStyle(
+                    color: gold,
+                    fontSize: 25,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () {
+                    showSearch(
+                      context: context,
+                      delegate: MovieSearch(tmdb),
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.search,
+                    color: Colors.white,
+                  ),
+                ),
+                const Icon(
+                  Icons.notifications_none,
+                  color: gold,
+                ),
+              ],
+            ),
           ),
-        ),
 
-        sectionTitle('القنوات المباشرة'),
-
-        ...channels.map((channel) => Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: panel,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              const CircleAvatar(
-                backgroundColor: Color(0xFF342B1D),
-                child: Icon(Icons.live_tv, color: gold),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  channel,
-                  style: const TextStyle(color: Colors.white),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+            ),
+            child: Container(
+              height: 220,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF604821),
+                    Color(0xFF211A10),
+                    panel,
+                  ],
                 ),
               ),
-              const Icon(Icons.circle, color: Colors.red, size: 9),
-              const SizedBox(width: 6),
-              const Text(
-                'مباشر',
-                style: TextStyle(color: gold, fontSize: 12),
+              child: Stack(
+                children: [
+                  const Positioned(
+                    left: 20,
+                    top: 30,
+                    child: Icon(
+                      Icons.local_movies,
+                      color: Color(0x44FFFFFF),
+                      size: 130,
+                    ),
+                  ),
+                  Positioned(
+                    right: 18,
+                    bottom: 20,
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'ShamFlix ORIGINAL',
+                          style: TextStyle(
+                            color: gold,
+                            fontSize: 12,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'اكتشف عالم السينما',
+                          style: TextStyle(
+                            fontSize: 23,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: gold,
+                            foregroundColor: Colors.black,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              selectedTab = 1;
+                            });
+                          },
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('استكشف الآن'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        )),
 
-        const SizedBox(height: 30),
+          sectionTitle('التصنيفات'),
+
+          SizedBox(
+            height: 43,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+              ),
+              itemCount: categories.length,
+              itemBuilder: (context, index) {
+                final active = selectedCategory == index;
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      selectedCategory = index;
+                    });
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                    ),
+                    decoration: BoxDecoration(
+                      color: active ? gold : panel,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      categories[index],
+                      style: TextStyle(
+                        color: active
+                            ? Colors.black
+                            : Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          mediaSection(
+            'أحدث الأفلام',
+            latestMovies,
+          ),
+
+          mediaSection(
+            'الأفلام الأكثر شعبية',
+            popularMovies,
+          ),
+
+          mediaSection(
+            'المسلسلات الأكثر شعبية',
+            popularTv,
+          ),
+
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  Widget moviesPage() {
+    return ListView(
+      children: [
+        sectionTitle('أحدث الأفلام'),
+        mediaSection('الأفلام الجديدة', latestMovies),
+        mediaSection('الأكثر شعبية', popularMovies),
+      ],
+    );
+  }
+
+  Widget tvPage() {
+    return ListView(
+      children: [
+        mediaSection('المسلسلات الأكثر شعبية', popularTv),
       ],
     );
   }
@@ -353,8 +477,8 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final pages = [
       homeContent(),
-      otherPage('الأفلام', Icons.movie),
-      otherPage('المسلسلات', Icons.video_library),
+      moviesPage(),
+      tvPage(),
       otherPage('البث المباشر', Icons.live_tv),
       otherPage('المفضلة', Icons.favorite),
     ];
@@ -362,18 +486,25 @@ class _HomePageState extends State<HomePage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        body: SafeArea(child: pages[selectedTab]),
+        body: SafeArea(
+          child: pages[selectedTab],
+        ),
         bottomNavigationBar: NavigationBar(
           backgroundColor: const Color(0xFF151515),
           indicatorColor: const Color(0xFF493B25),
           selectedIndex: selectedTab,
           onDestinationSelected: (index) {
-            setState(() => selectedTab = index);
+            setState(() {
+              selectedTab = index;
+            });
           },
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home, color: gold),
+              selectedIcon: Icon(
+                Icons.home,
+                color: gold,
+              ),
               label: 'الرئيسية',
             ),
             NavigationDestination(
@@ -400,36 +531,128 @@ class _HomePageState extends State<HomePage> {
 }
 
 class MovieSearch extends SearchDelegate {
-  @override
-  String get searchFieldLabel => 'ابحث عن فيلم أو مسلسل';
+  final TmdbService service;
+
+  MovieSearch(this.service);
 
   @override
-  List<Widget> buildActions(BuildContext context) => [
-    IconButton(
-      onPressed: () => query = '',
-      icon: const Icon(Icons.clear),
-    ),
-  ];
+  String get searchFieldLabel =>
+      'ابحث عن فيلم أو مسلسل';
 
   @override
-  Widget buildLeading(BuildContext context) => IconButton(
-    onPressed: () => close(context, null),
-    icon: const Icon(Icons.arrow_back),
-  );
+  List<Widget> buildActions(BuildContext context) {
+    return [
+      IconButton(
+        onPressed: () {
+          query = '';
+        },
+        icon: const Icon(Icons.clear),
+      ),
+    ];
+  }
 
   @override
-  Widget buildResults(BuildContext context) => Center(
-    child: Text(
-      'نتائج البحث عن: $query',
-      style: const TextStyle(color: Colors.white),
-    ),
-  );
+  Widget buildLeading(BuildContext context) {
+    return IconButton(
+      onPressed: () {
+        close(context, null);
+      },
+      icon: const Icon(Icons.arrow_back),
+    );
+  }
+
+  Widget searchResults() {
+    if (query.trim().isEmpty) {
+      return const Center(
+        child: Text(
+          'اكتب اسم الفيلم أو المسلسل',
+          style: TextStyle(color: Colors.white54),
+        ),
+      );
+    }
+
+    return FutureBuilder<List<dynamic>>(
+      future: service.searchMulti(query),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState ==
+            ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: gold),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text(
+              'حدث خطأ أثناء البحث',
+              style: TextStyle(color: Colors.white54),
+            ),
+          );
+        }
+
+        final results = snapshot.data ?? [];
+
+        if (results.isEmpty) {
+          return const Center(
+            child: Text(
+              'لا توجد نتائج',
+              style: TextStyle(color: Colors.white54),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: results.length,
+          itemBuilder: (context, index) {
+            final item =
+                Map<String, dynamic>.from(results[index]);
+
+            final poster = TmdbService.getPoster(
+              item['poster_path'],
+            );
+
+            return ListTile(
+              leading: poster == null
+                  ? const Icon(Icons.movie, color: gold)
+                  : Image.network(
+                      poster,
+                      width: 45,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) {
+                        return const Icon(
+                          Icons.movie,
+                          color: gold,
+                        );
+                      },
+                    ),
+              title: Text(
+                item['title'] ??
+                    item['name'] ??
+                    'بدون عنوان',
+                style: const TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                item['media_type'] == 'tv'
+                    ? 'مسلسل'
+                    : item['media_type'] == 'movie'
+                        ? 'فيلم'
+                        : 'محتوى',
+                style: const TextStyle(color: gold),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
-  Widget buildSuggestions(BuildContext context) => const Center(
-    child: Text(
-      'اكتب اسم الفيلم أو المسلسل',
-      style: TextStyle(color: Colors.white54),
-    ),
-  );
+  Widget buildResults(BuildContext context) {
+    return searchResults();
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    return searchResults();
+  }
 }
