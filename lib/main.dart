@@ -1,11 +1,18 @@
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:app_links/app_links.dart';
 import 'supabase_service.dart';
 import 'admin_auth_service.dart';
 import 'auth_page.dart';
 
+final GlobalKey<ScaffoldMessengerState> messengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
+final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
+
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const ShamFlixApp());
 }
 
@@ -20,12 +27,73 @@ String valueOf(dynamic value, [String fallback = '']) {
   return value.toString();
 }
 
-class ShamFlixApp extends StatelessWidget {
+// استقبال روابط تأكيد البريد الإلكتروني
+class ShamFlixApp extends StatefulWidget {
   const ShamFlixApp({super.key});
+
+  @override
+  State<ShamFlixApp> createState() => _ShamFlixAppState();
+}
+
+class _ShamFlixAppState extends State<ShamFlixApp> {
+  late final AppLinks appLinks;
+  StreamSubscription<Uri>? linkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    appLinks = AppLinks();
+
+    linkSubscription = appLinks.uriLinkStream.listen(
+      (uri) async {
+        if (uri.scheme != 'shamflix' ||
+            uri.host != 'login-callback') {
+          return;
+        }
+
+        try {
+          await AuthService.handleAuthDeepLink(uri);
+
+          authRefreshNotifier.value++;
+
+          messengerKey.currentState?.showSnackBar(
+            const SnackBar(
+              content: Text('تم تأكيد البريد الإلكتروني وتسجيل الدخول بنجاح'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        } catch (e) {
+          messengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text('تعذر تأكيد البريد: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      },
+      onError: (error) {
+        messengerKey.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text('حدث خطأ أثناء استقبال رابط التأكيد'),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    linkSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       title: 'ShamFlix',
       theme: ThemeData.dark().copyWith(
@@ -68,6 +136,17 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     loadData();
+    authRefreshNotifier.addListener(onAuthChanged);
+  }
+
+  void onAuthChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    authRefreshNotifier.removeListener(onAuthChanged);
+    super.dispose();
   }
 
   void loadData() {
@@ -677,7 +756,6 @@ class _AccountPageState extends State<AccountPage> {
           ),
         ),
         const SizedBox(height: 25),
-
         if (!loggedIn) ...[
           const Center(
             child: Text(
