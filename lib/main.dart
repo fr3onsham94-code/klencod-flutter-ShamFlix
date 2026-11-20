@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -1292,19 +1293,29 @@ class _DetailsPageState extends State<DetailsPage> {
       ));
       return;
     }
-    final packageName = selectedPlayer == 'vlc'
-        ? 'org.videolan.vlc'
-        : 'com.mxtech.videoplayer.ad';
+    final packages = selectedPlayer == 'vlc'
+        ? <String>['org.videolan.vlc']
+        : <String>['com.mxtech.videoplayer.ad', 'com.mxtech.videoplayer.pro'];
     try {
-      final intentUrl = 'intent://' + uri.host + uri.path +
-          (uri.hasQuery ? '?' + uri.query : '') +
-          '#Intent;scheme=' + uri.scheme + ';package=' + packageName +
-          ';type=video/*;end';
-      final opened = await launchUrl(Uri.parse(intentUrl),
-          mode: LaunchMode.externalApplication);
-      if (!opened && mounted) {
+      var launched = false;
+      for (final packageName in packages) {
+        final intent = AndroidIntent(
+          action: 'action_view',
+          data: url,
+          type: 'video/*',
+          package: packageName,
+        );
+        if (await intent.canResolveActivity()) {
+          await intent.launch();
+          launched = true;
+          break;
+        }
+      }
+      if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('تعذر فتح الرابط بالمشغل المحدد. جرّب المشغل الداخلي أو تأكد من تثبيت التطبيق.'),
+          content: Text(selectedPlayer == 'vlc'
+              ? 'لم يتم العثور على VLC. تأكد من تثبيته.'
+              : 'لم يتم العثور على MX Player. تأكد من تثبيته.'),
           action: SnackBarAction(
             label: 'داخلي',
             onPressed: () => Navigator.push(context, MaterialPageRoute(
@@ -1315,7 +1326,7 @@ class _DetailsPageState extends State<DetailsPage> {
       }
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر إرسال الرابط إلى المشغل الخارجي')),
+        const SnackBar(content: Text('تعذر تشغيل المشغل الخارجي. جرّب المشغل الداخلي.')),
       );
     }
   }
