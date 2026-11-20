@@ -14,13 +14,6 @@ dependencies:
   http: ^1.2.2
   supabase_flutter: ^2.8.0
   app_links: ^6.4.1
-  video_player: 2.8.2
-  url_launcher: 6.1.9
 
 flutter:
   uses-material-design: true
-
-# ==========================================
-# ShamFlix - آخر تحديث: 21-11-2026
-# تمت إضافة حزم المشغل الداخلي وفتح المشغلات الخارجية.
-# ==========================================

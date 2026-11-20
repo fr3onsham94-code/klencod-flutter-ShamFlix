@@ -2,73 +2,133 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-class TmdbService {
-  static const String _baseUrl = 'https://api.themoviedb.org/3';
+class SupabaseService {
+  static const String projectUrl =
+      'https://qjagbdxuytnuzwcfbcse.supabase.co';
 
-  // ضع API Read Access Token هنا
-  static const String _token = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI1YWEyM2ViYmYzNWQ5YmYxMjBmMzkwNjlmM2RjOTg1NiIsIm5iZiI6MTcwNzMzMjcyOC41ODA5OTk5LCJzdWIiOiI2NWMzZDQ3OGNmZmVlZDAxN2M1MjRlOGQiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.S_kc11Nm6_DccgrOtwBBrN93TwC2mjMBSBa6KptaWvo';
+  static const String publishableKey =
+      'sb_publishable_jxbDM61BDq3koMOoij_fdw_4xfFiUL7';
 
-  static const Map<String, String> _headers = {
-    'accept': 'application/json',
-    'Authorization': 'Bearer $_token',
-  };
+  static Future<List<Map<String, dynamic>>> _getData(
+    String table,
+  ) async {
+    final uri = Uri.parse(
+      '$projectUrl/rest/v1/$table',
+    ).replace(
+      queryParameters: {
+        'select': '*',
+        'is_published': 'eq.true',
+        'order': 'created_at.desc',
+      },
+    );
 
-  static const String imageBase =
-      'https://image.tmdb.org/t/p/w500';
-
-  Future<Map<String, dynamic>> _get(String endpoint) async {
     final response = await http.get(
-      Uri.parse('$_baseUrl$endpoint'),
-      headers: _headers,
+      uri,
+      headers: {
+        'apikey': publishableKey,
+        'Authorization': 'Bearer $publishableKey',
+        'Accept': 'application/json',
+      },
     );
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Supabase error: ${response.statusCode} ${response.body}',
+      );
     }
 
-    throw Exception(
-      'TMDB Error: ${response.statusCode}',
-    );
+    final List<dynamic> data =
+        jsonDecode(response.body);
+
+    return data
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
   }
 
-  // الأفلام الأكثر شعبية
-  Future<List<dynamic>> getPopularMovies() async {
-    final data = await _get(
-      '/movie/popular?language=ar-SA&page=1',
-    );
-    return data['results'] ?? [];
+  static Future<List<Map<String, dynamic>>> getMovies() {
+    return _getData('movies');
   }
 
-  // أحدث الأفلام
-  Future<List<dynamic>> getNowPlayingMovies() async {
-    final data = await _get(
-      '/movie/now_playing?language=ar-SA&page=1',
-    );
-    return data['results'] ?? [];
+  static Future<List<Map<String, dynamic>>> getSeries() {
+    return _getData('series');
   }
 
-  // المسلسلات الأكثر شعبية
-  Future<List<dynamic>> getPopularTv() async {
-    final data = await _get(
-      '/tv/popular?language=ar-SA&page=1',
-    );
-    return data['results'] ?? [];
+  static Future<List<Map<String, dynamic>>> getChannels() {
+    return _getData('channels');
   }
 
-  // البحث عن الأفلام والمسلسلات
-  Future<List<dynamic>> searchMulti(String query) async {
-    final data = await _get(
-      '/search/multi?query=${Uri.encodeComponent(query)}&language=ar-SA&page=1',
+  static Future<List<Map<String, dynamic>>> _getRows(
+    String table,
+    Map<String, String> filters,
+  ) async {
+    final uri = Uri.parse('$projectUrl/rest/v1/$table').replace(
+      queryParameters: {
+        'select': '*',
+        ...filters,
+      },
     );
-    return data['results'] ?? [];
-  }
 
-  // رابط صورة الفيلم أو المسلسل
-  static String? getPoster(dynamic path) {
-    if (path == null || path.toString().isEmpty) {
-      return null;
+    final response = await http.get(
+      uri,
+      headers: {
+        'apikey': publishableKey,
+        'Authorization': 'Bearer $publishableKey',
+        'Accept': 'application/json',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Supabase error: ${response.statusCode} ${response.body}',
+      );
     }
 
-    return '$imageBase$path';
+    final List<dynamic> data = jsonDecode(response.body);
+    return data
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
   }
+
+  static Future<List<Map<String, dynamic>>> getSeasons(
+    String seriesId,
+  ) {
+    return _getRows('seasons', {
+      'series_id': 'eq.$seriesId',
+      'order': 'season_number.asc',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getEpisodes(
+    String seasonId,
+  ) {
+    return _getRows('episodes', {
+      'season_id': 'eq.$seasonId',
+      'is_published': 'eq.true',
+      'order': 'episode_number.asc',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getPlaybackServers({
+    required String contentType,
+    required String contentId,
+  }) {
+    final foreignKey = switch (contentType) {
+      'movie' => 'movie_id',
+      'episode' => 'episode_id',
+      'channel' => 'channel_id',
+      _ => throw ArgumentError('نوع محتوى غير مدعوم: $contentType'),
+    };
+
+    return _getRows('playback_servers', {
+      foreignKey: 'eq.$contentId',
+      'is_active': 'eq.true',
+      'order': 'sort_order.asc',
+    });
+  }
+
 }
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// تم إضافة جلب المواسم والحلقات وسيرفرات التشغيل.
+// ==========================================
