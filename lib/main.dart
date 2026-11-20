@@ -934,7 +934,7 @@ class _AccountPageState extends State<AccountPage> {
         ),
         const SizedBox(height: 25),
 
-                  accountTile(
+        accountTile(
             icon: Icons.settings_outlined,
             title: 'إعدادات المشغل',
             subtitle: 'اختيار مشغل الفيديو الافتراضي',
@@ -1207,9 +1207,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                     style: TextStyle(color: Colors.white70, height: 1.6),
                   ),
                   const SizedBox(height: 16),
-                  _option(PlayerPreference.internal, 'المشغل الداخلي', 'تشغيل الفيديو داخل تطبيق ShamFlix', Icons.smart_display_outlined),
+                  _option(PlayerPreference.internal, 'المشغل الداخلي', 'تشغيل الفيديو داخل تطبيق ShamFlix', Icons.smart_display),
                   _option(PlayerPreference.vlc, 'VLC Player', 'فتح الفيديو باستخدام تطبيق VLC المثبت على جهازك', Icons.play_circle_outline),
-                  _option(PlayerPreference.mx, 'MX Player', 'فتح الفيديو باستخدام تطبيق MX Player المثبت على جهازك', Icons.ondemand_video_outlined),
+                  _option(PlayerPreference.mx, 'MX Player', 'فتح الفيديو باستخدام تطبيق MX Player المثبت على جهازك', Icons.ondemand_video),
                   const SizedBox(height: 12),
                   const Text(
                     'ملاحظة: يجب تثبيت VLC أو MX Player على الجهاز لاستخدامهما.',
@@ -1241,7 +1241,6 @@ class _PlaybackPageState extends State<PlaybackPage> {
   String selectedPlayer = PlayerPreference.internal;
   bool loading = true;
   String? error;
-  bool externalAttempted = false;
 
   @override
   void initState() {
@@ -1276,7 +1275,6 @@ class _PlaybackPageState extends State<PlaybackPage> {
   }
 
   Future<void> _openExternal() async {
-    externalAttempted = true;
     final packageName = selectedPlayer == PlayerPreference.vlc
         ? 'org.videolan.vlc'
         : 'com.mxtech.videoplayer.ad';
@@ -1322,7 +1320,6 @@ class _PlaybackPageState extends State<PlaybackPage> {
       selectedPlayer = PlayerPreference.internal;
       loading = true;
       error = null;
-      externalAttempted = false;
     });
     await controller?.dispose();
     controller = null;
