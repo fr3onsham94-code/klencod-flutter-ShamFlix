@@ -1644,7 +1644,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                             final duration = ds.data ?? Duration.zero;
                             final max = duration.inMilliseconds > 0
                                 ? duration.inMilliseconds.toDouble() : 1.0;
-                            final value = position.inMilliseconds.toDouble().clamp(0.0, max);
+                            final value = position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
                             return Column(children: [
                               Slider(
                                 value: value, max: max, activeColor: gold,
@@ -1671,7 +1671,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                       final playing = snapshot.data ?? false;
                       return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                         IconButton(iconSize: 48, color: gold,
-                          onPressed: () => player.seek(player.state.position - const Duration(seconds: 10)),
+                          onPressed: () => player.seek(player.state.position > const Duration(seconds: 10)
+                                  ? player.state.position - const Duration(seconds: 10)
+                                  : Duration.zero),
                           icon: const Icon(Icons.replay_10)),
                         IconButton(iconSize: 62, color: gold,
                           onPressed: () => player.playOrPause(),
