@@ -23,7 +23,12 @@ class AdminPage extends StatefulWidget {
 
 class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> movies = [];
+  List<Map<String, dynamic>> series = [];
+  List<Map<String, dynamic>> channels = [];
   List<Map<String, dynamic>> users = [];
+
+  bool catalogLoading = false;
+  String? catalogError;
 
   bool loading = true;
   bool usersLoading = false;
@@ -82,6 +87,8 @@ class _AdminPageState extends State<AdminPage> {
 
     if (section == 'movies') {
       loadMovies();
+    } else if (section == 'series' || section == 'channels') {
+      loadCatalog(section);
     } else if (section == 'users') {
       loadUsers();
     }
@@ -111,6 +118,8 @@ class _AdminPageState extends State<AdminPage> {
     }
 
     if (currentSection == 'movies' ||
+        currentSection == 'series' ||
+        currentSection == 'channels' ||
         currentSection == 'users') {
       setState(() {
         currentSection = 'home';
@@ -124,6 +133,10 @@ class _AdminPageState extends State<AdminPage> {
     switch (currentSection) {
       case 'movies':
         return 'إدارة الأفلام';
+      case 'series':
+        return 'إدارة المسلسلات';
+      case 'channels':
+        return 'إدارة القنوات';
       case 'users':
         return 'إدارة المستخدمين';
       case 'userList':
@@ -271,6 +284,362 @@ class _AdminPageState extends State<AdminPage> {
     } catch (e) {
       showMessage(e.toString(), isError: true);
     }
+  }
+
+  // =========================
+  // إدارة المسلسلات والقنوات
+  // =========================
+
+  Uri catalogUrl(String table) => Uri.parse(
+        '${SupabaseService.projectUrl}/rest/v1/$table',
+      );
+
+  Future<void> loadCatalog(String section) async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+    final table = section == 'series' ? 'series' : 'channels';
+    setState(() {
+      catalogLoading = true;
+      catalogError = null;
+    });
+    try {
+      final response = await http.get(
+        catalogUrl(table).replace(queryParameters: {
+          'select': '*',
+          'order': 'created_at.desc',
+        }),
+        headers: headers,
+      );
+      if (response.statusCode != 200) {
+        throw Exception(_readError(response));
+      }
+      final data = jsonDecode(response.body) as List;
+      final items = data
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      if (section == 'series') {
+        series = items;
+      } else {
+        channels = items;
+      }
+    } catch (e) {
+      catalogError = e.toString();
+    }
+    if (mounted) setState(() => catalogLoading = false);
+  }
+
+  Future<void> saveCatalogItem(
+    String section,
+    Map<String, dynamic> item, {
+    String? id,
+  }) async {
+    final table = section == 'series' ? 'series' : 'channels';
+    final uri = id == null
+        ? catalogUrl(table)
+        : catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'});
+    final response = id == null
+        ? await http.post(uri, headers: headers, body: jsonEncode(item))
+        : await http.patch(uri, headers: headers, body: jsonEncode(item));
+    if (response.statusCode != 200 &&
+        response.statusCode != 201 &&
+        response.statusCode != 204) {
+      throw Exception(_readError(response));
+    }
+    await loadCatalog(section);
+  }
+
+  Future<void> deleteCatalogItem(String section, String id) async {
+    final table = section == 'series' ? 'series' : 'channels';
+    final response = await http.delete(
+      catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'}),
+      headers: headers,
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(_readError(response));
+    }
+    await loadCatalog(section);
+  }
+
+  Future<void> toggleCatalogPublish(
+    String section,
+    Map<String, dynamic> item,
+  ) async {
+    final id = item['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final published = item['is_published'] == true;
+    final table = section == 'series' ? 'series' : 'channels';
+    try {
+      final response = await http.patch(
+        catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'}),
+        headers: headers,
+        body: jsonEncode({'is_published': !published}),
+      );
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        throw Exception(_readError(response));
+      }
+      await loadCatalog(section);
+      showMessage(published ? 'تم إلغاء النشر' : 'تم النشر');
+    } catch (e) {
+      showMessage(e.toString(), isError: true);
+    }
+  }
+
+  List<Map<String, dynamic>> get filteredCatalogItems {
+    final items = currentSection == 'series' ? series : channels;
+    final query = searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return items;
+    return items.where((item) {
+      final fields = currentSection == 'series'
+          ? ['title', 'category', 'release_year', 'tmdb_id']
+          : ['name', 'category', 'stream_url'];
+      return fields.any((field) =>
+          (item[field]?.toString().toLowerCase() ?? '').contains(query));
+    }).toList();
+  }
+
+  Future<void> openCatalogForm(
+    String section, {
+    Map<String, dynamic>? existing,
+  }) async {
+    final isSeries = section == 'series';
+    final titleController = TextEditingController(
+      text: existing?[isSeries ? 'title' : 'name']?.toString() ?? '',
+    );
+    final posterController = TextEditingController(
+      text: existing?[isSeries ? 'poster_url' : 'logo_url']?.toString() ?? '',
+    );
+    final descriptionController = TextEditingController(
+      text: existing?['description']?.toString() ?? '',
+    );
+    final categoryController = TextEditingController(
+      text: existing?['category']?.toString() ?? '',
+    );
+    final yearController = TextEditingController(
+      text: existing?['release_year']?.toString() ?? '',
+    );
+    final ratingController = TextEditingController(
+      text: existing?['rating']?.toString() ?? '',
+    );
+    final streamController = TextEditingController(
+      text: existing?['stream_url']?.toString() ?? '',
+    );
+    final tmdbController = TextEditingController(
+      text: existing?['tmdb_id']?.toString() ?? '',
+    );
+    bool published = existing?['is_published'] == true;
+    bool isLive = existing?['is_live'] != false;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            backgroundColor: adminPanel,
+            title: Text(
+              '${existing == null ? 'إضافة' : 'تعديل'} ${isSeries ? 'مسلسل' : 'قناة'}',
+              style: const TextStyle(color: adminGold),
+            ),
+            content: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    adminField(titleController, isSeries ? 'اسم المسلسل' : 'اسم القناة', required: true),
+                    if (isSeries) ...[
+                      adminField(tmdbController, 'رقم TMDB للمسلسل (اختياري)'),
+                      adminField(posterController, 'رابط صورة البوستر'),
+                      adminField(descriptionController, 'وصف المسلسل', maxLines: 4),
+                      adminField(categoryController, 'التصنيف'),
+                      adminField(yearController, 'سنة الإصدار', keyboard: TextInputType.number),
+                      adminField(ratingController, 'التقييم', keyboard: const TextInputType.numberWithOptions(decimal: true)),
+                    ] else ...[
+                      adminField(posterController, 'رابط شعار القناة'),
+                      adminField(streamController, 'رابط البث', required: true),
+                      adminField(categoryController, 'تصنيف القناة'),
+                      SwitchListTile(
+                        value: isLive,
+                        activeColor: adminGold,
+                        title: const Text('قناة بث مباشر', style: TextStyle(color: Colors.white)),
+                        onChanged: (value) => setDialogState(() => isLive = value),
+                      ),
+                    ],
+                    SwitchListTile(
+                      value: published,
+                      activeColor: adminGold,
+                      title: const Text('نشر المحتوى للمستخدمين', style: TextStyle(color: Colors.white)),
+                      onChanged: (value) => setDialogState(() => published = value),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء', style: TextStyle(color: Colors.white70)),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                onPressed: () {
+                  if (titleController.text.trim().isEmpty ||
+                      (!isSeries && streamController.text.trim().isEmpty)) {
+                    showMessage(isSeries ? 'أدخل اسم المسلسل' : 'أدخل اسم القناة ورابط البث', isError: true);
+                    return;
+                  }
+                  final data = <String, dynamic>{
+                    (isSeries ? 'title' : 'name'): titleController.text.trim(),
+                    (isSeries ? 'poster_url' : 'logo_url'): posterController.text.trim().isEmpty ? null : posterController.text.trim(),
+                    'category': categoryController.text.trim().isEmpty ? null : categoryController.text.trim(),
+                    'is_published': published,
+                  };
+                  if (isSeries) {
+                    data.addAll({
+                      'tmdb_id': int.tryParse(tmdbController.text.trim()),
+                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                      'release_year': int.tryParse(yearController.text.trim()),
+                      'rating': double.tryParse(ratingController.text.trim()),
+                    });
+                  } else {
+                    data.addAll({
+                      'stream_url': streamController.text.trim(),
+                      'is_live': isLive,
+                    });
+                  }
+                  Navigator.pop(dialogContext, data);
+                },
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    titleController.dispose();
+    posterController.dispose();
+    descriptionController.dispose();
+    categoryController.dispose();
+    yearController.dispose();
+    ratingController.dispose();
+    streamController.dispose();
+    tmdbController.dispose();
+    if (result == null) return;
+    try {
+      await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
+    } catch (e) {
+      showMessage(e.toString(), isError: true);
+    }
+  }
+
+  Future<void> confirmDeleteCatalog(
+    String section,
+    Map<String, dynamic> item,
+  ) async {
+    final isSeries = section == 'series';
+    final label = item[isSeries ? 'title' : 'name']?.toString() ?? '';
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: adminPanel,
+        title: Text('حذف ${isSeries ? 'المسلسل' : 'القناة'}', style: const TextStyle(color: adminGold)),
+        content: Text('هل تريد حذف "$label" نهائياً؟', style: const TextStyle(color: Colors.white)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء', style: TextStyle(color: Colors.white70))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await deleteCatalogItem(section, item['id'].toString());
+      showMessage('تم الحذف بنجاح');
+    } catch (e) {
+      showMessage(e.toString(), isError: true);
+    }
+  }
+
+  Widget catalogCard(String section, Map<String, dynamic> item) {
+    final isSeries = section == 'series';
+    final title = item[isSeries ? 'title' : 'name']?.toString() ?? 'بدون اسم';
+    final imageUrl = item[isSeries ? 'poster_url' : 'logo_url']?.toString() ?? '';
+    final published = item['is_published'] == true;
+    return Card(
+      color: adminPanel,
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 72,
+                height: 92,
+                child: imageUrl.isEmpty
+                    ? const ColoredBox(color: adminBg, child: Icon(Icons.live_tv, color: adminGold, size: 32))
+                    : Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const ColoredBox(color: adminBg, child: Icon(Icons.live_tv, color: adminGold))),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text(published ? 'منشور' : 'مسودة', style: TextStyle(color: published ? Colors.green : Colors.orange, fontWeight: FontWeight.bold)),
+                  if (!isSeries && item['is_live'] == true)
+                    const Text('بث مباشر', style: TextStyle(color: Colors.lightGreenAccent, fontSize: 12)),
+                  Wrap(
+                    spacing: 2,
+                    children: [
+                      IconButton(tooltip: 'تعديل', onPressed: () => openCatalogForm(section, existing: item), icon: const Icon(Icons.edit, color: adminGold)),
+                      IconButton(tooltip: published ? 'إلغاء النشر' : 'نشر', onPressed: () => toggleCatalogPublish(section, item), icon: Icon(published ? Icons.visibility_off : Icons.visibility, color: Colors.lightBlueAccent)),
+                      IconButton(tooltip: 'حذف', onPressed: () => confirmDeleteCatalog(section, item), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget catalogSection(String section) {
+    if (catalogLoading) return const Center(child: CircularProgressIndicator(color: adminGold));
+    if (catalogError != null) return errorView(catalogError!, () => loadCatalog(section));
+    final list = filteredCatalogItems;
+    final isSeries = section == 'series';
+    return Column(
+      children: [
+        searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
+        Expanded(
+          child: list.isEmpty
+              ? RefreshIndicator(
+                  color: adminGold,
+                  onRefresh: () => loadCatalog(section),
+                  child: ListView(children: [
+                    const SizedBox(height: 120),
+                    Center(child: Text(searchQuery.isNotEmpty ? 'لا توجد نتائج مطابقة' : (isSeries ? 'لا توجد مسلسلات حالياً\nاضغط إضافة مسلسل للبدء' : 'لا توجد قنوات حالياً\nاضغط إضافة قناة للبدء'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, height: 1.8))),
+                  ]),
+                )
+              : RefreshIndicator(
+                  color: adminGold,
+                  onRefresh: () => loadCatalog(section),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 90),
+                    itemCount: list.length,
+                    itemBuilder: (context, index) => catalogCard(section, list[index]),
+                  ),
+                ),
+        ),
+      ],
+    );
   }
 
   // =========================
@@ -1737,6 +2106,18 @@ class _AdminPageState extends State<AdminPage> {
           onTap: () => navigateTo('movies'),
         ),
         _homeCard(
+          title: 'المسلسلات',
+          subtitle: 'إضافة وتعديل وحذف ونشر المسلسلات',
+          icon: Icons.live_tv_outlined,
+          onTap: () => navigateTo('series'),
+        ),
+        _homeCard(
+          title: 'القنوات',
+          subtitle: 'إضافة وتعديل وحذف وإدارة البث المباشر',
+          icon: Icons.tv,
+          onTap: () => navigateTo('channels'),
+        ),
+        _homeCard(
           title: 'المستخدمون',
           subtitle: 'إدارة المستخدمين والمدراء والمحظورين',
           icon: Icons.people_outline,
@@ -1856,6 +2237,9 @@ class _AdminPageState extends State<AdminPage> {
     }
 
     final isMovies = currentSection == 'movies';
+    final isSeries = currentSection == 'series';
+    final isChannels = currentSection == 'channels';
+    final isCatalog = isSeries || isChannels;
     final isUsers = currentSection == 'users';
     final isUserList = currentSection == 'userList';
 
@@ -1882,6 +2266,11 @@ class _AdminPageState extends State<AdminPage> {
                   color: adminGold,
                 ),
               ),
+            if (isCatalog)
+              IconButton(
+                onPressed: () => loadCatalog(currentSection),
+                icon: const Icon(Icons.refresh, color: adminGold),
+              ),
             if (isUsers || isUserList)
               IconButton(
                 onPressed: loadUsers,
@@ -1892,13 +2281,15 @@ class _AdminPageState extends State<AdminPage> {
               ),
           ],
         ),
-        floatingActionButton: isMovies
+        floatingActionButton: isMovies || isCatalog
             ? FloatingActionButton.extended(
                 backgroundColor: adminGold,
                 foregroundColor: Colors.black,
-                onPressed: () => openMovieForm(),
+                onPressed: () => isMovies
+                    ? openMovieForm()
+                    : openCatalogForm(currentSection),
                 icon: const Icon(Icons.add),
-                label: const Text('إضافة فيلم'),
+                label: Text(isMovies ? 'إضافة فيلم' : isSeries ? 'إضافة مسلسل' : 'إضافة قناة'),
               )
             : null,
         body: Column(
@@ -1921,7 +2312,11 @@ class _AdminPageState extends State<AdminPage> {
                     Icon(
                       isMovies
                           ? Icons.movie_creation_outlined
-                          : Icons.people_outline,
+                          : isSeries
+                              ? Icons.live_tv_outlined
+                              : isChannels
+                                  ? Icons.tv
+                                  : Icons.people_outline,
                       color: adminGold,
                       size: 30,
                     ),
@@ -1939,9 +2334,13 @@ class _AdminPageState extends State<AdminPage> {
                     Text(
                       isMovies
                           ? '${movies.length} فيلم'
-                          : isUsers
-                              ? '${users.length} مستخدم'
-                              : '${filteredUsers.length} نتيجة',
+                          : isSeries
+                              ? '${series.length} مسلسل'
+                              : isChannels
+                                  ? '${channels.length} قناة'
+                                  : isUsers
+                                      ? '${users.length} مستخدم'
+                                      : '${filteredUsers.length} نتيجة',
                       style: const TextStyle(
                         color: adminGold,
                         fontWeight: FontWeight.bold,
@@ -1955,7 +2354,9 @@ class _AdminPageState extends State<AdminPage> {
                   ? homeSection()
                   : isMovies
                       ? moviesSection()
-                      : isUsers
+                      : isCatalog
+                          ? catalogSection(currentSection)
+                          : isUsers
                           ? usersLoading
                               ? const Center(
                                   child: CircularProgressIndicator(
