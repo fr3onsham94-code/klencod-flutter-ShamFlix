@@ -287,7 +287,8 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     posterImage(poster),
 
-                    if (showCategoryBadge && category.isNotEmpty)
+                    // إظهار التصنيف فوق البوستر
+                    if (category.trim().isNotEmpty)
                       Positioned(
                         top: 8,
                         right: 8,
