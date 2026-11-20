@@ -1720,6 +1720,9 @@ class _DetailsPageState extends State<DetailsPage> {
                         future: serversFuture,
                         builder: (context, snapshot) {
                           final count = snapshot.data?.length ?? 0;
+                          final legacy = valueOf(widget.item['stream_url']);
+                          final totalChoices = count + (legacy.isNotEmpty ? 1 : 0);
+                          final canPlay = totalChoices > 0;
                           return SizedBox(
                             width: double.infinity,
                             child: FilledButton.icon(
@@ -1728,16 +1731,22 @@ class _DetailsPageState extends State<DetailsPage> {
                                 foregroundColor: Colors.black,
                                 padding: const EdgeInsets.all(15),
                               ),
-                              onPressed: snapshot.connectionState == ConnectionState.waiting
+                              onPressed: snapshot.connectionState == ConnectionState.waiting || !canPlay
                                   ? null
                                   : () => _openPlayback(
-                                        url: valueOf(widget.item['stream_url']),
+                                        url: legacy,
                                         title: title,
                                         type: widget.isChannel ? 'channel' : 'movie',
                                         contentId: valueOf(widget.item['id']),
                                       ),
                               icon: const Icon(Icons.play_arrow),
-                              label: Text(count > 1 ? 'تشغيل واختيار السيرفر (' + count.toString() + ')' : 'تشغيل الآن'),
+                              label: Text(
+                                !canPlay
+                                    ? 'لا توجد روابط تشغيل'
+                                    : totalChoices > 1
+                                        ? 'اختيار سيرفر التشغيل (' + totalChoices.toString() + ')'
+                                        : 'تشغيل الآن',
+                              ),
                             ),
                           );
                         },
