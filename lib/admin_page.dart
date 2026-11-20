@@ -427,6 +427,8 @@ class _AdminPageState extends State<AdminPage> {
     );
     bool published = existing?['is_published'] == true;
     bool isLive = existing?['is_live'] != false;
+    bool tmdbLoading = false;
+    Map<String, dynamic>? tmdbPreview;
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -448,7 +450,99 @@ class _AdminPageState extends State<AdminPage> {
                   children: [
                     adminField(titleController, isSeries ? 'اسم المسلسل' : 'اسم القناة', required: true),
                     if (isSeries) ...[
-                      adminField(tmdbController, 'رقم TMDB للمسلسل (اختياري)'),
+                      adminField(tmdbController, 'رابط صفحة المسلسل من TMDB أو رقم المسلسل'),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: tmdbLoading
+                              ? null
+                              : () async {
+                                  final value = tmdbController.text.trim();
+                                  if (value.isEmpty) {
+                                    showMessage('أدخل رابط صفحة المسلسل من TMDB أولاً', isError: true);
+                                    return;
+                                  }
+                                  setDialogState(() => tmdbLoading = true);
+                                  try {
+                                    final data = await _fetchTmdbDetails(value, mediaType: 'tv');
+                                    if (!dialogContext.mounted) return;
+                                    if (data['media_type'] != 'tv') {
+                                      throw Exception('الرابط ليس صفحة مسلسل. استخدم رابط TMDB الذي يحتوي على /tv/');
+                                    }
+                                    setDialogState(() {
+                                      tmdbPreview = data;
+                                      tmdbController.text = data['tmdb_id']?.toString() ?? value;
+                                      final fetchedTitle = data['title']?.toString() ?? '';
+                                      if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
+                                      posterController.text = data['poster_url']?.toString() ?? '';
+                                      descriptionController.text = data['description']?.toString() ?? '';
+                                      categoryController.text = data['category']?.toString() ?? '';
+                                      yearController.text = data['release_year']?.toString() ?? '';
+                                      final rating = data['rating'];
+                                      ratingController.text = rating == null ? '' : (rating as num).toStringAsFixed(1);
+                                    });
+                                  } catch (e) {
+                                    if (dialogContext.mounted) {
+                                      showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
+                                    }
+                                  } finally {
+                                    if (dialogContext.mounted) {
+                                      setDialogState(() => tmdbLoading = false);
+                                    }
+                                  }
+                                },
+                          icon: tmdbLoading
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: adminGold))
+                              : const Icon(Icons.cloud_download_outlined),
+                          label: Text(tmdbLoading ? 'جارٍ جلب بيانات المسلسل...' : 'جلب بيانات المسلسل من TMDB'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: adminGold,
+                            side: const BorderSide(color: adminGold),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                          ),
+                        ),
+                      ),
+                      if (tmdbPreview != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: adminBg,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: adminGold.withOpacity(0.45)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if ((tmdbPreview!['poster_url']?.toString() ?? '').isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.network(
+                                    tmdbPreview!['poster_url'].toString(),
+                                    width: 62,
+                                    height: 90,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const SizedBox(width: 62, height: 90, child: Icon(Icons.live_tv, color: adminGold)),
+                                  ),
+                                ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(tmdbPreview!['title']?.toString() ?? '', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 5),
+                                    Text('تم جلب بيانات المسلسل بنجاح', style: const TextStyle(color: Colors.green, fontSize: 12)),
+                                    if ((tmdbPreview!['director']?.toString() ?? '').isNotEmpty)
+                                      Text('المخرج: ${tmdbPreview!['director']}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       adminField(posterController, 'رابط صورة البوستر'),
                       adminField(descriptionController, 'وصف المسلسل', maxLines: 4),
                       adminField(categoryController, 'التصنيف'),
@@ -1482,7 +1576,7 @@ class _AdminPageState extends State<AdminPage> {
     return int.tryParse(input);
   }
 
-  Future<Map<String, dynamic>> _fetchTmdbDetails(String value) async {
+  Future<Map<String, dynamic>> _fetchTmdbDetails(String value, {String? mediaType}) async {
     final response = await http.post(
       tmdbFunctionUrl,
       headers: {
@@ -1490,7 +1584,10 @@ class _AdminPageState extends State<AdminPage> {
         'Authorization': 'Bearer ${AuthService.accessToken ?? ''}',
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'tmdb_url': value.trim()}),
+      body: jsonEncode({
+        'tmdb_url': value.trim(),
+        if (mediaType != null) 'media_type': mediaType,
+      }),
     );
 
     dynamic decoded;
