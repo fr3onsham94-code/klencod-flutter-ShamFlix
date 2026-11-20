@@ -4,7 +4,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -20,6 +22,7 @@ final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
 
   await AuthService.initialize().timeout(
     const Duration(seconds: 20),
@@ -1250,34 +1253,70 @@ class _DetailsPageState extends State<DetailsPage> {
     await _startPlayback(selected['stream_url'].toString(), title);
   }
 
-  Future<void> _startPlayback(String url, String title) async {
-    final prefs = await SharedPreferences.getInstance();
-    final player = prefs.getString(_playerPreferenceKey) ?? 'internal';
-    if (!mounted) return;
+  bool _isDirectMediaUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null || !uri.hasScheme ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) return false;
+    return RegExp(
+      r'\.(mp4|m4v|mkv|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|m3u8|mpd|mp3|aac|m4a|ogg|wav)$',
+      caseSensitive: false,
+    ).hasMatch(uri.path);
+  }
 
-    if (player == 'internal') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(url: url, title: title)),
+  Future<void> _startPlayback(String url, String title) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || !uri.hasScheme) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('رابط التشغيل غير صالح')),
       );
       return;
     }
-
-    final packageName = player == 'vlc'
+    if (!_isDirectMediaUrl(url)) {
+      if (uri.scheme == 'http' || uri.scheme == 'https') {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => ShamFlixWebPage(url: url, title: title),
+        ));
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('نوع الرابط غير مدعوم داخل التطبيق')),
+        );
+      }
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final selectedPlayer = prefs.getString(_playerPreferenceKey) ?? 'internal';
+    if (!mounted) return;
+    if (selectedPlayer == 'internal') {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ShamFlixPlayerPage(url: url, title: title),
+      ));
+      return;
+    }
+    final packageName = selectedPlayer == 'vlc'
         ? 'org.videolan.vlc'
         : 'com.mxtech.videoplayer.ad';
     try {
-      final uri = Uri.parse(url);
-      final intentUrl =
-          'intent://${uri.host}${uri.path}${uri.hasQuery ? '?${uri.query}' : ''}'
-          '#Intent;scheme=${uri.scheme};package=$packageName;type=video/*;end';
-      final opened = await launchUrl(
-        Uri.parse(intentUrl),
-        mode: LaunchMode.externalApplication,
-      );
-      if (!opened && mounted) _showPlayerMissing(player);
+      final intentUrl = 'intent://' + uri.host + uri.path +
+          (uri.hasQuery ? '?' + uri.query : '') +
+          '#Intent;scheme=' + uri.scheme + ';package=' + packageName +
+          ';type=video/*;end';
+      final opened = await launchUrl(Uri.parse(intentUrl),
+          mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('تعذر فتح الرابط بالمشغل المحدد. جرّب المشغل الداخلي أو تأكد من تثبيت التطبيق.'),
+          action: SnackBarAction(
+            label: 'داخلي',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => ShamFlixPlayerPage(url: url, title: title),
+            )),
+          ),
+        ));
+      }
     } catch (_) {
-      if (mounted) _showPlayerMissing(player);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر إرسال الرابط إلى المشغل الخارجي')),
+      );
     }
   }
 
@@ -1527,40 +1566,50 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
 class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
   final String title;
-
   const ShamFlixPlayerPage({super.key, required this.url, required this.title});
-
   @override
   State<ShamFlixPlayerPage> createState() => _ShamFlixPlayerPageState();
 }
-
 class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
-  late final VideoPlayerController controller;
+  late final Player player;
+  late final VideoController controller;
   String? error;
-
+  bool opening = true;
   @override
   void initState() {
     super.initState();
-    controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-    _initialize();
+    player = Player();
+    controller = VideoController(player);
+    player.stream.error.listen((message) {
+      if (!mounted) return;
+      setState(() { error = message; opening = false; });
+    });
+    _open();
   }
-
-  Future<void> _initialize() async {
+  Future<void> _open() async {
     try {
-      await controller.initialize();
-      await controller.play();
-      if (mounted) setState(() {});
-    } catch (_) {
-      if (mounted) setState(() => error = 'تعذر تشغيل الفيديو. تحقق من الرابط أو صيغة البث.');
+      await player.open(Media(widget.url));
+      if (mounted) setState(() => opening = false);
+    } catch (e) {
+      if (mounted) setState(() {
+        opening = false;
+        error = 'تعذر تشغيل هذا الرابط: ' + e.toString();
+      });
     }
   }
-
+  String _time(Duration value) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = value.inHours;
+    final m = value.inMinutes.remainder(60);
+    final s = value.inSeconds.remainder(60);
+    if (h > 0) return two(h) + ':' + two(m) + ':' + two(s);
+    return two(m) + ':' + two(s);
+  }
   @override
   void dispose() {
-    controller.dispose();
+    player.dispose();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -1568,42 +1617,158 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(backgroundColor: bg, title: Text(widget.title)),
-        body: Center(
-          child: error != null
-              ? Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-                )
-              : !controller.value.isInitialized
-                  ? const CircularProgressIndicator(color: gold)
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AspectRatio(aspectRatio: controller.value.aspectRatio, child: VideoPlayer(controller)),
-                        VideoProgressIndicator(
-                          controller,
-                          allowScrubbing: true,
-                          colors: VideoProgressColors(playedColor: gold, bufferedColor: Colors.white38, backgroundColor: Colors.white12),
-                        ),
-                        const SizedBox(height: 16),
-                        IconButton(
-                          iconSize: 54,
-                          color: gold,
-                          onPressed: () {
-                            setState(() {
-                              controller.value.isPlaying ? controller.pause() : controller.play();
-                            });
+        body: error != null
+            ? Center(child: Padding(
+                padding: const EdgeInsets.all(22),
+                child: Text(error!, textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70)),
+              ))
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(child: Center(
+                    child: opening
+                        ? const CircularProgressIndicator(color: gold)
+                        : Video(controller: controller, fit: BoxFit.contain,
+                            controls: NoVideoControls),
+                  )),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    child: StreamBuilder<Duration>(
+                      stream: player.stream.position,
+                      builder: (context, ps) {
+                        final position = ps.data ?? Duration.zero;
+                        return StreamBuilder<Duration>(
+                          stream: player.stream.duration,
+                          builder: (context, ds) {
+                            final duration = ds.data ?? Duration.zero;
+                            final max = duration.inMilliseconds > 0
+                                ? duration.inMilliseconds.toDouble() : 1.0;
+                            final value = position.inMilliseconds.toDouble().clamp(0.0, max);
+                            return Column(children: [
+                              Slider(
+                                value: value, max: max, activeColor: gold,
+                                inactiveColor: Colors.white24,
+                                onChanged: duration == Duration.zero ? null :
+                                    (next) => player.seek(Duration(milliseconds: next.round())),
+                              ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(_time(position), style: const TextStyle(color: Colors.white70)),
+                                  Text(_time(duration), style: const TextStyle(color: Colors.white70)),
+                                ],
+                              ),
+                            ]);
                           },
-                          icon: Icon(controller.value.isPlaying ? Icons.pause_circle : Icons.play_circle),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-        ),
+                  ),
+                  StreamBuilder<bool>(
+                    stream: player.stream.playing,
+                    builder: (context, snapshot) {
+                      final playing = snapshot.data ?? false;
+                      return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        IconButton(iconSize: 48, color: gold,
+                          onPressed: () => player.seek(player.state.position - const Duration(seconds: 10)),
+                          icon: const Icon(Icons.replay_10)),
+                        IconButton(iconSize: 62, color: gold,
+                          onPressed: () => player.playOrPause(),
+                          icon: Icon(playing ? Icons.pause_circle : Icons.play_circle)),
+                        IconButton(iconSize: 48, color: gold,
+                          onPressed: () => player.seek(player.state.position + const Duration(seconds: 10)),
+                          icon: const Icon(Icons.forward_10)),
+                      ]);
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                ],
+              ),
       ),
     );
   }
 }
 
+class ShamFlixWebPage extends StatefulWidget {
+  final String url;
+  final String title;
+  const ShamFlixWebPage({super.key, required this.url, required this.title});
+  @override
+  State<ShamFlixWebPage> createState() => _ShamFlixWebPageState();
+}
+class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
+  late final WebViewController controller;
+  int progress = 0;
+  bool canGoBack = false;
+  bool canGoForward = false;
+  String? pageError;
+  @override
+  void initState() {
+    super.initState();
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(NavigationDelegate(
+        onProgress: (value) {
+          if (mounted) setState(() => progress = value);
+        },
+        onPageStarted: (_) {
+          if (mounted) setState(() => pageError = null);
+        },
+        onPageFinished: (_) async {
+          final back = await controller.canGoBack();
+          final forward = await controller.canGoForward();
+          if (mounted) setState(() {
+            canGoBack = back;
+            canGoForward = forward;
+            progress = 100;
+          });
+        },
+        onWebResourceError: (error) {
+          if (error.isForMainFrame == true && mounted) {
+            setState(() => pageError =
+                'تعذر تحميل الصفحة. تحقق من اتصال الإنترنت أو جرّب سيرفراً آخر.');
+          }
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: bg,
+          title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          actions: [
+            IconButton(tooltip: 'رجوع', onPressed: canGoBack ? () => controller.goBack() : null,
+                icon: const Icon(Icons.arrow_back)),
+            IconButton(tooltip: 'تقدم', onPressed: canGoForward ? () => controller.goForward() : null,
+                icon: const Icon(Icons.arrow_forward)),
+            IconButton(tooltip: 'تحديث', onPressed: () => controller.reload(),
+                icon: const Icon(Icons.refresh)),
+          ],
+        ),
+        body: Column(children: [
+          if (progress < 100)
+            LinearProgressIndicator(value: progress / 100, color: gold, backgroundColor: panel),
+          Expanded(
+            child: pageError != null
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(pageError!, textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70)),
+                  ))
+                : WebViewWidget(controller: controller),
+          ),
+        ]),
+      ),
+    );
+  }
+}
 
 class ShamFlixSearch extends SearchDelegate {
   Future<List<Map<String, dynamic>>> searchContent() async {
@@ -1759,4 +1924,11 @@ class ShamFlixSearch extends SearchDelegate {
 // تم ربط المواسم والحلقات والسيرفرات بواجهة المشاهدة.
 // تم إصلاح إنشاء VideoProgressColors ليتوافق مع إصدار الحزمة.
 // أضيفت إعدادات المشغل للمستخدمين المسجلين وغير المسجلين، والمشغل الداخلي والخارجي.
+// ==========================================
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// تم اعتماد media_kit/libmpv لتوسيع دعم صيغ الفيديو والبث المباشر.
+// تمت إضافة متصفح WebView مدمج لروابط صفحات مواقع المشاهدة.
+// تم فصل روابط صفحات المواقع عن روابط ملفات الفيديو المباشرة.
 // ==========================================
