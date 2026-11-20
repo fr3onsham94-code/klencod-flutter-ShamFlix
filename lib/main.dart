@@ -1583,7 +1583,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         VideoProgressIndicator(
                           controller,
                           allowScrubbing: true,
-                          colors: const VideoProgressColors(playedColor: gold, bufferedColor: Colors.white38, backgroundColor: Colors.white12),
+                          colors: VideoProgressColors(playedColor: gold, bufferedColor: Colors.white38, backgroundColor: Colors.white12),
                         ),
                         const SizedBox(height: 16),
                         IconButton(
@@ -1757,5 +1757,6 @@ class ShamFlixSearch extends SearchDelegate {
 // ==========================================
 // ShamFlix - آخر تحديث: 21-11-2026
 // تم ربط المواسم والحلقات والسيرفرات بواجهة المشاهدة.
+// تم إصلاح إنشاء VideoProgressColors ليتوافق مع إصدار الحزمة.
 // أضيفت إعدادات المشغل للمستخدمين المسجلين وغير المسجلين، والمشغل الداخلي والخارجي.
 // ==========================================
