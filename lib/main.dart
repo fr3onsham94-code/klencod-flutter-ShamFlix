@@ -3,6 +3,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_service.dart';
@@ -964,6 +967,20 @@ class _AccountPageState extends State<AccountPage> {
             subtitle: 'احفظ أفلامك ومسلسلاتك المفضلة',
           ),
           accountTile(
+            icon: Icons.settings_outlined,
+            title: 'إعدادات المشغل',
+            subtitle: 'اختيار المشغل الداخلي أو VLC أو MX Player',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ShamFlixPlayerSettingsPage(),
+                ),
+              );
+            },
+          ),
+
+          accountTile(
             icon: Icons.history,
             title: 'سجل المشاهدة',
             subtitle: 'تابع ما شاهدته',
@@ -1100,7 +1117,7 @@ class FavoritesPage extends StatelessWidget {
   }
 }
 
-class DetailsPage extends StatelessWidget {
+class DetailsPage extends StatefulWidget {
   final Map<String, dynamic> item;
   final bool isSeries;
   final bool isChannel;
@@ -1112,51 +1129,209 @@ class DetailsPage extends StatelessWidget {
     this.isChannel = false,
   });
 
-  Future<void> copyStreamUrl(BuildContext context) async {
-    final url = valueOf(item['stream_url']);
+  @override
+  State<DetailsPage> createState() => _DetailsPageState();
+}
 
-    if (url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('لا يوجد رابط تشغيل لهذا المحتوى'),
-        ),
-      );
-      return;
+class _DetailsPageState extends State<DetailsPage> {
+  bool seasonsLoading = false;
+  List<Map<String, dynamic>> seasons = [];
+  String? seasonsError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isSeries) _loadSeasons();
+  }
+
+  Future<void> _loadSeasons() async {
+    final id = widget.item['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    setState(() { seasonsLoading = true; seasonsError = null; });
+    try {
+      final rows = await SupabaseService.getSeasons(id);
+      if (!mounted) return;
+      setState(() => seasons = rows);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => seasonsError = e.toString());
+    } finally {
+      if (mounted) setState(() => seasonsLoading = false);
     }
+  }
 
+  Future<void> copyStreamUrl(String url) async {
+    if (url.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: url));
-
-    if (!context.mounted) return;
-
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('تم نسخ رابط التشغيل')),
     );
   }
 
+  Future<void> _chooseAndPlay({
+    required String contentType,
+    required String contentId,
+    required String title,
+    String? legacyUrl,
+  }) async {
+    List<Map<String, dynamic>> servers = [];
+    try {
+      servers = await SupabaseService.getPlaybackServers(
+        contentType: contentType,
+        contentId: contentId,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تحميل سيرفرات التشغيل: $e')),
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    if (servers.isEmpty) {
+      final fallback = legacyUrl?.trim() ?? '';
+      if (fallback.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا توجد روابط تشغيل لهذا المحتوى')),
+        );
+        return;
+      }
+      await _startPlayback(fallback, title);
+      return;
+    }
+
+    if (servers.length == 1) {
+      await _startPlayback(servers.first['stream_url'].toString(), title);
+      return;
+    }
+
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      backgroundColor: panel,
+      builder: (sheetContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('اختر سيرفر التشغيل', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                ...servers.map((server) => ListTile(
+                      leading: const Icon(Icons.dns, color: gold),
+                      title: Text(valueOf(server['server_name'], 'سيرفر'), style: const TextStyle(color: Colors.white)),
+                      trailing: const Icon(Icons.play_arrow, color: gold),
+                      onTap: () => Navigator.pop(sheetContext, server),
+                    )),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await _startPlayback(selected['stream_url'].toString(), title);
+  }
+
+  Future<void> _startPlayback(String url, String title) async {
+    final prefs = await SharedPreferences.getInstance();
+    final player = prefs.getString(_playerPreferenceKey) ?? 'internal';
+    if (!mounted) return;
+
+    if (player == 'internal') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(url: url, title: title)),
+      );
+      return;
+    }
+
+    final packageName = player == 'vlc'
+        ? 'org.videolan.vlc'
+        : 'com.mxtech.videoplayer.ad';
+    try {
+      final uri = Uri.parse(url);
+      final intentUrl =
+          'intent://${uri.host}${uri.path}${uri.hasQuery ? '?${uri.query}' : ''}'
+          '#Intent;scheme=${uri.scheme};package=$packageName;type=video/*;end';
+      final opened = await launchUrl(
+        Uri.parse(intentUrl),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && mounted) _showPlayerMissing(player);
+    } catch (_) {
+      if (mounted) _showPlayerMissing(player);
+    }
+  }
+
+  void _showPlayerMissing(String player) {
+    final name = player == 'vlc' ? 'VLC' : 'MX Player';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تأكد من تثبيت $name على جهازك')),
+    );
+  }
+
+  Widget _episodeList(Map<String, dynamic> season) {
+    final seasonId = season['id']?.toString() ?? '';
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: SupabaseService.getEpisodes(seasonId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: gold)));
+        }
+        if (snapshot.hasError) {
+          return const Padding(padding: EdgeInsets.all(12), child: Text('تعذر تحميل الحلقات', style: TextStyle(color: Colors.redAccent)));
+        }
+        final episodes = snapshot.data ?? [];
+        if (episodes.isEmpty) {
+          return const Padding(padding: EdgeInsets.all(12), child: Text('لا توجد حلقات منشورة في هذا الموسم', style: TextStyle(color: Colors.white54)));
+        }
+        return Column(
+          children: episodes.map((episode) {
+            final number = episode['episode_number']?.toString() ?? '';
+            final episodeTitle = valueOf(episode['title'], 'الحلقة $number');
+            final poster = valueOf(episode['poster_url']);
+            return ListTile(
+              leading: poster.isEmpty
+                  ? const CircleAvatar(backgroundColor: panel, child: Icon(Icons.play_arrow, color: gold))
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(poster, width: 54, height: 58, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.play_circle, color: gold)),
+                    ),
+              title: Text('$number - $episodeTitle', style: const TextStyle(color: Colors.white)),
+              subtitle: const Text('تشغيل الحلقة', style: TextStyle(color: Colors.white54)),
+              trailing: const Icon(Icons.play_circle_outline, color: gold),
+              onTap: () => _chooseAndPlay(
+                contentType: 'episode',
+                contentId: episode['id'].toString(),
+                title: episodeTitle,
+                legacyUrl: episode['stream_url']?.toString(),
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final title = valueOf(
-      item['title'] ?? item['name'],
-      'بدون عنوان',
-    );
-
-    final poster = valueOf(
-      item['poster_url'] ?? item['logo_url'],
-    );
-
-    final description = valueOf(
-      item['description'],
-      'لا يوجد وصف لهذا المحتوى حالياً.',
-    );
+    final item = widget.item;
+    final isSeries = widget.isSeries;
+    final isChannel = widget.isChannel;
+    final title = valueOf(item['title'] ?? item['name'], 'بدون عنوان');
+    final poster = valueOf(item['poster_url'] ?? item['logo_url']);
+    final description = valueOf(item['description'], 'لا يوجد وصف لهذا المحتوى حالياً.');
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: bg,
-        appBar: AppBar(
-          backgroundColor: bg,
-          title: Text(title),
-        ),
+        appBar: AppBar(backgroundColor: bg, title: Text(title)),
         body: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1165,112 +1340,79 @@ class DetailsPage extends StatelessWidget {
                 width: double.infinity,
                 height: 390,
                 child: poster.isEmpty
-                    ? Container(
-                        color: panel,
-                        child: const Icon(
-                          Icons.movie,
-                          color: gold,
-                          size: 90,
-                        ),
-                      )
-                    : Image.network(
-                        poster,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) {
-                          return Container(
-                            color: panel,
-                            child: const Icon(
-                              Icons.movie,
-                              color: gold,
-                              size: 90,
-                            ),
-                          );
-                        },
-                      ),
+                    ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))
+                    : Image.network(poster, fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))),
               ),
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 16,
                       runSpacing: 8,
                       children: [
-                        if (valueOf(item['release_year']).isNotEmpty)
-                          detailTag(
-                            Icons.calendar_today,
-                            valueOf(item['release_year']),
-                          ),
-                        if (valueOf(item['category']).isNotEmpty)
-                          detailTag(
-                            Icons.category,
-                            valueOf(item['category']),
-                          ),
-                        if (valueOf(item['rating']).isNotEmpty)
-                          detailTag(
-                            Icons.star,
-                            valueOf(item['rating']),
-                          ),
-                        detailTag(
-                          isChannel
-                              ? Icons.live_tv
-                              : isSeries
-                                  ? Icons.tv
-                                  : Icons.movie,
-                          isChannel
-                              ? 'قناة'
-                              : isSeries
-                                  ? 'مسلسل'
-                                  : 'فيلم',
-                        ),
+                        if (valueOf(item['release_year']).isNotEmpty) _detailTag(Icons.calendar_today, valueOf(item['release_year'])),
+                        if (valueOf(item['category']).isNotEmpty) _detailTag(Icons.category, valueOf(item['category'])),
+                        if (valueOf(item['rating']).isNotEmpty) _detailTag(Icons.star, valueOf(item['rating'])),
+                        _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie, isChannel ? 'قناة' : isSeries ? 'مسلسل' : 'فيلم'),
                       ],
                     ),
                     const SizedBox(height: 25),
-                    const Text(
-                      'القصة والوصف',
-                      style: TextStyle(
-                        color: gold,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Text('القصة والوصف', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
-                    Text(
-                      description,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        height: 1.7,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    if (valueOf(item['stream_url']).isNotEmpty)
+                    Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
+                    const SizedBox(height: 25),
+                    if (!isSeries)
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: gold,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.all(15),
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black, padding: const EdgeInsets.all(15)),
+                          onPressed: () => _chooseAndPlay(
+                            contentType: isChannel ? 'channel' : 'movie',
+                            contentId: item['id'].toString(),
+                            title: title,
+                            legacyUrl: item['stream_url']?.toString(),
                           ),
-                          onPressed: () => copyStreamUrl(context),
                           icon: const Icon(Icons.play_arrow),
-                          label: const Text(
-                            'نسخ رابط التشغيل',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
+                          label: const Text('تشغيل الآن', style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
+                    if (valueOf(item['stream_url']).isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.center,
+                        child: TextButton.icon(
+                          onPressed: () => copyStreamUrl(valueOf(item['stream_url'])),
+                          icon: const Icon(Icons.copy, color: gold),
+                          label: const Text('نسخ رابط التشغيل', style: TextStyle(color: gold)),
+                        ),
+                      ),
+                    ],
+                    if (isSeries) ...[
+                      const SizedBox(height: 22),
+                      const Text('المواسم والحلقات', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      if (seasonsLoading)
+                        const Center(child: CircularProgressIndicator(color: gold))
+                      else if (seasonsError != null)
+                        Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
+                      else if (seasons.isEmpty)
+                        const Text('لا توجد مواسم منشورة حالياً', style: TextStyle(color: Colors.white54))
+                      else
+                        ...seasons.map((season) => Card(
+                              color: panel,
+                              child: ExpansionTile(
+                                iconColor: gold,
+                                collapsedIconColor: gold,
+                                title: Text(valueOf(season['name'], 'الموسم ${season['season_number']}'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                children: [_episodeList(season)],
+                              ),
+                            )),
+                    ],
                   ],
                 ),
               ),
@@ -1281,20 +1423,173 @@ class DetailsPage extends StatelessWidget {
     );
   }
 
-  Widget detailTag(IconData icon, String text) {
+  Widget _detailTag(IconData icon, String text) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: gold, size: 16),
         const SizedBox(width: 5),
-        Text(
-          text,
-          style: const TextStyle(color: Colors.white70),
-        ),
+        Text(text, style: const TextStyle(color: Colors.white70)),
       ],
     );
   }
 }
+
+const String _playerPreferenceKey = 'shamflix_player_preference';
+
+class ShamFlixPlayerSettingsPage extends StatefulWidget {
+  const ShamFlixPlayerSettingsPage({super.key});
+
+  @override
+  State<ShamFlixPlayerSettingsPage> createState() => _ShamFlixPlayerSettingsPageState();
+}
+
+class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage> {
+  String selectedPlayer = 'internal';
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      selectedPlayer = prefs.getString(_playerPreferenceKey) ?? 'internal';
+      loading = false;
+    });
+  }
+
+  Future<void> _save(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerPreferenceKey, value);
+    if (!mounted) return;
+    setState(() => selectedPlayer = value);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ اختيار المشغل')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(backgroundColor: bg, title: const Text('إعدادات المشغل')),
+        body: loading
+            ? const Center(child: CircularProgressIndicator(color: gold))
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const Text('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 14),
+                  _playerOption('internal', 'المشغل الداخلي', 'تشغيل داخل تطبيق ShamFlix', Icons.smart_display),
+                  _playerOption('vlc', 'VLC', 'يتطلب تثبيت تطبيق VLC', Icons.play_circle),
+                  _playerOption('mx', 'MX Player', 'يتطلب تثبيت تطبيق MX Player', Icons.ondemand_video),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _playerOption(String value, String title, String subtitle, IconData icon) {
+    return Card(
+      color: panel,
+      child: RadioListTile<String>(
+        value: value,
+        groupValue: selectedPlayer,
+        activeColor: gold,
+        secondary: Icon(icon, color: gold),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)),
+        onChanged: (next) { if (next != null) _save(next); },
+      ),
+    );
+  }
+}
+
+class ShamFlixPlayerPage extends StatefulWidget {
+  final String url;
+  final String title;
+
+  const ShamFlixPlayerPage({super.key, required this.url, required this.title});
+
+  @override
+  State<ShamFlixPlayerPage> createState() => _ShamFlixPlayerPageState();
+}
+
+class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
+  late final VideoPlayerController controller;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      await controller.initialize();
+      await controller.play();
+      if (mounted) setState(() {});
+    } catch (_) {
+      if (mounted) setState(() => error = 'تعذر تشغيل الفيديو. تحقق من الرابط أو صيغة البث.');
+    }
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(backgroundColor: bg, title: Text(widget.title)),
+        body: Center(
+          child: error != null
+              ? Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                )
+              : !controller.value.isInitialized
+                  ? const CircularProgressIndicator(color: gold)
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AspectRatio(aspectRatio: controller.value.aspectRatio, child: VideoPlayer(controller)),
+                        VideoProgressIndicator(
+                          controller,
+                          allowScrubbing: true,
+                          colors: const VideoProgressColors(playedColor: gold, bufferedColor: Colors.white38, backgroundColor: Colors.white12),
+                        ),
+                        const SizedBox(height: 16),
+                        IconButton(
+                          iconSize: 54,
+                          color: gold,
+                          onPressed: () {
+                            setState(() {
+                              controller.value.isPlaying ? controller.pause() : controller.play();
+                            });
+                          },
+                          icon: Icon(controller.value.isPlaying ? Icons.pause_circle : Icons.play_circle),
+                        ),
+                      ],
+                    ),
+        ),
+      ),
+    );
+  }
+}
+
 
 class ShamFlixSearch extends SearchDelegate {
   Future<List<Map<String, dynamic>>> searchContent() async {
@@ -1444,3 +1739,9 @@ class ShamFlixSearch extends SearchDelegate {
     return results(context);
   }
 }
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// تم ربط المواسم والحلقات والسيرفرات بواجهة المشاهدة.
+// أضيفت إعدادات المشغل والمشغل الداخلي والخارجي.
+// ==========================================
