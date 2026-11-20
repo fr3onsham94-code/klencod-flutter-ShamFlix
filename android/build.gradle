@@ -1,6 +1,7 @@
 allprojects {
     repositories {
         google()
+        maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }
         mavenCentral()
     }
 }
@@ -16,3 +17,8 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة مرآة Maven Central لتقليل أخطاء 429 أثناء تنزيل الاعتماديات.
+// ==========================================
