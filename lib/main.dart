@@ -1052,6 +1052,20 @@ class _AccountPageState extends State<AccountPage> {
             subtitle: 'قريباً: قائمة محتواك المفضل',
           ),
           accountTile(
+            icon: Icons.settings_outlined,
+            title: 'إعدادات المشغل',
+            subtitle: 'اختيار المشغل الداخلي أو VLC أو MX Player',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ShamFlixPlayerSettingsPage(),
+                ),
+              );
+            },
+          ),
+
+          accountTile(
             icon: Icons.history,
             title: 'سجل المشاهدة',
             subtitle: 'قريباً: آخر ما شاهدته',
@@ -1743,5 +1757,5 @@ class ShamFlixSearch extends SearchDelegate {
 // ==========================================
 // ShamFlix - آخر تحديث: 21-11-2026
 // تم ربط المواسم والحلقات والسيرفرات بواجهة المشاهدة.
-// أضيفت إعدادات المشغل والمشغل الداخلي والخارجي.
+// أضيفت إعدادات المشغل للمستخدمين المسجلين وغير المسجلين، والمشغل الداخلي والخارجي.
 // ==========================================
