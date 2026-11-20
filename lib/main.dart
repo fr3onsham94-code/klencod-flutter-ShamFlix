@@ -4,9 +4,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
-import 'package:android_intent_plus/android_intent.dart';
 
 import 'supabase_service.dart';
 import 'admin_auth_service.dart';
@@ -934,18 +931,6 @@ class _AccountPageState extends State<AccountPage> {
         ),
         const SizedBox(height: 25),
 
-        accountTile(
-            icon: Icons.settings_outlined,
-            title: 'إعدادات المشغل',
-            subtitle: 'اختيار مشغل الفيديو الافتراضي',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PlayerSettingsPage()),
-              );
-            },
-          ),
-
         if (!loggedIn) ...[
           const Center(
             child: Text(
@@ -1115,302 +1100,7 @@ class FavoritesPage extends StatelessWidget {
   }
 }
 
-class PlayerPreference {
-  static const String key = 'shamflix_default_player';
-  static const String internal = 'internal';
-  static const String vlc = 'vlc';
-  static const String mx = 'mx';
-
-  static Future<String> get() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(key) ?? internal;
-  }
-
-  static Future<void> set(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, value);
-  }
-
-  static String label(String value) {
-    if (value == vlc) return 'VLC Player';
-    if (value == mx) return 'MX Player';
-    return 'المشغل الداخلي';
-  }
-}
-
-class PlayerSettingsPage extends StatefulWidget {
-  const PlayerSettingsPage({super.key});
-
-  @override
-  State<PlayerSettingsPage> createState() => _PlayerSettingsPageState();
-}
-
-class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
-  String selected = PlayerPreference.internal;
-  bool loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final value = await PlayerPreference.get();
-    if (!mounted) return;
-    setState(() {
-      selected = value;
-      loading = false;
-    });
-  }
-
-  Future<void> _save(String value) async {
-    await PlayerPreference.set(value);
-    if (!mounted) return;
-    setState(() => selected = value);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم حفظ المشغل الافتراضي: ' + PlayerPreference.label(value))),
-    );
-  }
-
-  Widget _option(String value, String title, String subtitle, IconData icon) {
-    return Card(
-      color: panel,
-      child: RadioListTile<String>(
-        value: value,
-        groupValue: selected,
-        activeColor: gold,
-        secondary: Icon(icon, color: gold),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)),
-        onChanged: (v) {
-          if (v != null) _save(v);
-        },
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: const Text('إعدادات المشغل')),
-        body: loading
-            ? const Center(child: CircularProgressIndicator(color: gold))
-            : ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  const Text(
-                    'اختر مشغل الفيديو الذي تريد استخدامه دائماً. يمكنك تغييره لاحقاً من هنا.',
-                    style: TextStyle(color: Colors.white70, height: 1.6),
-                  ),
-                  const SizedBox(height: 16),
-                  _option(PlayerPreference.internal, 'المشغل الداخلي', 'تشغيل الفيديو داخل تطبيق ShamFlix', Icons.smart_display),
-                  _option(PlayerPreference.vlc, 'VLC Player', 'فتح الفيديو باستخدام تطبيق VLC المثبت على جهازك', Icons.play_circle_outline),
-                  _option(PlayerPreference.mx, 'MX Player', 'فتح الفيديو باستخدام تطبيق MX Player المثبت على جهازك', Icons.ondemand_video),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'ملاحظة: يجب تثبيت VLC أو MX Player على الجهاز لاستخدامهما.',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-}
-
-class PlaybackPage extends StatefulWidget {
-  final String url;
-  final String title;
-
-  const PlaybackPage({
-    super.key,
-    required this.url,
-    required this.title,
-  });
-
-  @override
-  State<PlaybackPage> createState() => _PlaybackPageState();
-}
-
-class _PlaybackPageState extends State<PlaybackPage> {
-  VideoPlayerController? controller;
-  String selectedPlayer = PlayerPreference.internal;
-  bool loading = true;
-  String? error;
-
-  @override
-  void initState() {
-    super.initState();
-    _initialize();
-  }
-
-  Future<void> _initialize() async {
-    selectedPlayer = await PlayerPreference.get();
-    if (!mounted) return;
-
-    if (selectedPlayer != PlayerPreference.internal) {
-      await _openExternal();
-      return;
-    }
-
-    try {
-      final video = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-      controller = video;
-      await video.initialize();
-      await video.setLooping(false);
-      await video.play();
-      if (!mounted) return;
-      setState(() => loading = false);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        loading = false;
-        error = 'تعذر تشغيل الفيديو داخل التطبيق. جرّب مشغلاً خارجياً.';
-      });
-    }
-  }
-
-  Future<void> _openExternal() async {
-    final packageName = selectedPlayer == PlayerPreference.vlc
-        ? 'org.videolan.vlc'
-        : 'com.mxtech.videoplayer.ad';
-
-    try {
-      final intent = AndroidIntent(
-        action: 'action_view',
-        data: widget.url,
-        type: 'video/*',
-        package: packageName,
-      );
-      await intent.launch();
-      if (!mounted) return;
-      setState(() => loading = false);
-    } catch (_) {
-      if (selectedPlayer == PlayerPreference.mx) {
-        try {
-          final proIntent = AndroidIntent(
-            action: 'action_view',
-            data: widget.url,
-            type: 'video/*',
-            package: 'com.mxtech.videoplayer.pro',
-          );
-          await proIntent.launch();
-          if (!mounted) return;
-          setState(() => loading = false);
-          return;
-        } catch (_) {}
-      }
-      if (!mounted) return;
-      setState(() {
-        loading = false;
-        error = 'لم يتم العثور على ' + PlayerPreference.label(selectedPlayer) +
-            ' أو تعذر فتح الرابط. ثبّت التطبيق أو غيّر المشغل من الإعدادات.';
-      });
-    }
-  }
-
-  Future<void> _useInternal() async {
-    await PlayerPreference.set(PlayerPreference.internal);
-    if (!mounted) return;
-    setState(() {
-      selectedPlayer = PlayerPreference.internal;
-      loading = true;
-      error = null;
-    });
-    await controller?.dispose();
-    controller = null;
-    await _initialize();
-  }
-
-  @override
-  void dispose() {
-    controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final video = controller;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: bg,
-          title: Text(widget.title),
-        ),
-        body: Center(
-          child: loading
-              ? const CircularProgressIndicator(color: gold)
-              : error != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.error_outline, color: Colors.orange, size: 48),
-                          const SizedBox(height: 14),
-                          Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-                          const SizedBox(height: 18),
-                          OutlinedButton.icon(
-                            onPressed: _useInternal,
-                            icon: const Icon(Icons.smart_display),
-                            label: const Text('جرّب المشغل الداخلي'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : selectedPlayer != PlayerPreference.internal
-                      ? const Text(
-                          'تم إرسال الفيديو إلى المشغل الخارجي. إذا لم يفتح، تأكد من تثبيته.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white70),
-                        )
-                      : video == null || !video.value.isInitialized
-                          ? const Text('تعذر تجهيز الفيديو', style: TextStyle(color: Colors.white70))
-                          : GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  video.value.isPlaying ? video.pause() : video.play();
-                                });
-                              },
-                              child: AspectRatio(
-                                aspectRatio: video.value.aspectRatio,
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    VideoPlayer(video),
-                                    if (!video.value.isPlaying)
-                                      const Icon(Icons.play_circle_fill, color: Colors.white, size: 64),
-                                    Positioned(
-                                      bottom: 8,
-                                      left: 12,
-                                      right: 12,
-                                      child: VideoProgressIndicator(
-                                        video,
-                                        allowScrubbing: true,
-                                        colors: const VideoProgressColors(
-                                          playedColor: gold,
-                                          bufferedColor: Colors.white38,
-                                          backgroundColor: Colors.white12,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-        ),
-      ),
-    );
-  }
-}
-
-class DetailsPage extends StatefulWidget {
+class DetailsPage extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool isSeries;
   final bool isChannel;
@@ -1422,249 +1112,51 @@ class DetailsPage extends StatefulWidget {
     this.isChannel = false,
   });
 
-  @override
-  State<DetailsPage> createState() => _DetailsPageState();
-}
+  Future<void> copyStreamUrl(BuildContext context) async {
+    final url = valueOf(item['stream_url']);
 
-class _DetailsPageState extends State<DetailsPage> {
-  late Future<List<Map<String, dynamic>>> seasonsFuture;
-  late Future<List<Map<String, dynamic>>> serversFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    seasonsFuture = _loadSeasons();
-    serversFuture = _loadMainServers();
-  }
-
-  Future<List<Map<String, dynamic>>> _loadSeasons() {
-    if (!widget.isSeries) return Future.value([]);
-    return SupabaseService.getSeasons(valueOf(widget.item['id']));
-  }
-
-  Future<List<Map<String, dynamic>>> _loadMainServers() {
-    final id = valueOf(widget.item['id']);
-    if (widget.isChannel) {
-      return SupabaseService.getPlaybackServers(channelId: id);
-    }
-    if (!widget.isSeries) {
-      return SupabaseService.getPlaybackServers(movieId: id);
-    }
-    return Future.value([]);
-  }
-
-  void _message(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _openPlayback({
-    required String url,
-    required String title,
-    required String type,
-    required String contentId,
-  }) async {
-    List<Map<String, dynamic>> servers;
-    try {
-      servers = await SupabaseService.getPlaybackServers(
-        movieId: type == 'movie' ? contentId : null,
-        episodeId: type == 'episode' ? contentId : null,
-        channelId: type == 'channel' ? contentId : null,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _message('تعذر تحميل سيرفرات التشغيل: ' + e.toString());
-      return;
-    }
-
-    if (!mounted) return;
-    final legacyUrl = type == 'episode'
-        ? url
-        : valueOf(widget.item['stream_url']);
-    final choices = <Map<String, dynamic>>[
-      ...servers,
-      if (legacyUrl.isNotEmpty)
-        {
-          'server_name': 'الرابط الأساسي',
-          'stream_url': legacyUrl,
-        },
-    ];
-
-    if (choices.isEmpty && url.isNotEmpty) {
-      choices.add({'server_name': 'الرابط الأساسي', 'stream_url': url});
-    }
-
-    if (choices.isEmpty) {
-      _message('لا توجد روابط تشغيل متاحة لهذا المحتوى');
-      return;
-    }
-
-    if (choices.length == 1) {
-      _launchPlayer(
-        choices.first['stream_url'].toString(),
-        title,
-      );
-      return;
-    }
-
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: panel,
-      isScrollControlled: true,
-      builder: (sheetContext) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('اختر سيرفر التشغيل', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                ...choices.map((server) => Card(
-                      color: bg,
-                      child: ListTile(
-                        leading: const Icon(Icons.dns_outlined, color: gold),
-                        title: Text(valueOf(server['server_name'], 'سيرفر'), style: const TextStyle(color: Colors.white)),
-                        subtitle: Text(
-                          valueOf(server['stream_url']),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white54, fontSize: 11),
-                        ),
-                        trailing: const Icon(Icons.play_circle_outline, color: gold),
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _launchPlayer(server['stream_url'].toString(), title);
-                        },
-                      ),
-                    )),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _launchPlayer(String url, String title) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PlaybackPage(url: url, title: title),
-      ),
-    );
-  }
-
-  Widget _buildEpisodes(String seasonId) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: SupabaseService.getEpisodes(seasonId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator(color: gold)),
-          );
-        }
-        if (snapshot.hasError) {
-          return const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('تعذر تحميل الحلقات', style: TextStyle(color: Colors.redAccent)),
-          );
-        }
-        final episodes = snapshot.data ?? [];
-        if (episodes.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('لا توجد حلقات منشورة في هذا الموسم', style: TextStyle(color: Colors.white54)),
-          );
-        }
-        return Column(
-          children: episodes.map((episode) {
-            final epTitle = valueOf(episode['title'], 'الحلقة');
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-              leading: const Icon(Icons.play_circle_outline, color: gold, size: 30),
-              title: Text(
-                'الحلقة ' + valueOf(episode['episode_number']) + ' - ' + epTitle,
-                style: const TextStyle(color: Colors.white),
-              ),
-              subtitle: Text(
-                valueOf(episode['description'], 'اضغط للتشغيل'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
-              ),
-              onTap: () async {
-                await _openPlayback(
-                  url: valueOf(episode['stream_url']),
-                  title: epTitle,
-                  type: 'episode',
-                  contentId: valueOf(episode['id']),
-                );
-              },
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-
-  Widget _seriesSection() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: seasonsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: gold));
-        }
-        if (snapshot.hasError) {
-          return const Text('تعذر تحميل المواسم', style: TextStyle(color: Colors.redAccent));
-        }
-        final seasons = snapshot.data ?? [];
-        if (seasons.isEmpty) {
-          return const Text('لا توجد مواسم منشورة حالياً', style: TextStyle(color: Colors.white54));
-        }
-        return Column(
-          children: seasons.map((season) {
-            final seasonName = valueOf(
-              season['name'],
-              'الموسم ' + valueOf(season['season_number']),
-            );
-            return Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.white10),
-              child: ExpansionTile(
-                iconColor: gold,
-                collapsedIconColor: gold,
-                title: Text(seasonName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                children: [_buildEpisodes(valueOf(season['id']))],
-              ),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-
-  Future<void> _copyUrl() async {
-    final url = valueOf(widget.item['stream_url']);
     if (url.isEmpty) {
-      _message('لا يوجد رابط أساسي لنسخه');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يوجد رابط تشغيل لهذا المحتوى'),
+        ),
+      );
       return;
     }
+
     await Clipboard.setData(ClipboardData(text: url));
-    if (mounted) _message('تم نسخ رابط التشغيل');
+
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم نسخ رابط التشغيل')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final title = valueOf(widget.item['title'] ?? widget.item['name'], 'بدون عنوان');
-    final poster = valueOf(widget.item['poster_url'] ?? widget.item['logo_url']);
-    final description = valueOf(widget.item['description'], 'لا يوجد وصف لهذا المحتوى حالياً.');
+    final title = valueOf(
+      item['title'] ?? item['name'],
+      'بدون عنوان',
+    );
+
+    final poster = valueOf(
+      item['poster_url'] ?? item['logo_url'],
+    );
+
+    final description = valueOf(
+      item['description'],
+      'لا يوجد وصف لهذا المحتوى حالياً.',
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: Text(title)),
+        appBar: AppBar(
+          backgroundColor: bg,
+          title: Text(title),
+        ),
         body: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1673,14 +1165,27 @@ class _DetailsPageState extends State<DetailsPage> {
                 width: double.infinity,
                 height: 390,
                 child: poster.isEmpty
-                    ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))
+                    ? Container(
+                        color: panel,
+                        child: const Icon(
+                          Icons.movie,
+                          color: gold,
+                          size: 90,
+                        ),
+                      )
                     : Image.network(
                         poster,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: panel,
-                          child: const Icon(Icons.movie, color: gold, size: 90),
-                        ),
+                        errorBuilder: (_, __, ___) {
+                          return Container(
+                            color: panel,
+                            child: const Icon(
+                              Icons.movie,
+                              color: gold,
+                              size: 90,
+                            ),
+                          );
+                        },
                       ),
               ),
               Padding(
@@ -1688,79 +1193,84 @@ class _DetailsPageState extends State<DetailsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold)),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 25,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 16,
                       runSpacing: 8,
                       children: [
-                        if (valueOf(widget.item['release_year']).isNotEmpty)
-                          _detailTag(Icons.calendar_today, valueOf(widget.item['release_year'])),
-                        if (valueOf(widget.item['category']).isNotEmpty)
-                          _detailTag(Icons.category, valueOf(widget.item['category'])),
-                        if (valueOf(widget.item['rating']).isNotEmpty)
-                          _detailTag(Icons.star, valueOf(widget.item['rating'])),
-                        _detailTag(
-                          widget.isChannel ? Icons.live_tv : widget.isSeries ? Icons.tv : Icons.movie,
-                          widget.isChannel ? 'قناة' : widget.isSeries ? 'مسلسل' : 'فيلم',
+                        if (valueOf(item['release_year']).isNotEmpty)
+                          detailTag(
+                            Icons.calendar_today,
+                            valueOf(item['release_year']),
+                          ),
+                        if (valueOf(item['category']).isNotEmpty)
+                          detailTag(
+                            Icons.category,
+                            valueOf(item['category']),
+                          ),
+                        if (valueOf(item['rating']).isNotEmpty)
+                          detailTag(
+                            Icons.star,
+                            valueOf(item['rating']),
+                          ),
+                        detailTag(
+                          isChannel
+                              ? Icons.live_tv
+                              : isSeries
+                                  ? Icons.tv
+                                  : Icons.movie,
+                          isChannel
+                              ? 'قناة'
+                              : isSeries
+                                  ? 'مسلسل'
+                                  : 'فيلم',
                         ),
                       ],
                     ),
                     const SizedBox(height: 25),
-                    const Text('القصة والوصف', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
-                    const SizedBox(height: 25),
-                    if (widget.isSeries) ...[
-                      const Text('المواسم والحلقات', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
-                      _seriesSection(),
-                    ] else ...[
-                      FutureBuilder<List<Map<String, dynamic>>>(
-                        future: serversFuture,
-                        builder: (context, snapshot) {
-                          final count = snapshot.data?.length ?? 0;
-                          final legacy = valueOf(widget.item['stream_url']);
-                          final totalChoices = count + (legacy.isNotEmpty ? 1 : 0);
-                          final canPlay = totalChoices > 0;
-                          return SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: gold,
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.all(15),
-                              ),
-                              onPressed: snapshot.connectionState == ConnectionState.waiting || !canPlay
-                                  ? null
-                                  : () => _openPlayback(
-                                        url: legacy,
-                                        title: title,
-                                        type: widget.isChannel ? 'channel' : 'movie',
-                                        contentId: valueOf(widget.item['id']),
-                                      ),
-                              icon: const Icon(Icons.play_arrow),
-                              label: Text(
-                                !canPlay
-                                    ? 'لا توجد روابط تشغيل'
-                                    : totalChoices > 1
-                                        ? 'اختيار سيرفر التشغيل (' + totalChoices.toString() + ')'
-                                        : 'تشغيل الآن',
-                              ),
-                            ),
-                          );
-                        },
+                    const Text(
+                      'القصة والوصف',
+                      style: TextStyle(
+                        color: gold,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      if (valueOf(widget.item['stream_url']).isNotEmpty)
-                        Align(
-                          alignment: Alignment.center,
-                          child: TextButton.icon(
-                            onPressed: _copyUrl,
-                            icon: const Icon(Icons.copy, size: 16),
-                            label: const Text('نسخ الرابط الأساسي'),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        height: 1.7,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    if (valueOf(item['stream_url']).isNotEmpty)
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: gold,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.all(15),
+                          ),
+                          onPressed: () => copyStreamUrl(context),
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text(
+                            'نسخ رابط التشغيل',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
-                    ],
+                      ),
                   ],
                 ),
               ),
@@ -1771,13 +1281,16 @@ class _DetailsPageState extends State<DetailsPage> {
     );
   }
 
-  Widget _detailTag(IconData icon, String text) {
+  Widget detailTag(IconData icon, String text) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: gold, size: 16),
         const SizedBox(width: 5),
-        Text(text, style: const TextStyle(color: Colors.white70)),
+        Text(
+          text,
+          style: const TextStyle(color: Colors.white70),
+        ),
       ],
     );
   }
@@ -1789,8 +1302,8 @@ class ShamFlixSearch extends SearchDelegate {
     final seriesResults = await SupabaseService.getSeries();
 
     final allResults = [
-      ...movieResults.map((item) => {...item, '_is_series': false}),
-      ...seriesResults.map((item) => {...item, '_is_series': true}),
+      ...movieResults,
+      ...seriesResults,
     ];
 
     final searchText = query.trim().toLowerCase();
@@ -1873,7 +1386,7 @@ class ShamFlixSearch extends SearchDelegate {
             final item = items[index];
             final poster = valueOf(item['poster_url']);
 
-            final isSeries = item['_is_series'] == true;
+            final isSeries = item['stream_url'] == null;
 
             return ListTile(
               leading: SizedBox(
