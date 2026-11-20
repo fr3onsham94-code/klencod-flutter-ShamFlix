@@ -1,7 +1,7 @@
 
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {
   static const String _projectUrl =
@@ -10,11 +10,10 @@ class AuthService {
   static const String _publishableKey =
       'sb_publishable_jxbDM61BDq3koMOoij_fdw_4xfFiUL7';
 
-  static const String _redirectUrl =
+  static const String redirectUrl =
       'shamflix://login-callback';
 
-  static const String _accessKey = 'shamflix_access_token';
-  static const String _refreshKey = 'shamflix_refresh_token';
+  static StreamSubscription<AuthState>? _authSubscription;
 
   static String? accessToken;
   static String? refreshToken;
@@ -22,211 +21,147 @@ class AuthService {
   static String? userEmail;
   static bool isAdmin = false;
 
+  static SupabaseClient get client =>
+      Supabase.instance.client;
+
   static bool get isLoggedIn => accessToken != null;
 
-  static Map<String, String> get _headers => {
-        'apikey': _publishableKey,
-        'Content-Type': 'application/json',
-      };
+  // تهيئة Supabase والاستماع إلى تغييرات تسجيل الدخول.
+  static Future<void> initialize() async {
+    await Supabase.initialize(
+      url: _projectUrl,
+      publishableKey: _publishableKey,
+    );
 
-  static String _errorMessage(http.Response response) {
-    try {
-      final data = jsonDecode(response.body);
-      return data['msg'] ??
-          data['message'] ??
-          data['error_description'] ??
-          'حدث خطأ أثناء الاتصال';
-    } catch (_) {
-      return 'حدث خطأ أثناء الاتصال: ${response.statusCode}';
-    }
+    _authSubscription?.cancel();
+
+    _authSubscription =
+        client.auth.onAuthStateChange.listen((data) {
+      _syncSession(data.session);
+    });
+
+    await restoreSession();
   }
 
-  static Future<void> _saveSession(
-      Map<String, dynamic> data) async {
-    final user = data['user'] ?? {};
-    final metadata = user['app_metadata'];
-    final role = metadata is Map ? metadata['role'] : null;
-
-    accessToken = data['access_token'];
-    refreshToken = data['refresh_token'];
-    userId = user['id'];
-    userEmail = user['email'];
-    isAdmin = role == 'admin';
-
-    final prefs = await SharedPreferences.getInstance();
-
-    if (accessToken != null && refreshToken != null) {
-      await prefs.setString(_accessKey, accessToken!);
-      await prefs.setString(_refreshKey, refreshToken!);
+  // مزامنة بيانات المستخدم والجلسة.
+  static void _syncSession(Session? session) {
+    if (session == null) {
+      accessToken = null;
+      refreshToken = null;
+      userId = null;
+      userEmail = null;
+      isAdmin = false;
+      return;
     }
+
+    final user = session.user;
+
+    accessToken = session.accessToken;
+    refreshToken = session.refreshToken;
+    userId = user.id;
+    userEmail = user.email;
+
+    isAdmin = user.appMetadata['role'] == 'admin';
   }
 
+  // استعادة الجلسة التي يحفظها Supabase SDK تلقائياً.
   static Future<bool> restoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
+    final session = client.auth.currentSession;
 
-    final savedRefresh = prefs.getString(_refreshKey);
+    _syncSession(session);
 
-    if (savedRefresh == null || savedRefresh.isEmpty) {
-      return false;
-    }
-
-    try {
-      final response = await http.post(
-        Uri.parse(
-          '$_projectUrl/auth/v1/token?grant_type=refresh_token',
-        ),
-        headers: _headers,
-        body: jsonEncode({
-          'refresh_token': savedRefresh,
-        }),
-      );
-
-      if (response.statusCode != 200) {
-        await signOut();
-        return false;
-      }
-
-      await _saveSession(jsonDecode(response.body));
-      return isLoggedIn;
-    } catch (_) {
-      return false;
-    }
+    return isLoggedIn;
   }
 
+  // إنشاء حساب بالبريد وكلمة المرور.
   static Future<String> signUp({
     required String email,
     required String password,
   }) async {
-    final uri = Uri.parse(
-      '$_projectUrl/auth/v1/signup',
-    ).replace(
-      queryParameters: {
-        'redirect_to': _redirectUrl,
-      },
+    final response = await client.auth.signUp(
+      email: email.trim(),
+      password: password,
+      emailRedirectTo: redirectUrl,
     );
 
-    final response = await http.post(
-      uri,
-      headers: _headers,
-      body: jsonEncode({
-        'email': email.trim(),
-        'password': password,
-      }),
-    );
+    _syncSession(response.session);
 
-    if (response.statusCode != 200 &&
-        response.statusCode != 201) {
-      throw Exception(_errorMessage(response));
-    }
-
-    final data = jsonDecode(response.body);
-
-    if (data['access_token'] == null) {
+    if (response.session == null) {
       return 'تم إنشاء الحساب. افتح بريدك واضغط رابط التأكيد.';
     }
 
-    await _saveSession(data);
     return 'تم إنشاء الحساب وتسجيل الدخول بنجاح.';
   }
 
+  // تسجيل الدخول بالبريد وكلمة المرور.
   static Future<void> signIn({
     required String email,
     required String password,
   }) async {
-    final response = await http.post(
-      Uri.parse(
-        '$_projectUrl/auth/v1/token?grant_type=password',
-      ),
-      headers: _headers,
-      body: jsonEncode({
-        'email': email.trim(),
-        'password': password,
-      }),
+    final response = await client.auth.signInWithPassword(
+      email: email.trim(),
+      password: password,
     );
 
-    if (response.statusCode != 200) {
-      throw Exception(_errorMessage(response));
-    }
-
-    await _saveSession(jsonDecode(response.body));
+    _syncSession(response.session);
   }
 
+  // تسجيل الدخول باستخدام Google.
+  static Future<void> signInWithGoogle() async {
+    await client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: redirectUrl,
+    );
+  }
+
+  // ربط Google بالحساب المسجل دخوله حالياً.
+  static Future<void> linkGoogle() async {
+    if (client.auth.currentSession == null) {
+      throw Exception('يجب تسجيل الدخول أولاً لربط Google.');
+    }
+
+    await client.auth.linkIdentity(
+      OAuthProvider.google,
+      redirectTo: redirectUrl,
+    );
+  }
+
+  // إرسال رابط استعادة كلمة المرور.
+  static Future<void> sendPasswordReset({
+    required String email,
+  }) async {
+    await client.auth.resetPasswordForEmail(
+      email.trim(),
+      redirectTo: redirectUrl,
+    );
+  }
+
+  // تعيين كلمة مرور جديدة بعد فتح رابط الاستعادة.
+  static Future<void> updatePassword({
+    required String password,
+  }) async {
+    await client.auth.updateUser(
+      UserAttributes(password: password),
+    );
+
+    _syncSession(client.auth.currentSession);
+  }
+
+  // تحديث الجلسة بعد العودة من رابط خارجي.
+  // معالجة الرابط نفسها سننقلها إلى Supabase SDK في main.dart.
   static Future<void> handleAuthDeepLink(Uri uri) async {
-    if (uri.scheme != 'shamflix' ||
-        uri.host != 'login-callback') {
-      return;
-    }
-
-    final params = <String, String>{};
-
-    if (uri.fragment.isNotEmpty) {
-      params.addAll(Uri.splitQueryString(uri.fragment));
-    }
-
-    if (uri.query.isNotEmpty) {
-      params.addAll(uri.queryParameters);
-    }
-
-    final error = params['error_description'] ??
-        params['error'];
-
-    if (error != null) {
-      throw Exception(error);
-    }
-
-    final token = params['access_token'];
-    final refresh = params['refresh_token'];
-
-    if (token == null || refresh == null) {
-      throw Exception(
-        'لم يتم العثور على بيانات تأكيد البريد في الرابط.',
-      );
-    }
-
-    final response = await http.get(
-      Uri.parse('$_projectUrl/auth/v1/user'),
-      headers: {
-        ..._headers,
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception(_errorMessage(response));
-    }
-
-    final user = jsonDecode(response.body);
-
-    await _saveSession({
-      'access_token': token,
-      'refresh_token': refresh,
-      'user': user,
-    });
+    await restoreSession();
   }
 
+  // تسجيل الخروج.
   static Future<void> signOut() async {
-    final token = accessToken;
+    await client.auth.signOut();
+    _syncSession(null);
+  }
 
-    if (token != null) {
-      try {
-        await http.post(
-          Uri.parse('$_projectUrl/auth/v1/logout'),
-          headers: {
-            ..._headers,
-            'Authorization': 'Bearer $token',
-          },
-        );
-      } catch (_) {}
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_accessKey);
-    await prefs.remove(_refreshKey);
-
-    accessToken = null;
-    refreshToken = null;
-    userId = null;
-    userEmail = null;
-    isAdmin = false;
+  // إغلاق مستمع المصادقة عند الحاجة.
+  static Future<void> dispose() async {
+    await _authSubscription?.cancel();
+    _authSubscription = null;
   }
 }

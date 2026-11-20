@@ -1,8 +1,10 @@
 
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:app_links/app_links.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'supabase_service.dart';
 import 'admin_auth_service.dart';
 import 'auth_page.dart';
@@ -16,12 +18,9 @@ final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    await AuthService.restoreSession().timeout(
-      const Duration(seconds: 12),
-      onTimeout: () => false,
-    );
-  } catch (_) {}
+  await AuthService.initialize().timeout(
+    const Duration(seconds: 20),
+  );
 
   runApp(const ShamFlixApp());
 }
@@ -45,42 +44,25 @@ class ShamFlixApp extends StatefulWidget {
 }
 
 class _ShamFlixAppState extends State<ShamFlixApp> {
-  late final AppLinks appLinks;
-  StreamSubscription<Uri>? linkSubscription;
+  StreamSubscription<AuthState>? authSubscription;
 
   @override
   void initState() {
     super.initState();
 
-    appLinks = AppLinks();
+    authSubscription =
+        AuthService.client.auth.onAuthStateChange.listen(
+      (data) {
+        authRefreshNotifier.value++;
 
-    linkSubscription = appLinks.uriLinkStream.listen(
-      (uri) async {
-        if (uri.scheme != 'shamflix' ||
-            uri.host != 'login-callback') {
-          return;
-        }
-
-        try {
-          await AuthService.handleAuthDeepLink(uri);
-
-          authRefreshNotifier.value++;
-
+        if (data.event == AuthChangeEvent.passwordRecovery) {
           messengerKey.currentState?.showSnackBar(
             const SnackBar(
               content: Text(
-                'تم تأكيد البريد الإلكتروني وتسجيل الدخول بنجاح',
+                'تم التحقق من رابط الاستعادة. يمكنك تعيين كلمة مرور جديدة.',
               ),
               backgroundColor: Colors.green,
-              duration: Duration(seconds: 4),
-            ),
-          );
-        } catch (e) {
-          messengerKey.currentState?.showSnackBar(
-            SnackBar(
-              content: Text('تعذر تأكيد البريد: $e'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
+              duration: Duration(seconds: 5),
             ),
           );
         }
@@ -88,7 +70,8 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
       onError: (error) {
         messengerKey.currentState?.showSnackBar(
           const SnackBar(
-            content: Text('حدث خطأ أثناء استقبال رابط التأكيد'),
+            content: Text('حدث خطأ أثناء تحديث حالة الحساب'),
+            backgroundColor: Colors.red,
           ),
         );
       },
@@ -97,7 +80,7 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
 
   @override
   void dispose() {
-    linkSubscription?.cancel();
+    authSubscription?.cancel();
     super.dispose();
   }
 
@@ -688,6 +671,34 @@ class AccountPage extends StatefulWidget {
 
 class _AccountPageState extends State<AccountPage> {
   bool loading = false;
+  bool linkingGoogle = false;
+
+  @override
+  void initState() {
+    super.initState();
+    authRefreshNotifier.addListener(onAuthChanged);
+  }
+
+  @override
+  void dispose() {
+    authRefreshNotifier.removeListener(onAuthChanged);
+    super.dispose();
+  }
+
+  void onAuthChanged() {
+    if (mounted) setState(() {});
+  }
+
+  bool get isGoogleLinked {
+    final user = AuthService.client.auth.currentUser;
+
+    if (user == null) return false;
+
+    return user.identities?.any(
+          (identity) => identity.provider == 'google',
+        ) ??
+        false;
+  }
 
   Future<void> openLogin() async {
     await Navigator.push(
@@ -700,6 +711,40 @@ class _AccountPageState extends State<AccountPage> {
     if (mounted) setState(() {});
   }
 
+  Future<void> linkGoogleAccount() async {
+    if (!AuthService.isLoggedIn) {
+      showMessage('يرجى تسجيل الدخول أولاً');
+      return;
+    }
+
+    if (isGoogleLinked) {
+      showMessage('حساب Google مربوط بالفعل');
+      return;
+    }
+
+    setState(() => linkingGoogle = true);
+
+    try {
+      await AuthService.linkGoogle();
+
+      if (!mounted) return;
+
+      showMessage(
+        'تم فتح صفحة Google. أكمل الموافقة لربط حسابك.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      showMessage(
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => linkingGoogle = false);
+      }
+    }
+  }
+
   Future<void> logout() async {
     setState(() => loading = true);
 
@@ -709,17 +754,19 @@ class _AccountPageState extends State<AccountPage> {
       if (!mounted) return;
 
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تسجيل الخروج')),
-      );
+      showMessage('تم تسجيل الخروج');
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر تسجيل الخروج')),
-      );
+      showMessage('تعذر تسجيل الخروج');
     } finally {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  void showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Widget accountTile({
@@ -733,15 +780,68 @@ class _AccountPageState extends State<AccountPage> {
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
         leading: Icon(icon, color: gold),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
+        title: Text(
+          title,
+          style: const TextStyle(color: Colors.white),
+        ),
         subtitle: subtitle == null
             ? null
             : Text(
                 subtitle,
                 style: const TextStyle(color: Colors.white54),
               ),
-        trailing: const Icon(Icons.chevron_left, color: gold),
+        trailing: const Icon(
+          Icons.chevron_left,
+          color: gold,
+        ),
         onTap: onTap,
+      ),
+    );
+  }
+
+  Widget googleAccountTile() {
+    final linked = isGoogleLinked;
+
+    return Card(
+      color: panel,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ListTile(
+        leading: const Icon(
+          Icons.g_mobiledata,
+          color: gold,
+          size: 32,
+        ),
+        title: Text(
+          linked ? 'حساب Google مربوط' : 'ربط حساب Google',
+          style: const TextStyle(color: Colors.white),
+        ),
+        subtitle: Text(
+          linked
+              ? 'يمكنك تسجيل الدخول باستخدام Google'
+              : 'اربط Gmail بحسابك الحالي دون إنشاء حساب جديد',
+          style: const TextStyle(color: Colors.white54),
+        ),
+        trailing: linked
+            ? const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+              )
+            : linkingGoogle
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: gold,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(
+                    Icons.link,
+                    color: gold,
+                  ),
+        onTap: linked || linkingGoogle
+            ? null
+            : linkGoogleAccount,
       ),
     );
   }
@@ -754,7 +854,11 @@ class _AccountPageState extends State<AccountPage> {
       padding: const EdgeInsets.all(18),
       children: [
         const SizedBox(height: 25),
-        const Icon(Icons.account_circle, color: gold, size: 85),
+        const Icon(
+          Icons.account_circle,
+          color: gold,
+          size: 85,
+        ),
         const SizedBox(height: 12),
         const Center(
           child: Text(
@@ -767,11 +871,15 @@ class _AccountPageState extends State<AccountPage> {
           ),
         ),
         const SizedBox(height: 25),
+
         if (!loggedIn) ...[
           const Center(
             child: Text(
               'أهلاً بك في ShamFlix',
-              style: TextStyle(color: Colors.white70, fontSize: 16),
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -808,7 +916,11 @@ class _AccountPageState extends State<AccountPage> {
               padding: const EdgeInsets.all(18),
               child: Column(
                 children: [
-                  const Icon(Icons.account_circle, color: gold, size: 55),
+                  const Icon(
+                    Icons.account_circle,
+                    color: gold,
+                    size: 55,
+                  ),
                   const SizedBox(height: 10),
                   Text(
                     AuthService.userEmail ?? 'مستخدم ShamFlix',
@@ -840,6 +952,9 @@ class _AccountPageState extends State<AccountPage> {
               ),
             ),
           ),
+
+          googleAccountTile(),
+
           if (AuthService.isAdmin)
             accountTile(
               icon: Icons.admin_panel_settings,
@@ -854,6 +969,7 @@ class _AccountPageState extends State<AccountPage> {
                 );
               },
             ),
+
           accountTile(
             icon: Icons.favorite_outline,
             title: 'المفضلة',
@@ -864,7 +980,9 @@ class _AccountPageState extends State<AccountPage> {
             title: 'سجل المشاهدة',
             subtitle: 'قريباً: آخر ما شاهدته',
           ),
+
           const SizedBox(height: 15),
+
           SizedBox(
             height: 50,
             child: OutlinedButton.icon(

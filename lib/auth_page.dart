@@ -1,5 +1,9 @@
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'admin_auth_service.dart';
 
 const Color bg = Color(0xFF090909);
@@ -17,32 +21,61 @@ class _AuthPageState extends State<AuthPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  StreamSubscription<AuthState>? _authSubscription;
+
   bool isLogin = true;
   bool isLoading = false;
   bool hidePassword = true;
+  bool isPasswordRecovery = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _authSubscription =
+        AuthService.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        if (!mounted) return;
+
+        setState(() {
+          isPasswordRecovery = true;
+          isLogin = true;
+        });
+
+        showMessage('أدخل كلمة المرور الجديدة لحسابك');
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  bool validateEmail(String email) {
+    return email.contains('@') && email.contains('.');
   }
 
   Future<void> submit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (email.isEmpty || password.isEmpty) {
-      showMessage('يرجى إدخال البريد الإلكتروني وكلمة المرور');
-      return;
+    if (!isPasswordRecovery) {
+      if (email.isEmpty || password.isEmpty) {
+        showMessage('يرجى إدخال البريد الإلكتروني وكلمة المرور');
+        return;
+      }
+
+      if (!validateEmail(email)) {
+        showMessage('يرجى إدخال بريد إلكتروني صحيح');
+        return;
+      }
     }
 
-    if (!email.contains('@') || !email.contains('.')) {
-      showMessage('يرجى إدخال بريد إلكتروني صحيح');
-      return;
-    }
-
-    if (password.length < 6) {
+    if (password.isEmpty || password.length < 6) {
       showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
       return;
     }
@@ -50,7 +83,21 @@ class _AuthPageState extends State<AuthPage> {
     setState(() => isLoading = true);
 
     try {
-      if (isLogin) {
+      if (isPasswordRecovery) {
+        await AuthService.updatePassword(password: password);
+
+        if (!mounted) return;
+
+        setState(() {
+          isPasswordRecovery = false;
+          isLogin = true;
+          _passwordController.clear();
+        });
+
+        showMessage('تم تغيير كلمة المرور بنجاح');
+
+        Navigator.pop(context, true);
+      } else if (isLogin) {
         await AuthService.signIn(
           email: email,
           password: password,
@@ -94,6 +141,59 @@ class _AuthPageState extends State<AuthPage> {
     }
   }
 
+  Future<void> signInGoogle() async {
+    setState(() => isLoading = true);
+
+    try {
+      await AuthService.signInWithGoogle();
+
+      if (!mounted) return;
+
+      showMessage('تم فتح صفحة تسجيل الدخول بواسطة Google');
+    } catch (e) {
+      if (!mounted) return;
+
+      showMessage(
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  Future<void> resetPassword() async {
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty || !validateEmail(email)) {
+      showMessage('أدخل بريدك الإلكتروني الصحيح أولاً');
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      await AuthService.sendPasswordReset(email: email);
+
+      if (!mounted) return;
+
+      showMessage(
+        'تم إرسال رابط استعادة كلمة المرور. تحقق من بريدك الإلكتروني.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      showMessage(
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
   void showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -102,6 +202,12 @@ class _AuthPageState extends State<AuthPage> {
 
   @override
   Widget build(BuildContext context) {
+    final title = isPasswordRecovery
+        ? 'تعيين كلمة مرور جديدة'
+        : isLogin
+            ? 'سجّل دخولك لمتابعة المشاهدة'
+            : 'أنشئ حسابك وانضم إلينا';
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -137,31 +243,36 @@ class _AuthPageState extends State<AuthPage> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    isLogin
-                        ? 'سجّل دخولك لمتابعة المشاهدة'
-                        : 'أنشئ حسابك وانضم إلينا',
+                    title,
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 15,
                     ),
                   ),
                   const SizedBox(height: 35),
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: inputDecoration(
-                      'البريد الإلكتروني',
-                      Icons.email_outlined,
+
+                  if (!isPasswordRecovery) ...[
+                    TextField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: inputDecoration(
+                        'البريد الإلكتروني',
+                        Icons.email_outlined,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
+                    const SizedBox(height: 18),
+                  ],
+
                   TextField(
                     controller: _passwordController,
                     obscureText: hidePassword,
                     style: const TextStyle(color: Colors.white),
                     decoration: inputDecoration(
-                      'كلمة المرور',
+                      isPasswordRecovery
+                          ? 'كلمة المرور الجديدة'
+                          : 'كلمة المرور',
                       Icons.lock_outline,
                     ).copyWith(
                       suffixIcon: IconButton(
@@ -179,7 +290,22 @@ class _AuthPageState extends State<AuthPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 28),
+
+                  if (isLogin && !isPasswordRecovery) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: isLoading ? null : resetPassword,
+                        child: const Text(
+                          'نسيت كلمة المرور؟',
+                          style: TextStyle(color: gold),
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 20),
+
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -197,7 +323,11 @@ class _AuthPageState extends State<AuthPage> {
                               color: Colors.black,
                             )
                           : Text(
-                              isLogin ? 'تسجيل الدخول' : 'إنشاء حساب',
+                              isPasswordRecovery
+                                  ? 'حفظ كلمة المرور الجديدة'
+                                  : isLogin
+                                      ? 'تسجيل الدخول'
+                                      : 'إنشاء حساب',
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.bold,
@@ -205,26 +335,58 @@ class _AuthPageState extends State<AuthPage> {
                             ),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  TextButton(
-                    onPressed: isLoading
-                        ? null
-                        : () {
-                            setState(() {
-                              isLogin = !isLogin;
-                            });
-                          },
-                    child: Text(
-                      isLogin
-                          ? 'ليس لديك حساب؟ أنشئ حساباً جديداً'
-                          : 'لديك حساب بالفعل؟ سجّل الدخول',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: gold,
-                        fontSize: 14,
+
+                  if (!isPasswordRecovery) ...[
+                    const SizedBox(height: 15),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        onPressed: isLoading ? null : signInGoogle,
+                        icon: const Icon(
+                          Icons.g_mobiledata,
+                          color: gold,
+                          size: 30,
+                        ),
+                        label: const Text(
+                          'المتابعة باستخدام Google',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: gold),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+
+                    const SizedBox(height: 20),
+
+                    TextButton(
+                      onPressed: isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                isLogin = !isLogin;
+                              });
+                            },
+                      child: Text(
+                        isLogin
+                            ? 'ليس لديك حساب؟ أنشئ حساباً جديداً'
+                            : 'لديك حساب بالفعل؟ سجّل الدخول',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: gold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
