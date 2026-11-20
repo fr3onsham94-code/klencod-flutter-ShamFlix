@@ -54,6 +54,10 @@ class _AdminPageState extends State<AdminPage> {
         '${SupabaseService.projectUrl}/functions/v1/admin-users',
       );
 
+  Uri get tmdbFunctionUrl => Uri.parse(
+        '${SupabaseService.projectUrl}/functions/v1/tmdb-movie',
+      );
+
   @override
   void initState() {
     super.initState();
@@ -1109,6 +1113,38 @@ class _AdminPageState extends State<AdminPage> {
     return int.tryParse(input);
   }
 
+  Future<Map<String, dynamic>> _fetchTmdbDetails(String value) async {
+    final response = await http.post(
+      tmdbFunctionUrl,
+      headers: {
+        'apikey': SupabaseService.publishableKey,
+        'Authorization': 'Bearer ${AuthService.accessToken ?? ''}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'tmdb_url': value.trim()}),
+    );
+
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      decoded = null;
+    }
+
+    if (response.statusCode != 200) {
+      final message = decoded is Map
+          ? decoded['error']?.toString() ?? 'تعذر جلب بيانات TMDB'
+          : 'تعذر الاتصال بخدمة TMDB (${response.statusCode})';
+      throw Exception(message);
+    }
+
+    if (decoded is! Map || decoded['success'] != true) {
+      throw Exception('استجابة غير صحيحة من خدمة TMDB');
+    }
+
+    return Map<String, dynamic>.from(decoded);
+  }
+
   void showMessage(
     String message, {
     bool isError = false,
@@ -1165,6 +1201,8 @@ class _AdminPageState extends State<AdminPage> {
 
     bool published =
         existing?['is_published'] == true;
+    bool tmdbLoading = false;
+    Map<String, dynamic>? tmdbPreview;
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -1197,8 +1235,115 @@ class _AdminPageState extends State<AdminPage> {
                         ),
                         adminField(
                           tmdbController,
-                          'رابط TMDB أو رقم الفيلم',
+                          'رابط صفحة TMDB أو رقم الفيلم',
                         ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: tmdbLoading
+                                ? null
+                                : () async {
+                                    final value = tmdbController.text.trim();
+                                    if (value.isEmpty) {
+                                      showMessage('أدخل رابط صفحة الفيلم من TMDB أولاً', isError: true);
+                                      return;
+                                    }
+
+                                    setDialogState(() => tmdbLoading = true);
+                                    try {
+                                      final data = await _fetchTmdbDetails(value);
+                                      if (!dialogContext.mounted) return;
+
+                                      setDialogState(() {
+                                        tmdbPreview = data;
+                                        final fetchedTitle = data['title']?.toString() ?? '';
+                                        if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
+                                        posterController.text = data['poster_url']?.toString() ?? '';
+                                        descriptionController.text = data['description']?.toString() ?? '';
+                                        categoryController.text = data['category']?.toString() ?? '';
+                                        yearController.text = data['release_year']?.toString() ?? '';
+                                        final rating = data['rating'];
+                                        ratingController.text = rating == null ? '' : (rating as num).toStringAsFixed(1);
+                                      });
+                                    } catch (e) {
+                                      if (dialogContext.mounted) {
+                                        showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
+                                      }
+                                    } finally {
+                                      if (dialogContext.mounted) {
+                                        setDialogState(() => tmdbLoading = false);
+                                      }
+                                    }
+                                  },
+                            icon: tmdbLoading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: adminGold,
+                                    ),
+                                  )
+                                : const Icon(Icons.cloud_download_outlined),
+                            label: Text(tmdbLoading ? 'جارٍ جلب البيانات...' : 'جلب بيانات الفيلم من TMDB'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: adminGold,
+                              side: const BorderSide(color: adminGold),
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                            ),
+                          ),
+                        ),
+                        if (tmdbPreview != null) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: adminBg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: adminGold.withOpacity(0.45)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if ((tmdbPreview!['poster_url']?.toString() ?? '').isNotEmpty)
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(7),
+                                    child: Image.network(
+                                      tmdbPreview!['poster_url'].toString(),
+                                      width: 72,
+                                      height: 105,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const SizedBox(
+                                        width: 72,
+                                        height: 105,
+                                        child: Icon(Icons.movie, color: adminGold),
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('تم جلب البيانات بنجاح', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 5),
+                                      Text(tmdbPreview!['title']?.toString() ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                      if ((tmdbPreview!['title_en']?.toString() ?? '').isNotEmpty)
+                                        Text(tmdbPreview!['title_en'].toString(), style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                                      const SizedBox(height: 5),
+                                      Text('السنة: ${tmdbPreview!['release_year'] ?? '-'}  •  التقييم: ${tmdbPreview!['rating'] ?? '-'}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                      if ((tmdbPreview!['director']?.toString() ?? '').isNotEmpty)
+                                        Text('المخرج: ${tmdbPreview!['director']}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                                      if ((tmdbPreview!['cast'] as List? ?? []).isNotEmpty)
+                                        Text('الممثلون: ${(tmdbPreview!['cast'] as List).take(4).map((person) => person['name']).join('، ')}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         adminField(
                           posterController,
                           'رابط صورة الفيلم',
