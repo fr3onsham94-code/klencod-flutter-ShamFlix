@@ -1789,8 +1789,8 @@ class ShamFlixSearch extends SearchDelegate {
     final seriesResults = await SupabaseService.getSeries();
 
     final allResults = [
-      ...movieResults,
-      ...seriesResults,
+      ...movieResults.map((item) => {...item, '_is_series': false}),
+      ...seriesResults.map((item) => {...item, '_is_series': true}),
     ];
 
     final searchText = query.trim().toLowerCase();
@@ -1873,7 +1873,7 @@ class ShamFlixSearch extends SearchDelegate {
             final item = items[index];
             final poster = valueOf(item['poster_url']);
 
-            final isSeries = item['stream_url'] == null;
+            final isSeries = item['_is_series'] == true;
 
             return ListTile(
               leading: SizedBox(
