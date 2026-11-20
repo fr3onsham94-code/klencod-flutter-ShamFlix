@@ -521,7 +521,7 @@ class _AdminPageState extends State<AdminPage> {
     await loadCatalog(section);
   }
 
-  Future<void> deleteCatalogItem(String section, String id) async {
+    Future<void> deleteCatalogItem(String section, String id) async {
     final table = section == 'series' ? 'series' : 'channels';
     final response = await http.delete(
       catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'}),
@@ -864,6 +864,22 @@ class _AdminPageState extends State<AdminPage> {
                   Wrap(
                     spacing: 2,
                     children: [
+                      if (isSeries)
+                        IconButton(
+                          tooltip: 'إدارة المواسم والحلقات',
+                          onPressed: () => _openSeriesSeasons(item),
+                          icon: const Icon(Icons.video_library_outlined, color: adminGold),
+                        )
+                      else
+                        IconButton(
+                          tooltip: 'سيرفرات التشغيل',
+                          onPressed: () => _managePlaybackServers(
+                            type: 'channel',
+                            contentId: item['id'].toString(),
+                            legacyUrl: item['stream_url']?.toString(),
+                          ),
+                          icon: const Icon(Icons.dns_outlined, color: Colors.lightBlueAccent),
+                        ),
                       IconButton(tooltip: 'تعديل', onPressed: () => openCatalogForm(section, existing: item), icon: const Icon(Icons.edit, color: adminGold)),
                       IconButton(tooltip: published ? 'إلغاء النشر' : 'نشر', onPressed: () => toggleCatalogPublish(section, item), icon: Icon(published ? Icons.visibility_off : Icons.visibility, color: Colors.lightBlueAccent)),
                       IconButton(tooltip: 'حذف', onPressed: () => confirmDeleteCatalog(section, item), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
@@ -909,6 +925,614 @@ class _AdminPageState extends State<AdminPage> {
       ],
     );
   }
+
+  // =========================
+  // إدارة المواسم والحلقات والسيرفرات
+  // =========================
+
+  Uri _extraTableUrl(String table) =>
+      Uri.parse(SupabaseService.projectUrl + '/rest/v1/' + table);
+
+  Future<List<Map<String, dynamic>>> _extraLoad(
+    String table,
+    Map<String, String> filters, {
+    String order = 'created_at.asc',
+  }) async {
+    final response = await http.get(
+      _extraTableUrl(table).replace(queryParameters: {
+        'select': '*',
+        ...filters,
+        'order': order,
+      }),
+      headers: headers,
+    );
+    if (response.statusCode != 200) throw Exception(_readError(response));
+    final rows = jsonDecode(response.body) as List;
+    return rows.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<String?> _extraSave(
+    String table,
+    Map<String, dynamic> data, {
+    String? id,
+  }) async {
+    final uri = id == null
+        ? _extraTableUrl(table)
+        : _extraTableUrl(table).replace(queryParameters: {'id': 'eq.' + id});
+    final response = id == null
+        ? await http.post(uri, headers: headers, body: jsonEncode(data))
+        : await http.patch(uri, headers: headers, body: jsonEncode(data));
+    if (response.statusCode != 200 &&
+        response.statusCode != 201 &&
+        response.statusCode != 204) {
+      throw Exception(_readError(response));
+    }
+    if (id != null) return id;
+    if (response.body.trim().isEmpty) return null;
+    final decoded = jsonDecode(response.body);
+    if (decoded is List && decoded.isNotEmpty) {
+      return decoded.first['id']?.toString();
+    }
+    if (decoded is Map) return decoded['id']?.toString();
+    return null;
+  }
+
+  Future<void> _extraDelete(String table, String id) async {
+    final response = await http.delete(
+      _extraTableUrl(table).replace(queryParameters: {'id': 'eq.' + id}),
+      headers: headers,
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(_readError(response));
+    }
+  }
+
+  Future<void> _editPlaybackServer({
+    required String type,
+    required String contentId,
+    Map<String, dynamic>? existing,
+  }) async {
+    final name = TextEditingController(
+      text: existing?['server_name']?.toString() ?? '',
+    );
+    final url = TextEditingController(
+      text: existing?['stream_url']?.toString() ?? '',
+    );
+    final order = TextEditingController(
+      text: existing?['sort_order']?.toString() ?? '0',
+    );
+    bool active = existing?['is_active'] != false;
+
+    final data = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            backgroundColor: adminPanel,
+            title: Text(
+              existing == null ? 'إضافة سيرفر' : 'تعديل السيرفر',
+              style: const TextStyle(color: adminGold),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  adminField(name, 'اسم السيرفر', required: true),
+                  adminField(url, 'رابط التشغيل', required: true),
+                  adminField(order, 'ترتيب العرض', keyboard: TextInputType.number),
+                  SwitchListTile(
+                    value: active,
+                    activeColor: adminGold,
+                    title: const Text('السيرفر فعال', style: TextStyle(color: Colors.white)),
+                    onChanged: (v) => setDialogState(() => active = v),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء', style: TextStyle(color: Colors.white70)),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                onPressed: () {
+                  if (name.text.trim().isEmpty || url.text.trim().isEmpty) {
+                    showMessage('أدخل اسم السيرفر ورابط التشغيل', isError: true);
+                    return;
+                  }
+                  Navigator.pop(dialogContext, {
+                    'server_name': name.text.trim(),
+                    'stream_url': url.text.trim(),
+                    'sort_order': int.tryParse(order.text.trim()) ?? 0,
+                    'is_active': active,
+                  });
+                },
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    name.dispose();
+    url.dispose();
+    order.dispose();
+    if (data == null) return;
+
+    final row = <String, dynamic>{...data};
+    if (type == 'movie') row['movie_id'] = contentId;
+    if (type == 'episode') row['episode_id'] = contentId;
+    if (type == 'channel') row['channel_id'] = contentId;
+    await _extraSave(
+      'playback_servers',
+      row,
+      id: existing?['id']?.toString(),
+    );
+  }
+
+  Future<void> _managePlaybackServers({
+    required String type,
+    required String contentId,
+    String? legacyUrl,
+  }) async {
+    String foreignKey;
+    if (type == 'movie') {
+      foreignKey = 'movie_id';
+    } else if (type == 'episode') {
+      foreignKey = 'episode_id';
+    } else {
+      foreignKey = 'channel_id';
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            backgroundColor: adminPanel,
+            title: const Text('سيرفرات التشغيل', style: TextStyle(color: adminGold)),
+            content: SizedBox(
+              width: 540,
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _extraLoad(
+                  'playback_servers',
+                  {foreignKey: 'eq.' + contentId},
+                  order: 'sort_order.asc,created_at.asc',
+                ),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SizedBox(
+                      height: 100,
+                      child: Center(child: CircularProgressIndicator(color: adminGold)),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Text(snapshot.error.toString(), style: const TextStyle(color: Colors.redAccent));
+                  }
+                  final servers = snapshot.data ?? [];
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if ((legacyUrl ?? '').trim().isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              'يوجد رابط قديم محفوظ مع المحتوى وسيبقى كما هو.',
+                              style: TextStyle(color: Colors.white54, fontSize: 12),
+                            ),
+                          ),
+                        if (servers.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(15),
+                            child: Text('لا توجد سيرفرات إضافية بعد', style: TextStyle(color: Colors.white60)),
+                          ),
+                        ...servers.map((server) => Card(
+                              color: adminBg,
+                              child: ListTile(
+                                title: Text(server['server_name']?.toString() ?? 'سيرفر', style: const TextStyle(color: Colors.white)),
+                                subtitle: Text(
+                                  server['stream_url']?.toString() ?? '',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                ),
+                                leading: Icon(
+                                  server['is_active'] == true ? Icons.check_circle : Icons.pause_circle,
+                                  color: server['is_active'] == true ? Colors.green : Colors.orange,
+                                ),
+                                trailing: Wrap(
+                                  children: [
+                                    IconButton(
+                                      onPressed: () async {
+                                        await _editPlaybackServer(
+                                          type: type,
+                                          contentId: contentId,
+                                          existing: server,
+                                        );
+                                        setDialogState(() {});
+                                      },
+                                      icon: const Icon(Icons.edit, color: adminGold),
+                                    ),
+                                    IconButton(
+                                      onPressed: () async {
+                                        final yes = await showDialog<bool>(
+                                          context: dialogContext,
+                                          builder: (ctx) => AlertDialog(
+                                            backgroundColor: adminPanel,
+                                            title: const Text('حذف السيرفر', style: TextStyle(color: adminGold)),
+                                            content: const Text('هل تريد حذف هذا السيرفر؟', style: TextStyle(color: Colors.white)),
+                                            actions: [
+                                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+                                              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف', style: TextStyle(color: Colors.red))),
+                                            ],
+                                          ),
+                                        );
+                                        if (yes == true) {
+                                          await _extraDelete('playback_servers', server['id'].toString());
+                                          setDialogState(() {});
+                                        }
+                                      },
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إغلاق', style: TextStyle(color: Colors.white70)),
+              ),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                onPressed: () async {
+                  await _editPlaybackServer(type: type, contentId: contentId);
+                  setDialogState(() {});
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('إضافة سيرفر'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSeriesSeasons(Map<String, dynamic> seriesItem) async {
+    final seriesId = seriesItem['id']?.toString();
+    if (seriesId == null || seriesId.isEmpty) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            backgroundColor: adminPanel,
+            title: Text('مواسم ' + (seriesItem['title']?.toString() ?? 'المسلسل'), style: const TextStyle(color: adminGold)),
+            content: SizedBox(
+              width: 540,
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _extraLoad('seasons', {'series_id': 'eq.' + seriesId}, order: 'season_number.asc'),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
+                  }
+                  if (snapshot.hasError) {
+                    return Text(snapshot.error.toString(), style: const TextStyle(color: Colors.redAccent));
+                  }
+                  final seasons = snapshot.data ?? [];
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (seasons.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(15),
+                            child: Text('لم تتم إضافة مواسم بعد', style: TextStyle(color: Colors.white60)),
+                          ),
+                        ...seasons.map((season) => Card(
+                              color: adminBg,
+                              child: ListTile(
+                                title: Text(season['name']?.toString() ?? ('الموسم ' + season['season_number'].toString()), style: const TextStyle(color: Colors.white)),
+                                subtitle: Text('رقم الموسم: ' + season['season_number'].toString(), style: const TextStyle(color: Colors.white54)),
+                                onTap: () => _openSeasonEpisodes(season),
+                                trailing: Wrap(
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'الحلقات',
+                                      onPressed: () => _openSeasonEpisodes(season),
+                                      icon: const Icon(Icons.video_library_outlined, color: adminGold),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'تعديل',
+                                      onPressed: () => _editSeason(seriesId, existing: season, onSaved: () => setDialogState(() {})),
+                                      icon: const Icon(Icons.edit, color: Colors.lightBlueAccent),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'حذف',
+                                      onPressed: () async {
+                                        final yes = await showDialog<bool>(
+                                          context: dialogContext,
+                                          builder: (ctx) => AlertDialog(
+                                            backgroundColor: adminPanel,
+                                            title: const Text('حذف الموسم', style: TextStyle(color: adminGold)),
+                                            content: const Text('سيتم حذف حلقات الموسم أيضاً. هل تريد المتابعة؟', style: TextStyle(color: Colors.white)),
+                                            actions: [
+                                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+                                              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف', style: TextStyle(color: Colors.red))),
+                                            ],
+                                          ),
+                                        );
+                                        if (yes == true) {
+                                          final episodes = await _extraLoad('episodes', {'season_id': 'eq.' + season['id'].toString()});
+                                          for (final ep in episodes) {
+                                            await _extraDelete('episodes', ep['id'].toString());
+                                          }
+                                          await _extraDelete('seasons', season['id'].toString());
+                                          setDialogState(() {});
+                                        }
+                                      },
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق', style: TextStyle(color: Colors.white70))),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                onPressed: () => _editSeason(seriesId, onSaved: () => setDialogState(() {})),
+                icon: const Icon(Icons.add),
+                label: const Text('إضافة موسم'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editSeason(
+    String seriesId, {
+    Map<String, dynamic>? existing,
+    required VoidCallback onSaved,
+  }) async {
+    final number = TextEditingController(text: existing?['season_number']?.toString() ?? '');
+    final name = TextEditingController(text: existing?['name']?.toString() ?? '');
+    final data = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: adminPanel,
+          title: Text(existing == null ? 'إضافة موسم' : 'تعديل الموسم', style: const TextStyle(color: adminGold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              adminField(number, 'رقم الموسم', keyboard: TextInputType.number, required: true),
+              adminField(name, 'اسم الموسم'),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            FilledButton(
+              onPressed: () {
+                final n = int.tryParse(number.text.trim());
+                if (n == null || n < 0) {
+                  showMessage('أدخل رقم موسم صحيح', isError: true);
+                  return;
+                }
+                Navigator.pop(ctx, {
+                  'series_id': seriesId,
+                  'season_number': n,
+                  'name': name.text.trim().isEmpty ? 'الموسم ' + n.toString() : name.text.trim(),
+                });
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
+      ),
+    );
+    number.dispose();
+    name.dispose();
+    if (data == null) return;
+    await _extraSave('seasons', data, id: existing?['id']?.toString());
+    onSaved();
+  }
+
+  Future<void> _openSeasonEpisodes(Map<String, dynamic> season) async {
+    final seasonId = season['id']?.toString();
+    if (seasonId == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            backgroundColor: adminPanel,
+            title: Text('حلقات ' + (season['name']?.toString() ?? 'الموسم'), style: const TextStyle(color: adminGold)),
+            content: SizedBox(
+              width: 560,
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _extraLoad('episodes', {'season_id': 'eq.' + seasonId}, order: 'episode_number.asc'),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
+                  }
+                  if (snapshot.hasError) {
+                    return Text(snapshot.error.toString(), style: const TextStyle(color: Colors.redAccent));
+                  }
+                  final episodes = snapshot.data ?? [];
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (episodes.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(15),
+                            child: Text('لا توجد حلقات في هذا الموسم', style: TextStyle(color: Colors.white60)),
+                          ),
+                        ...episodes.map((episode) => Card(
+                              color: adminBg,
+                              child: ListTile(
+                                title: Text(episode['episode_number'].toString() + '. ' + (episode['title']?.toString() ?? 'حلقة'), style: const TextStyle(color: Colors.white)),
+                                subtitle: Text(episode['is_published'] == true ? 'منشورة' : 'مسودة', style: TextStyle(color: episode['is_published'] == true ? Colors.green : Colors.orange)),
+                                trailing: Wrap(
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'السيرفرات',
+                                      onPressed: () => _managePlaybackServers(
+                                        type: 'episode',
+                                        contentId: episode['id'].toString(),
+                                        legacyUrl: episode['stream_url']?.toString(),
+                                      ),
+                                      icon: const Icon(Icons.dns_outlined, color: adminGold),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'تعديل',
+                                      onPressed: () => _editEpisode(seasonId, existing: episode, onSaved: () => setDialogState(() {})),
+                                      icon: const Icon(Icons.edit, color: Colors.lightBlueAccent),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'حذف',
+                                      onPressed: () async {
+                                        await _extraDelete('episodes', episode['id'].toString());
+                                        setDialogState(() {});
+                                      },
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق', style: TextStyle(color: Colors.white70))),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                onPressed: () => _editEpisode(seasonId, onSaved: () => setDialogState(() {})),
+                icon: const Icon(Icons.add),
+                label: const Text('إضافة حلقة'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editEpisode(
+    String seasonId, {
+    Map<String, dynamic>? existing,
+    required VoidCallback onSaved,
+  }) async {
+    final number = TextEditingController(text: existing?['episode_number']?.toString() ?? '');
+    final title = TextEditingController(text: existing?['title']?.toString() ?? '');
+    final description = TextEditingController(text: existing?['description']?.toString() ?? '');
+    final poster = TextEditingController(text: existing?['poster_url']?.toString() ?? '');
+    final stream = TextEditingController(text: existing?['stream_url']?.toString() ?? '');
+    bool published = existing?['is_published'] == true;
+
+    final data = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setFormState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            backgroundColor: adminPanel,
+            title: Text(existing == null ? 'إضافة حلقة' : 'تعديل الحلقة', style: const TextStyle(color: adminGold)),
+            content: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    adminField(number, 'رقم الحلقة', keyboard: TextInputType.number, required: true),
+                    adminField(title, 'عنوان الحلقة', required: true),
+                    adminField(description, 'وصف الحلقة', maxLines: 3),
+                    adminField(poster, 'رابط صورة الحلقة'),
+                    adminField(stream, 'رابط التشغيل القديم (اختياري)'),
+                    SwitchListTile(
+                      value: published,
+                      activeColor: adminGold,
+                      title: const Text('نشر الحلقة', style: TextStyle(color: Colors.white)),
+                      onChanged: (v) => setFormState(() => published = v),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                onPressed: () {
+                  final n = int.tryParse(number.text.trim());
+                  if (n == null || n < 1 || title.text.trim().isEmpty) {
+                    showMessage('أدخل رقم الحلقة وعنوانها', isError: true);
+                    return;
+                  }
+                  Navigator.pop(ctx, {
+                    'season_id': seasonId,
+                    'episode_number': n,
+                    'title': title.text.trim(),
+                    'description': description.text.trim().isEmpty ? null : description.text.trim(),
+                    'poster_url': poster.text.trim().isEmpty ? null : poster.text.trim(),
+                    'stream_url': stream.text.trim().isEmpty ? null : stream.text.trim(),
+                    'is_published': published,
+                  });
+                },
+                child: const Text('حفظ الحلقة'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    number.dispose();
+    title.dispose();
+    description.dispose();
+    poster.dispose();
+    stream.dispose();
+    if (data == null) return;
+    final id = await _extraSave('episodes', data, id: existing?['id']?.toString());
+    onSaved();
+    if (id != null && existing == null && mounted) {
+      await _managePlaybackServers(
+        type: 'episode',
+        contentId: id,
+        legacyUrl: data['stream_url']?.toString(),
+      );
+    }
+  }
+
+  // =========================
 
   // =========================
   // إدارة المستخدمين
@@ -2316,6 +2940,16 @@ class _AdminPageState extends State<AdminPage> {
                     spacing: 4,
                     children: [
                       IconButton(
+                        tooltip: 'سيرفرات التشغيل',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _managePlaybackServers(
+                          type: 'movie',
+                          contentId: movie['id'].toString(),
+                          legacyUrl: movie['stream_url']?.toString(),
+                        ),
+                        icon: const Icon(Icons.dns_outlined, color: Colors.lightBlueAccent),
+                      ),
+                      IconButton(
                         tooltip: 'تعديل',
                         visualDensity:
                             VisualDensity.compact,
@@ -2762,3 +3396,9 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 }
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// تم استعادة إدارة المواسم والحلقات والسيرفرات
+// مع الحفاظ على نسخة saveCatalogItem الحالية.
+// ==========================================
