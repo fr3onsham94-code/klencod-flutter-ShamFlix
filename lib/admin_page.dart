@@ -33,6 +33,12 @@ class _AdminPageState extends State<AdminPage> {
   bool loading = true;
   bool usersLoading = false;
 
+  // إعداد عام لإظهار أو إخفاء ليبل التصنيف على البوسترات.
+  bool showCategoryBadge = true;
+  bool badgeSettingLoading = true;
+  bool badgeSettingSaving = false;
+  String? badgeSettingError;
+
   String currentSection = 'home';
   String userCategory = 'normal';
 
@@ -63,15 +69,178 @@ class _AdminPageState extends State<AdminPage> {
         '${SupabaseService.projectUrl}/functions/v1/tmdb-movie',
       );
 
+  Uri get appSettingsUrl => Uri.parse(
+        '${SupabaseService.projectUrl}/rest/v1/app_settings',
+      );
+
   @override
   void initState() {
     super.initState();
+    loadCategoryBadgeSetting();
   }
 
   @override
   void dispose() {
     searchController.dispose();
     super.dispose();
+  }
+
+  // =========================
+  // إعدادات التطبيق العامة
+  // =========================
+
+  Future<void> loadCategoryBadgeSetting() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+
+    if (mounted) {
+      setState(() {
+        badgeSettingLoading = true;
+        badgeSettingError = null;
+      });
+    }
+
+    try {
+      final response = await http.get(
+        appSettingsUrl.replace(
+          queryParameters: {
+            'select': 'setting_value',
+            'setting_key': 'eq.show_category_badge',
+          },
+        ),
+        headers: {
+          'apikey': SupabaseService.publishableKey,
+          'Authorization': 'Bearer ${AuthService.accessToken ?? ''}',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception(_readError(response));
+      }
+
+      final rows = jsonDecode(response.body) as List;
+      var enabled = true;
+      if (rows.isNotEmpty) {
+        final value = rows.first['setting_value'];
+        enabled = value == true || value.toString().toLowerCase() == 'true';
+      }
+
+      if (mounted) {
+        setState(() {
+          showCategoryBadge = enabled;
+          badgeSettingError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => badgeSettingError = e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => badgeSettingLoading = false);
+      }
+    }
+  }
+
+  Future<void> saveCategoryBadgeSetting(bool enabled) async {
+    if (badgeSettingSaving) return;
+
+    setState(() {
+      badgeSettingSaving = true;
+      badgeSettingError = null;
+    });
+
+    try {
+      final response = await http.post(
+        appSettingsUrl.replace(
+          queryParameters: {'on_conflict': 'setting_key'},
+        ),
+        headers: {
+          ...headers,
+          'Prefer': 'resolution=merge-duplicates,return=minimal',
+        },
+        body: jsonEncode({
+          'setting_key': 'show_category_badge',
+          'setting_value': enabled,
+        }),
+      );
+
+      if (response.statusCode != 200 &&
+          response.statusCode != 201 &&
+          response.statusCode != 204) {
+        throw Exception(_readError(response));
+      }
+
+      if (!mounted) return;
+      setState(() => showCategoryBadge = enabled);
+      showMessage(
+        enabled
+            ? 'تم تفعيل ليبل التصنيف لجميع المستخدمين'
+            : 'تم إخفاء ليبل التصنيف عن جميع المستخدمين',
+      );
+    } catch (e) {
+      showMessage(e.toString(), isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => badgeSettingSaving = false);
+      }
+    }
+  }
+
+  Widget settingsSection() {
+    if (badgeSettingLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: adminGold),
+      );
+    }
+
+    if (badgeSettingError != null) {
+      return errorView(badgeSettingError!, loadCategoryBadgeSetting);
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        Card(
+          color: adminPanel,
+          child: SwitchListTile(
+            value: showCategoryBadge,
+            onChanged: badgeSettingSaving
+                ? null
+                : saveCategoryBadgeSetting,
+            activeColor: adminGold,
+            title: const Text(
+              'إظهار تصنيف البوستر',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: Text(
+              showCategoryBadge
+                  ? 'الليبل الذهبي ظاهر على بوسترات الأفلام والمسلسلات والقنوات'
+                  : 'الليبل مخفي عن جميع المستخدمين',
+              style: const TextStyle(color: Colors.white60),
+            ),
+            secondary: const Icon(Icons.local_offer_outlined, color: adminGold),
+          ),
+        ),
+        if (badgeSettingSaving)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(
+              child: CircularProgressIndicator(color: adminGold),
+            ),
+          ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Text(
+            'هذا إعداد عام يُحفظ في قاعدة البيانات ويُطبّق على كل مستخدمي ShamFlix.',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        ),
+      ],
+    );
   }
 
   // =========================
@@ -91,6 +260,8 @@ class _AdminPageState extends State<AdminPage> {
       loadCatalog(section);
     } else if (section == 'users') {
       loadUsers();
+    } else if (section == 'settings') {
+      loadCategoryBadgeSetting();
     }
   }
 
@@ -120,7 +291,8 @@ class _AdminPageState extends State<AdminPage> {
     if (currentSection == 'movies' ||
         currentSection == 'series' ||
         currentSection == 'channels' ||
-        currentSection == 'users') {
+        currentSection == 'users' ||
+        currentSection == 'settings') {
       setState(() {
         currentSection = 'home';
         searchQuery = '';
@@ -139,6 +311,8 @@ class _AdminPageState extends State<AdminPage> {
         return 'إدارة القنوات';
       case 'users':
         return 'إدارة المستخدمين';
+      case 'settings':
+        return 'إعدادات التطبيق';
       case 'userList':
         switch (userCategory) {
           case 'admins':
@@ -2194,7 +2368,7 @@ class _AdminPageState extends State<AdminPage> {
   // =========================
 
   Widget homeSection() {
-    return Column(
+    return ListView(
       children: [
         _homeCard(
           title: 'الأفلام',
@@ -2219,6 +2393,12 @@ class _AdminPageState extends State<AdminPage> {
           subtitle: 'إدارة المستخدمين والمدراء والمحظورين',
           icon: Icons.people_outline,
           onTap: () => navigateTo('users'),
+        ),
+        _homeCard(
+          title: 'إعدادات التطبيق',
+          subtitle: 'التحكم بإظهار أو إخفاء ليبل التصنيف',
+          icon: Icons.settings_outlined,
+          onTap: () => navigateTo('settings'),
         ),
       ],
     );
@@ -2339,6 +2519,7 @@ class _AdminPageState extends State<AdminPage> {
     final isCatalog = isSeries || isChannels;
     final isUsers = currentSection == 'users';
     final isUserList = currentSection == 'userList';
+    final isSettings = currentSection == 'settings';
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -2391,7 +2572,7 @@ class _AdminPageState extends State<AdminPage> {
             : null,
         body: Column(
           children: [
-            if (currentSection != 'home')
+            if (currentSection != 'home' && !isSettings)
               Container(
                 margin: const EdgeInsets.fromLTRB(
                   14,
@@ -2468,7 +2649,9 @@ class _AdminPageState extends State<AdminPage> {
                                   : usersHomeSection()
                           : isUserList
                               ? userListSection()
-                              : const SizedBox.shrink(),
+                              : isSettings
+                                  ? settingsSection()
+                                  : const SizedBox.shrink(),
             ),
           ],
         ),

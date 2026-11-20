@@ -113,6 +113,9 @@ class _HomePageState extends State<HomePage> {
   int selectedTab = 0;
   int selectedCategory = 0;
 
+  // إعداد إظهار أو إخفاء شارة التصنيف
+  bool showCategoryBadge = true;
+
   late Future<List<Map<String, dynamic>>> movies;
   late Future<List<Map<String, dynamic>>> series;
   late Future<List<Map<String, dynamic>>> channels;
@@ -130,7 +133,32 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     loadData();
+    loadCategoryBadgeSetting();
     authRefreshNotifier.addListener(onAuthChanged);
+  }
+
+  // جلب إعداد الشارة من Supabase
+  Future<void> loadCategoryBadgeSetting() async {
+    try {
+      final result = await AuthService.client
+          .from('app_settings')
+          .select('setting_value')
+          .eq('setting_key', 'show_category_badge')
+          .maybeSingle();
+
+      if (!mounted) return;
+
+      final value = result?['setting_value'];
+
+      setState(() {
+        showCategoryBadge = value == null
+            ? true
+            : value == true ||
+                value.toString().toLowerCase() == 'true';
+      });
+    } catch (_) {
+      // في حال فشل الاتصال تبقى الشارة ظاهرة افتراضياً.
+    }
   }
 
   void onAuthChanged() {
@@ -239,6 +267,7 @@ class _HomePageState extends State<HomePage> {
     required bool isSeries,
   }) {
     final poster = valueOf(item['poster_url']);
+    final category = valueOf(item['category']);
 
     return GestureDetector(
       onTap: () => openDetails(item, isSeries: isSeries),
@@ -253,7 +282,36 @@ class _HomePageState extends State<HomePage> {
               child: SizedBox(
                 width: 135,
                 height: 175,
-                child: posterImage(poster),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    posterImage(poster),
+
+                    if (showCategoryBadge && category.isNotEmpty)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: gold,
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                          child: Text(
+                            category,
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 8),
