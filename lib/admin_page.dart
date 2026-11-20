@@ -20,8 +20,14 @@ class AdminPage extends StatefulWidget {
 
 class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> movies = [];
+  List<Map<String, dynamic>> users = [];
+
   bool loading = true;
+  bool usersLoading = false;
+  bool showUsers = false;
+
   String? errorMessage;
+  String? usersError;
 
   Map<String, String> get headers => {
         'apikey': SupabaseService.publishableKey,
@@ -34,11 +40,19 @@ class _AdminPageState extends State<AdminPage> {
         '${SupabaseService.projectUrl}/rest/v1/movies',
       );
 
+  Uri get usersFunctionUrl => Uri.parse(
+        '${SupabaseService.projectUrl}/functions/v1/admin-users',
+      );
+
   @override
   void initState() {
     super.initState();
     loadMovies();
   }
+
+  // =========================
+  // الأفلام
+  // =========================
 
   Future<void> loadMovies() async {
     if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
@@ -85,35 +99,6 @@ class _AdminPageState extends State<AdminPage> {
     if (mounted) {
       setState(() => loading = false);
     }
-  }
-
-  String _readError(http.Response response) {
-    try {
-      final data = jsonDecode(response.body);
-
-      if (data is Map) {
-        return data['message']?.toString() ??
-            data['msg']?.toString() ??
-            data['details']?.toString() ??
-            'حدث خطأ في قاعدة البيانات';
-      }
-    } catch (_) {}
-
-    return 'خطأ في الاتصال: ${response.statusCode}';
-  }
-
-  int? _extractTmdbId(String value) {
-    final input = value.trim();
-
-    final match = RegExp(
-      r'/(?:movie|tv)/(\d+)',
-    ).firstMatch(input);
-
-    if (match != null) {
-      return int.tryParse(match.group(1)!);
-    }
-
-    return int.tryParse(input);
   }
 
   Future<void> saveMovie(
@@ -192,18 +177,462 @@ class _AdminPageState extends State<AdminPage> {
 
       await loadMovies();
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            published ? 'تم إلغاء نشر الفيلم' : 'تم نشر الفيلم',
-          ),
-        ),
+      showMessage(
+        published ? 'تم إلغاء نشر الفيلم' : 'تم نشر الفيلم',
       );
     } catch (e) {
       showMessage(e.toString(), isError: true);
     }
+  }
+
+  // =========================
+  // إدارة المستخدمين
+  // =========================
+
+  Future<Map<String, dynamic>> callUsersFunction(
+    Map<String, dynamic> body,
+  ) async {
+    final response = await http.post(
+      usersFunctionUrl,
+      headers: {
+        'apikey': SupabaseService.publishableKey,
+        'Authorization':
+            'Bearer ${AuthService.accessToken ?? ''}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+
+    dynamic decoded;
+
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      decoded = null;
+    }
+
+    if (response.statusCode != 200) {
+      String message = 'حدث خطأ أثناء تنفيذ العملية';
+
+      if (decoded is Map) {
+        message = decoded['error']?.toString() ??
+            decoded['message']?.toString() ??
+            message;
+      }
+
+      throw Exception(message);
+    }
+
+    if (decoded is! Map) {
+      throw Exception('استجابة غير صحيحة من الخادم');
+    }
+
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  Future<void> loadUsers() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
+      return;
+    }
+
+    setState(() {
+      usersLoading = true;
+      usersError = null;
+    });
+
+    try {
+      final result = await callUsersFunction({
+        'action': 'list',
+        'page': 1,
+      });
+
+      final data = result['users'] as List? ?? [];
+
+      users = data
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    } catch (e) {
+      usersError = e.toString();
+    }
+
+    if (mounted) {
+      setState(() => usersLoading = false);
+    }
+  }
+
+  bool isUserBanned(Map<String, dynamic> user) {
+    final value = user['banned_until'];
+
+    if (value == null) return false;
+
+    final date = DateTime.tryParse(value.toString());
+
+    if (date == null) return false;
+
+    return date.isAfter(DateTime.now().toUtc());
+  }
+
+  Future<void> changeUserStatus(
+    Map<String, dynamic> user, {
+    required bool ban,
+  }) async {
+    final id = user['id']?.toString();
+
+    if (id == null || id.isEmpty) return;
+
+    final email = user['email']?.toString() ?? '';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: adminPanel,
+          title: Text(
+            ban ? 'حظر المستخدم' : 'فك حظر المستخدم',
+            style: const TextStyle(color: adminGold),
+          ),
+          content: Text(
+            ban
+                ? 'هل تريد حظر الحساب التالي؟\n$email'
+                : 'هل تريد فك الحظر عن الحساب التالي؟\n$email',
+            style: const TextStyle(color: Colors.white),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text(
+                'إلغاء',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: ban ? Colors.red : Colors.green,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(ban ? 'حظر' : 'فك الحظر'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await callUsersFunction({
+        'action': ban ? 'ban' : 'unban',
+        'user_id': id,
+      });
+
+      showMessage(
+        ban ? 'تم حظر المستخدم' : 'تم فك حظر المستخدم',
+      );
+
+      await loadUsers();
+    } catch (e) {
+      showMessage(e.toString(), isError: true);
+    }
+  }
+
+  Future<void> changeAdminRole(
+    Map<String, dynamic> user, {
+    required bool makeAdmin,
+  }) async {
+    final id = user['id']?.toString();
+
+    if (id == null || id.isEmpty) return;
+
+    final email = user['email']?.toString() ?? '';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: adminPanel,
+          title: Text(
+            makeAdmin ? 'ترقية إلى مدير' : 'إزالة صلاحية المدير',
+            style: const TextStyle(color: adminGold),
+          ),
+          content: Text(
+            makeAdmin
+                ? 'هل تريد منح هذا الحساب صلاحية المدير؟\n$email'
+                : 'هل تريد إزالة صلاحية المدير من هذا الحساب؟\n$email',
+            style: const TextStyle(color: Colors.white),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text(
+                'إلغاء',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: adminGold,
+                foregroundColor: Colors.black,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('تأكيد'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await callUsersFunction({
+        'action': 'set_admin',
+        'user_id': id,
+        'is_admin': makeAdmin,
+      });
+
+      showMessage(
+        makeAdmin
+            ? 'تمت ترقية المستخدم إلى مدير'
+            : 'تمت إزالة صلاحية المدير',
+      );
+
+      await loadUsers();
+    } catch (e) {
+      showMessage(e.toString(), isError: true);
+    }
+  }
+
+  Widget userCard(Map<String, dynamic> user) {
+    final email = user['email']?.toString() ?? 'بريد غير معروف';
+    final isAdmin = user['role'] == 'admin';
+    final banned = isUserBanned(user);
+
+    final createdAt = user['created_at']?.toString() ?? '';
+
+    return Card(
+      color: adminPanel,
+      margin: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 7,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(13),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: adminGold.withOpacity(0.15),
+                  child: Icon(
+                    isAdmin ? Icons.admin_panel_settings : Icons.person,
+                    color: adminGold,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    email,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _statusChip(
+                  isAdmin ? 'مدير' : 'مستخدم',
+                  isAdmin ? adminGold : Colors.blueGrey,
+                ),
+                _statusChip(
+                  banned ? 'محظور' : 'نشط',
+                  banned ? Colors.red : Colors.green,
+                ),
+              ],
+            ),
+            if (createdAt.isNotEmpty) ...[
+              const SizedBox(height: 9),
+              Text(
+                'تاريخ التسجيل: ${createdAt.split('T').first}',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+            const Divider(color: Colors.white12, height: 22),
+            Wrap(
+              spacing: 5,
+              runSpacing: 5,
+              children: [
+                TextButton.icon(
+                  onPressed: () => changeUserStatus(
+                    user,
+                    ban: !banned,
+                  ),
+                  icon: Icon(
+                    banned ? Icons.lock_open : Icons.block,
+                    color: banned ? Colors.green : Colors.redAccent,
+                    size: 19,
+                  ),
+                  label: Text(
+                    banned ? 'فك الحظر' : 'حظر',
+                    style: TextStyle(
+                      color: banned ? Colors.green : Colors.redAccent,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => changeAdminRole(
+                    user,
+                    makeAdmin: !isAdmin,
+                  ),
+                  icon: Icon(
+                    isAdmin
+                        ? Icons.remove_moderator
+                        : Icons.admin_panel_settings,
+                    color: adminGold,
+                    size: 19,
+                  ),
+                  label: Text(
+                    isAdmin ? 'إزالة المدير' : 'ترقية لمدير',
+                    style: const TextStyle(color: adminGold),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.13),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget usersSection() {
+    if (usersLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: adminGold),
+      );
+    }
+
+    if (usersError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: Colors.red,
+                size: 45,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                usersError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 15),
+              FilledButton(
+                onPressed: loadUsers,
+                child: const Text('إعادة المحاولة'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (users.isEmpty) {
+      return RefreshIndicator(
+        color: adminGold,
+        onRefresh: loadUsers,
+        child: ListView(
+          children: const [
+            SizedBox(height: 130),
+            Center(
+              child: Text(
+                'لا يوجد مستخدمون لعرضهم',
+                style: TextStyle(color: Colors.white54),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      color: adminGold,
+      onRefresh: loadUsers,
+      child: ListView.builder(
+        padding: const EdgeInsets.only(bottom: 25),
+        itemCount: users.length,
+        itemBuilder: (context, index) {
+          return userCard(users[index]);
+        },
+      ),
+    );
+  }
+
+  // =========================
+  // أدوات عامة
+  // =========================
+
+  String _readError(http.Response response) {
+    try {
+      final data = jsonDecode(response.body);
+
+      if (data is Map) {
+        return data['message']?.toString() ??
+            data['msg']?.toString() ??
+            data['details']?.toString() ??
+            'حدث خطأ في قاعدة البيانات';
+      }
+    } catch (_) {}
+
+    return 'خطأ في الاتصال: ${response.statusCode}';
+  }
+
+  int? _extractTmdbId(String value) {
+    final input = value.trim();
+
+    final match = RegExp(
+      r'/(?:movie|tv)/(\d+)',
+    ).firstMatch(input);
+
+    if (match != null) {
+      return int.tryParse(match.group(1)!);
+    }
+
+    return int.tryParse(input);
   }
 
   void showMessage(
@@ -219,6 +648,10 @@ class _AdminPageState extends State<AdminPage> {
       ),
     );
   }
+
+  // =========================
+  // نموذج الفيلم
+  // =========================
 
   Future<void> openMovieForm({
     Map<String, dynamic>? existing,
@@ -505,7 +938,6 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget movieCard(Map<String, dynamic> movie) {
     final published = movie['is_published'] == true;
-
     final poster = movie['poster_url']?.toString() ?? '';
 
     return Card(
@@ -621,6 +1053,72 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
+  // =========================
+  // واجهة لوحة الإدارة
+  // =========================
+
+  Widget sectionHeader() {
+    return Container(
+      margin: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: adminPanel,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _sectionButton(
+              title: 'الأفلام',
+              icon: Icons.movie_creation_outlined,
+              selected: !showUsers,
+              onTap: () {
+                setState(() => showUsers = false);
+                loadMovies();
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _sectionButton(
+              title: 'المستخدمون',
+              icon: Icons.people_outline,
+              selected: showUsers,
+              onTap: () {
+                setState(() => showUsers = true);
+                loadUsers();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionButton({
+    required String title,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: selected ? adminGold : adminBg,
+        foregroundColor: selected ? Colors.black : Colors.white70,
+        padding: const EdgeInsets.symmetric(vertical: 13),
+      ),
+      onPressed: onTap,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 19),
+          const SizedBox(width: 6),
+          Text(title),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
@@ -654,47 +1152,55 @@ class _AdminPageState extends State<AdminPage> {
           ),
           actions: [
             IconButton(
-              onPressed: loadMovies,
+              onPressed: showUsers ? loadUsers : loadMovies,
               icon: const Icon(Icons.refresh, color: adminGold),
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          backgroundColor: adminGold,
-          foregroundColor: Colors.black,
-          onPressed: () => openMovieForm(),
-          icon: const Icon(Icons.add),
-          label: const Text('إضافة فيلم'),
-        ),
+        floatingActionButton: showUsers
+            ? null
+            : FloatingActionButton.extended(
+                backgroundColor: adminGold,
+                foregroundColor: Colors.black,
+                onPressed: () => openMovieForm(),
+                icon: const Icon(Icons.add),
+                label: const Text('إضافة فيلم'),
+              ),
         body: Column(
           children: [
+            sectionHeader(),
+
             Container(
-              margin: const EdgeInsets.all(14),
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: adminPanel,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.movie_creation_outlined,
+                  Icon(
+                    showUsers
+                        ? Icons.people_outline
+                        : Icons.movie_creation_outlined,
                     color: adminGold,
-                    size: 35,
+                    size: 32,
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'إدارة الأفلام',
-                      style: TextStyle(
+                      showUsers ? 'إدارة المستخدمين' : 'إدارة الأفلام',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        fontSize: 17,
                       ),
                     ),
                   ),
                   Text(
-                    '${movies.length} فيلم',
+                    showUsers
+                        ? '${users.length} مستخدم'
+                        : '${movies.length} فيلم',
                     style: const TextStyle(
                       color: adminGold,
                       fontWeight: FontWeight.bold,
@@ -703,66 +1209,69 @@ class _AdminPageState extends State<AdminPage> {
                 ],
               ),
             ),
+
             Expanded(
-              child: loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: adminGold,
-                      ),
-                    )
-                  : errorMessage != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.error_outline,
-                                  color: Colors.red,
-                                  size: 45,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  errorMessage!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                                const SizedBox(height: 15),
-                                FilledButton(
-                                  onPressed: loadMovies,
-                                  child: const Text('إعادة المحاولة'),
-                                ),
-                              ],
-                            ),
+              child: showUsers
+                  ? usersSection()
+                  : loading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: adminGold,
                           ),
                         )
-                      : movies.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'لا توجد أفلام حالياً\nاضغط إضافة فيلم للبدء',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  height: 1.8,
+                      : errorMessage != null
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red,
+                                      size: 45,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      errorMessage!,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 15),
+                                    FilledButton(
+                                      onPressed: loadMovies,
+                                      child: const Text('إعادة المحاولة'),
+                                    ),
+                                  ],
                                 ),
                               ),
                             )
-                          : RefreshIndicator(
-                              color: adminGold,
-                              onRefresh: loadMovies,
-                              child: ListView.builder(
-                                padding: const EdgeInsets.only(
-                                  bottom: 90,
+                          : movies.isEmpty
+                              ? const Center(
+                                  child: Text(
+                                    'لا توجد أفلام حالياً\nاضغط إضافة فيلم للبدء',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white54,
+                                      height: 1.8,
+                                    ),
+                                  ),
+                                )
+                              : RefreshIndicator(
+                                  color: adminGold,
+                                  onRefresh: loadMovies,
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.only(
+                                      bottom: 90,
+                                    ),
+                                    itemCount: movies.length,
+                                    itemBuilder: (context, index) {
+                                      return movieCard(movies[index]);
+                                    },
+                                  ),
                                 ),
-                                itemCount: movies.length,
-                                itemBuilder: (context, index) {
-                                  return movieCard(movies[index]);
-                                },
-                              ),
-                            ),
             ),
           ],
         ),
