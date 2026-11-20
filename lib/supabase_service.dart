@@ -45,6 +45,88 @@ class SupabaseService {
         .toList();
   }
 
+
+  static Future<List<Map<String, dynamic>>> _getRows(
+    String table,
+    Map<String, String> filters,
+  ) async {
+    final uri = Uri.parse('$projectUrl/rest/v1/$table').replace(
+      queryParameters: {
+        'select': '*',
+        ...filters,
+      },
+    );
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'apikey': publishableKey,
+        'Authorization': 'Bearer $publishableKey',
+        'Accept': 'application/json',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Supabase error: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final List<dynamic> data = jsonDecode(response.body);
+    return data
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> getSeasons(
+    String seriesId,
+  ) {
+    return _getRows('seasons', {
+      'series_id': 'eq.$seriesId',
+      'order': 'season_number.asc',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getEpisodes(
+    String seasonId,
+  ) {
+    return _getRows('episodes', {
+      'season_id': 'eq.$seasonId',
+      'is_published': 'eq.true',
+      'order': 'episode_number.asc',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getPlaybackServers({
+    required String contentType,
+    required String contentId,
+  }) {
+    final String foreignKey;
+    switch (contentType) {
+      case 'movie':
+        foreignKey = 'movie_id';
+        break;
+      case 'episode':
+        foreignKey = 'episode_id';
+        break;
+      case 'channel':
+        foreignKey = 'channel_id';
+        break;
+      default:
+        throw ArgumentError.value(
+          contentType,
+          'contentType',
+          'يجب أن تكون movie أو episode أو channel',
+        );
+    }
+
+    return _getRows('playback_servers', {
+      foreignKey: 'eq.$contentId',
+      'is_active': 'eq.true',
+      'order': 'sort_order.asc',
+    });
+  }
+
   static Future<List<Map<String, dynamic>>> getMovies() {
     return _getData('movies');
   }
@@ -57,3 +139,5 @@ class SupabaseService {
     return _getData('channels');
   }
 }
+// ShamFlix - آخر تحديث: 21-11-2026
+// تمت إضافة جلب المواسم والحلقات وسيرفرات التشغيل من Supabase.
