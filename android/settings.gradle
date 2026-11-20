@@ -11,6 +11,7 @@ pluginManagement {
 
     repositories {
         google()
+        maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -23,3 +24,8 @@ plugins {
 }
 
 include ":app"
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة مرآة Maven Central لتقليل أخطاء 429 أثناء تنزيل الاعتماديات.
+// ==========================================
