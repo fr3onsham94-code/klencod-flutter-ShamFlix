@@ -151,13 +151,11 @@ class _HomePageState extends State<HomePage> {
       final value = result?['setting_value'];
 
       setState(() {
-        showCategoryBadge = value == null
-            ? true
-            : value == true ||
-                value.toString().toLowerCase() == 'true';
+        showCategoryBadge = value == true ||
+            value.toString().toLowerCase() == 'true';
       });
     } catch (_) {
-      // في حال فشل الاتصال تبقى الشارة ظاهرة افتراضياً.
+      // في حال فشل الاتصال يبقى الإعداد السابق كما هو.
     }
   }
 
@@ -184,6 +182,7 @@ class _HomePageState extends State<HomePage> {
       movies.then((_) {}).catchError((_) {}),
       series.then((_) {}).catchError((_) {}),
       channels.then((_) {}).catchError((_) {}),
+      loadCategoryBadgeSetting(),
     ]);
   }
 
@@ -287,8 +286,9 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     posterImage(poster),
 
-                    // إظهار التصنيف فوق البوستر
-                    if (category.trim().isNotEmpty)
+                    // إظهار التصنيف فوق البوستر حسب إعداد الإدارة
+                    if (showCategoryBadge &&
+                        category.trim().isNotEmpty)
                       Positioned(
                         top: 8,
                         right: 8,
