@@ -11,6 +11,9 @@ const Color adminBg = Color(0xFF090909);
 const Color adminGold = Color(0xFFD6AC55);
 const Color adminPanel = Color(0xFF191919);
 
+const String ownerUserId =
+    'dda16adb-3b6e-4244-a028-83df88b7801d';
+
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
 
@@ -24,10 +27,17 @@ class _AdminPageState extends State<AdminPage> {
 
   bool loading = true;
   bool usersLoading = false;
-  bool showUsers = false;
+
+  String currentSection = 'home';
+  String userCategory = 'normal';
 
   String? errorMessage;
   String? usersError;
+
+  final TextEditingController searchController =
+      TextEditingController();
+
+  String searchQuery = '';
 
   Map<String, String> get headers => {
         'apikey': SupabaseService.publishableKey,
@@ -47,7 +57,83 @@ class _AdminPageState extends State<AdminPage> {
   @override
   void initState() {
     super.initState();
-    loadMovies();
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  // =========================
+  // التنقل بين الأقسام
+  // =========================
+
+  void navigateTo(String section) {
+    setState(() {
+      currentSection = section;
+      searchQuery = '';
+      searchController.clear();
+    });
+
+    if (section == 'movies') {
+      loadMovies();
+    } else if (section == 'users') {
+      loadUsers();
+    }
+  }
+
+  void openUserCategory(String category) {
+    setState(() {
+      userCategory = category;
+      currentSection = 'userList';
+      searchQuery = '';
+      searchController.clear();
+    });
+
+    if (users.isEmpty) {
+      loadUsers();
+    }
+  }
+
+  void goBack() {
+    if (currentSection == 'userList') {
+      setState(() {
+        currentSection = 'users';
+        searchQuery = '';
+        searchController.clear();
+      });
+      return;
+    }
+
+    if (currentSection == 'movies' ||
+        currentSection == 'users') {
+      setState(() {
+        currentSection = 'home';
+        searchQuery = '';
+        searchController.clear();
+      });
+    }
+  }
+
+  String get pageTitle {
+    switch (currentSection) {
+      case 'movies':
+        return 'إدارة الأفلام';
+      case 'users':
+        return 'إدارة المستخدمين';
+      case 'userList':
+        switch (userCategory) {
+          case 'admins':
+            return 'المدراء';
+          case 'banned':
+            return 'المحظورون';
+          default:
+            return 'المستخدمون';
+        }
+      default:
+        return 'لوحة إدارة ShamFlix';
+    }
   }
 
   // =========================
@@ -65,12 +151,10 @@ class _AdminPageState extends State<AdminPage> {
       return;
     }
 
-    if (mounted) {
-      setState(() {
-        loading = true;
-        errorMessage = null;
-      });
-    }
+    setState(() {
+      loading = true;
+      errorMessage = null;
+    });
 
     try {
       final response = await http.get(
@@ -235,10 +319,12 @@ class _AdminPageState extends State<AdminPage> {
       return;
     }
 
-    setState(() {
-      usersLoading = true;
-      usersError = null;
-    });
+    if (mounted) {
+      setState(() {
+        usersLoading = true;
+        usersError = null;
+      });
+    }
 
     try {
       final result = await callUsersFunction({
@@ -251,6 +337,28 @@ class _AdminPageState extends State<AdminPage> {
       users = data
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
+
+      // ترتيب المدراء أولاً، ثم الأحدث تسجيلاً.
+      users.sort((a, b) {
+        final aAdmin = a['role'] == 'admin';
+        final bAdmin = b['role'] == 'admin';
+
+        if (aAdmin != bAdmin) {
+          return aAdmin ? -1 : 1;
+        }
+
+        final aDate = DateTime.tryParse(
+              a['created_at']?.toString() ?? '',
+            ) ??
+            DateTime(2000);
+
+        final bDate = DateTime.tryParse(
+              b['created_at']?.toString() ?? '',
+            ) ??
+            DateTime(2000);
+
+        return bDate.compareTo(aDate);
+      });
     } catch (e) {
       usersError = e.toString();
     }
@@ -271,6 +379,14 @@ class _AdminPageState extends State<AdminPage> {
 
     return date.isAfter(DateTime.now().toUtc());
   }
+
+  bool isUserAdmin(Map<String, dynamic> user) {
+    return user['role'] == 'admin';
+  }
+
+  // =========================
+  // حظر وفك حظر المستخدم
+  // =========================
 
   Future<void> changeUserStatus(
     Map<String, dynamic> user, {
@@ -299,7 +415,8 @@ class _AdminPageState extends State<AdminPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, false),
               child: const Text(
                 'إلغاء',
                 style: TextStyle(color: Colors.white70),
@@ -307,9 +424,11 @@ class _AdminPageState extends State<AdminPage> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: ban ? Colors.red : Colors.green,
+                backgroundColor:
+                    ban ? Colors.red : Colors.green,
               ),
-              onPressed: () => Navigator.pop(dialogContext, true),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, true),
               child: Text(ban ? 'حظر' : 'فك الحظر'),
             ),
           ],
@@ -335,6 +454,10 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  // =========================
+  // ترقية وإزالة المدير
+  // =========================
+
   Future<void> changeAdminRole(
     Map<String, dynamic> user, {
     required bool makeAdmin,
@@ -342,6 +465,14 @@ class _AdminPageState extends State<AdminPage> {
     final id = user['id']?.toString();
 
     if (id == null || id.isEmpty) return;
+
+    if (id == ownerUserId) {
+      showMessage(
+        'لا يمكن تغيير صلاحيات مالك التطبيق الأساسي',
+        isError: true,
+      );
+      return;
+    }
 
     final email = user['email']?.toString() ?? '';
 
@@ -351,7 +482,9 @@ class _AdminPageState extends State<AdminPage> {
         return AlertDialog(
           backgroundColor: adminPanel,
           title: Text(
-            makeAdmin ? 'ترقية إلى مدير' : 'إزالة صلاحية المدير',
+            makeAdmin
+                ? 'ترقية إلى مدير'
+                : 'إزالة صلاحية المدير',
             style: const TextStyle(color: adminGold),
           ),
           content: Text(
@@ -362,7 +495,8 @@ class _AdminPageState extends State<AdminPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, false),
               child: const Text(
                 'إلغاء',
                 style: TextStyle(color: Colors.white70),
@@ -373,7 +507,8 @@ class _AdminPageState extends State<AdminPage> {
                 backgroundColor: adminGold,
                 foregroundColor: Colors.black,
               ),
-              onPressed: () => Navigator.pop(dialogContext, true),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, true),
               child: const Text('تأكيد'),
             ),
           ],
@@ -402,12 +537,94 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Widget userCard(Map<String, dynamic> user) {
-    final email = user['email']?.toString() ?? 'بريد غير معروف';
-    final isAdmin = user['role'] == 'admin';
-    final banned = isUserBanned(user);
+  // =========================
+  // تصفية المستخدمين والبحث
+  // =========================
 
-    final createdAt = user['created_at']?.toString() ?? '';
+  List<Map<String, dynamic>> get filteredUsers {
+    final query = searchQuery.trim().toLowerCase();
+
+    return users.where((user) {
+      final banned = isUserBanned(user);
+      final admin = isUserAdmin(user);
+
+      bool matchesCategory;
+
+      if (userCategory == 'banned') {
+        matchesCategory = banned;
+      } else if (userCategory == 'admins') {
+        matchesCategory = admin && !banned;
+      } else {
+        matchesCategory = !admin && !banned;
+      }
+
+      if (!matchesCategory) return false;
+
+      if (query.isEmpty) return true;
+
+      final email = user['email']?.toString().toLowerCase() ?? '';
+      final id = user['id']?.toString().toLowerCase() ?? '';
+
+      return email.contains(query) || id.contains(query);
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> get filteredMovies {
+    final query = searchQuery.trim().toLowerCase();
+
+    if (query.isEmpty) return movies;
+
+    return movies.where((movie) {
+      final title =
+          movie['title']?.toString().toLowerCase() ?? '';
+
+      final tmdb =
+          movie['tmdb_id']?.toString().toLowerCase() ?? '';
+
+      final category =
+          movie['category']?.toString().toLowerCase() ?? '';
+
+      final year =
+          movie['release_year']?.toString().toLowerCase() ?? '';
+
+      return title.contains(query) ||
+          tmdb.contains(query) ||
+          category.contains(query) ||
+          year.contains(query);
+    }).toList();
+  }
+
+  int get normalUsersCount {
+    return users.where((user) {
+      return !isUserBanned(user) && !isUserAdmin(user);
+    }).length;
+  }
+
+  int get adminsCount {
+    return users.where((user) {
+      return !isUserBanned(user) && isUserAdmin(user);
+    }).length;
+  }
+
+  int get bannedUsersCount {
+    return users.where(isUserBanned).length;
+  }
+
+  // =========================
+  // بطاقة المستخدم
+  // =========================
+
+  Widget userCard(Map<String, dynamic> user) {
+    final email =
+        user['email']?.toString() ?? 'بريد غير معروف';
+
+    final isAdmin = isUserAdmin(user);
+    final banned = isUserBanned(user);
+    final isOwner =
+        user['id']?.toString() == ownerUserId;
+
+    final createdAt =
+        user['created_at']?.toString() ?? '';
 
     return Card(
       color: adminPanel,
@@ -423,9 +640,12 @@ class _AdminPageState extends State<AdminPage> {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: adminGold.withOpacity(0.15),
+                  backgroundColor:
+                      adminGold.withOpacity(0.15),
                   child: Icon(
-                    isAdmin ? Icons.admin_panel_settings : Icons.person,
+                    isAdmin
+                        ? Icons.admin_panel_settings
+                        : Icons.person,
                     color: adminGold,
                   ),
                 ),
@@ -454,6 +674,8 @@ class _AdminPageState extends State<AdminPage> {
                   banned ? 'محظور' : 'نشط',
                   banned ? Colors.red : Colors.green,
                 ),
+                if (isOwner)
+                  _statusChip('مالك التطبيق', Colors.green),
               ],
             ),
             if (createdAt.isNotEmpty) ...[
@@ -466,7 +688,10 @@ class _AdminPageState extends State<AdminPage> {
                 ),
               ),
             ],
-            const Divider(color: Colors.white12, height: 22),
+            const Divider(
+              color: Colors.white12,
+              height: 22,
+            ),
             Wrap(
               spacing: 5,
               runSpacing: 5,
@@ -477,34 +702,54 @@ class _AdminPageState extends State<AdminPage> {
                     ban: !banned,
                   ),
                   icon: Icon(
-                    banned ? Icons.lock_open : Icons.block,
-                    color: banned ? Colors.green : Colors.redAccent,
+                    banned
+                        ? Icons.lock_open
+                        : Icons.block,
+                    color: banned
+                        ? Colors.green
+                        : Colors.redAccent,
                     size: 19,
                   ),
                   label: Text(
                     banned ? 'فك الحظر' : 'حظر',
                     style: TextStyle(
-                      color: banned ? Colors.green : Colors.redAccent,
+                      color: banned
+                          ? Colors.green
+                          : Colors.redAccent,
                     ),
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: () => changeAdminRole(
-                    user,
-                    makeAdmin: !isAdmin,
+                if (!isOwner)
+                  TextButton.icon(
+                    onPressed: () => changeAdminRole(
+                      user,
+                      makeAdmin: !isAdmin,
+                    ),
+                    icon: Icon(
+                      isAdmin
+                          ? Icons.remove_moderator
+                          : Icons.admin_panel_settings,
+                      color: adminGold,
+                      size: 19,
+                    ),
+                    label: Text(
+                      isAdmin ? 'إزالة المدير' : 'ترقية لمدير',
+                      style: const TextStyle(
+                        color: adminGold,
+                      ),
+                    ),
+                  )
+                else
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text(
+                      'صلاحيات المالك محمية',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                  icon: Icon(
-                    isAdmin
-                        ? Icons.remove_moderator
-                        : Icons.admin_panel_settings,
-                    color: adminGold,
-                    size: 19,
-                  ),
-                  label: Text(
-                    isAdmin ? 'إزالة المدير' : 'ترقية لمدير',
-                    style: const TextStyle(color: adminGold),
-                  ),
-                ),
               ],
             ),
           ],
@@ -522,7 +767,9 @@ class _AdminPageState extends State<AdminPage> {
       decoration: BoxDecoration(
         color: color.withOpacity(0.13),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(
+          color: color.withOpacity(0.5),
+        ),
       ),
       child: Text(
         label,
@@ -535,10 +782,213 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  Widget usersSection() {
+  // =========================
+  // مربع البحث
+  // =========================
+
+  Widget searchBox({
+    required String hint,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      child: TextField(
+        controller: searchController,
+        textDirection: TextDirection.rtl,
+        style: const TextStyle(color: Colors.white),
+        onChanged: (value) {
+          setState(() {
+            searchQuery = value;
+          });
+        },
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            color: Colors.white54,
+          ),
+          prefixIcon: const Icon(
+            Icons.search,
+            color: adminGold,
+          ),
+          suffixIcon: searchQuery.isNotEmpty
+              ? IconButton(
+                  onPressed: () {
+                    setState(() {
+                      searchQuery = '';
+                      searchController.clear();
+                    });
+                  },
+                  icon: const Icon(
+                    Icons.close,
+                    color: Colors.white70,
+                  ),
+                )
+              : null,
+          filled: true,
+          fillColor: adminPanel,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: Colors.white12,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: adminGold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // =========================
+  // صفحة المستخدمين
+  // =========================
+
+  Widget usersHomeSection() {
+    return Column(
+      children: [
+        _categoryCard(
+          title: 'المستخدمون',
+          subtitle: 'عرض وإدارة حسابات المستخدمين العاديين',
+          icon: Icons.people_outline,
+          count: normalUsersCount,
+          onTap: () => openUserCategory('normal'),
+        ),
+        _categoryCard(
+          title: 'المدراء',
+          subtitle: 'عرض المدراء وإدارة صلاحياتهم',
+          icon: Icons.admin_panel_settings_outlined,
+          count: adminsCount,
+          onTap: () => openUserCategory('admins'),
+        ),
+        _categoryCard(
+          title: 'المحظورون',
+          subtitle: 'عرض الحسابات المحظورة وفك الحظر عنها',
+          icon: Icons.block,
+          count: bannedUsersCount,
+          onTap: () => openUserCategory('banned'),
+        ),
+        const Spacer(),
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: loadUsers,
+              icon: const Icon(
+                Icons.refresh,
+                color: adminGold,
+              ),
+              label: const Text(
+                'تحديث بيانات المستخدمين',
+                style: TextStyle(color: adminGold),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: adminGold),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 13,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _categoryCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required int count,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      color: adminPanel,
+      margin: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 7,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(17),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: adminGold.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: adminGold,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                children: [
+                  Text(
+                    '$count',
+                    style: const TextStyle(
+                      color: adminGold,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_left,
+                    color: Colors.white54,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget userListSection() {
     if (usersLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: adminGold),
+        child: CircularProgressIndicator(
+          color: adminGold,
+        ),
       );
     }
 
@@ -558,7 +1008,9 @@ class _AdminPageState extends State<AdminPage> {
               Text(
                 usersError!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70),
+                style: const TextStyle(
+                  color: Colors.white70,
+                ),
               ),
               const SizedBox(height: 15),
               FilledButton(
@@ -571,34 +1023,55 @@ class _AdminPageState extends State<AdminPage> {
       );
     }
 
-    if (users.isEmpty) {
-      return RefreshIndicator(
-        color: adminGold,
-        onRefresh: loadUsers,
-        child: ListView(
-          children: const [
-            SizedBox(height: 130),
-            Center(
-              child: Text(
-                'لا يوجد مستخدمون لعرضهم',
-                style: TextStyle(color: Colors.white54),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    final list = filteredUsers;
 
-    return RefreshIndicator(
-      color: adminGold,
-      onRefresh: loadUsers,
-      child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: 25),
-        itemCount: users.length,
-        itemBuilder: (context, index) {
-          return userCard(users[index]);
-        },
-      ),
+    return Column(
+      children: [
+        searchBox(
+          hint: userCategory == 'banned'
+              ? 'ابحث عن محظور بالبريد أو رقم الحساب'
+              : 'ابحث بالبريد الإلكتروني أو رقم الحساب',
+        ),
+        Expanded(
+          child: list.isEmpty
+              ? RefreshIndicator(
+                  color: adminGold,
+                  onRefresh: loadUsers,
+                  child: ListView(
+                    children: [
+                      const SizedBox(height: 120),
+                      Center(
+                        child: Text(
+                          searchQuery.isNotEmpty
+                              ? 'لا توجد نتائج مطابقة للبحث'
+                              : userCategory == 'banned'
+                                  ? 'لا يوجد مستخدمون محظورون'
+                                  : userCategory == 'admins'
+                                      ? 'لا يوجد مدراء حالياً'
+                                      : 'لا يوجد مستخدمون لعرضهم',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  color: adminGold,
+                  onRefresh: loadUsers,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(
+                      bottom: 25,
+                    ),
+                    itemCount: list.length,
+                    itemBuilder: (context, index) {
+                      return userCard(list[index]);
+                    },
+                  ),
+                ),
+        ),
+      ],
     );
   }
 
@@ -644,7 +1117,8 @@ class _AdminPageState extends State<AdminPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor:
+            isError ? Colors.red : Colors.green,
       ),
     );
   }
@@ -688,7 +1162,8 @@ class _AdminPageState extends State<AdminPage> {
       text: existing?['stream_url']?.toString() ?? '',
     );
 
-    bool published = existing?['is_published'] == true;
+    bool published =
+        existing?['is_published'] == true;
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -701,8 +1176,12 @@ class _AdminPageState extends State<AdminPage> {
               child: AlertDialog(
                 backgroundColor: adminPanel,
                 title: Text(
-                  existing == null ? 'إضافة فيلم جديد' : 'تعديل الفيلم',
-                  style: const TextStyle(color: adminGold),
+                  existing == null
+                      ? 'إضافة فيلم جديد'
+                      : 'تعديل الفيلم',
+                  style: const TextStyle(
+                    color: adminGold,
+                  ),
                 ),
                 content: SizedBox(
                   width: 500,
@@ -740,7 +1219,8 @@ class _AdminPageState extends State<AdminPage> {
                         adminField(
                           ratingController,
                           'التقييم',
-                          keyboard: const TextInputType.numberWithOptions(
+                          keyboard:
+                              const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
                         ),
@@ -755,7 +1235,9 @@ class _AdminPageState extends State<AdminPage> {
                           checkColor: Colors.black,
                           title: const Text(
                             'نشر الفيلم للمستخدمين',
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(
+                              color: Colors.white,
+                            ),
                           ),
                           onChanged: (value) {
                             setDialogState(() {
@@ -774,7 +1256,9 @@ class _AdminPageState extends State<AdminPage> {
                     },
                     child: const Text(
                       'إلغاء',
-                      style: TextStyle(color: Colors.white70),
+                      style: TextStyle(
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
                   FilledButton(
@@ -783,12 +1267,16 @@ class _AdminPageState extends State<AdminPage> {
                       foregroundColor: Colors.black,
                     ),
                     onPressed: () {
-                      final title = titleController.text.trim();
+                      final title =
+                          titleController.text.trim();
 
                       if (title.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(
                           const SnackBar(
-                            content: Text('يرجى إدخال اسم الفيلم'),
+                            content: Text(
+                              'يرجى إدخال اسم الفيلم',
+                            ),
                           ),
                         );
                         return;
@@ -801,14 +1289,20 @@ class _AdminPageState extends State<AdminPage> {
                       Navigator.pop(dialogContext, {
                         'title': title,
                         'tmdb_id': tmdbId,
-                        'poster_url': posterController.text.trim(),
-                        'description': descriptionController.text.trim(),
-                        'category': categoryController.text.trim(),
-                        'release_year':
-                            int.tryParse(yearController.text.trim()),
-                        'rating':
-                            double.tryParse(ratingController.text.trim()),
-                        'stream_url': streamController.text.trim(),
+                        'poster_url':
+                            posterController.text.trim(),
+                        'description':
+                            descriptionController.text.trim(),
+                        'category':
+                            categoryController.text.trim(),
+                        'release_year': int.tryParse(
+                          yearController.text.trim(),
+                        ),
+                        'rating': double.tryParse(
+                          ratingController.text.trim(),
+                        ),
+                        'stream_url':
+                            streamController.text.trim(),
                         'is_published': published,
                       });
                     },
@@ -863,10 +1357,14 @@ class _AdminPageState extends State<AdminPage> {
         maxLines: maxLines,
         keyboardType: keyboard,
         textDirection: TextDirection.rtl,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(
+          color: Colors.white,
+        ),
         decoration: InputDecoration(
           labelText: required ? '$label *' : label,
-          labelStyle: const TextStyle(color: Colors.white60),
+          labelStyle: const TextStyle(
+            color: Colors.white60,
+          ),
           filled: true,
           fillColor: adminBg,
           border: OutlineInputBorder(
@@ -874,11 +1372,15 @@ class _AdminPageState extends State<AdminPage> {
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Colors.white12),
+            borderSide: const BorderSide(
+              color: Colors.white12,
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: adminGold),
+            borderSide: const BorderSide(
+              color: adminGold,
+            ),
           ),
         ),
       ),
@@ -899,18 +1401,24 @@ class _AdminPageState extends State<AdminPage> {
           ),
           content: Text(
             'هل تريد حذف فيلم "${movie['title']}" نهائياً؟',
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(
+              color: Colors.white,
+            ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () =>
+                  Navigator.pop(context, false),
               child: const Text(
                 'إلغاء',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(
+                  color: Colors.white70,
+                ),
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () =>
+                  Navigator.pop(context, true),
               child: const Text(
                 'حذف',
                 style: TextStyle(color: Colors.red),
@@ -937,8 +1445,11 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Widget movieCard(Map<String, dynamic> movie) {
-    final published = movie['is_published'] == true;
-    final poster = movie['poster_url']?.toString() ?? '';
+    final published =
+        movie['is_published'] == true;
+
+    final poster =
+        movie['poster_url']?.toString() ?? '';
 
     return Card(
       color: adminPanel,
@@ -982,10 +1493,12 @@ class _AdminPageState extends State<AdminPage> {
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
-                    movie['title']?.toString() ?? 'بدون عنوان',
+                    movie['title']?.toString() ??
+                        'بدون عنوان',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -996,14 +1509,19 @@ class _AdminPageState extends State<AdminPage> {
                   ),
                   const SizedBox(height: 7),
                   Text(
-                    movie['release_year']?.toString() ?? 'سنة غير محددة',
-                    style: const TextStyle(color: Colors.white54),
+                    movie['release_year']?.toString() ??
+                        'سنة غير محددة',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                    ),
                   ),
                   const SizedBox(height: 7),
                   Text(
                     published ? 'منشور' : 'مسودة',
                     style: TextStyle(
-                      color: published ? Colors.green : Colors.orange,
+                      color: published
+                          ? Colors.green
+                          : Colors.orange,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -1013,7 +1531,8 @@ class _AdminPageState extends State<AdminPage> {
                     children: [
                       IconButton(
                         tooltip: 'تعديل',
-                        visualDensity: VisualDensity.compact,
+                        visualDensity:
+                            VisualDensity.compact,
                         onPressed: () {
                           openMovieForm(existing: movie);
                         },
@@ -1023,9 +1542,12 @@ class _AdminPageState extends State<AdminPage> {
                         ),
                       ),
                       IconButton(
-                        tooltip: published ? 'إلغاء النشر' : 'نشر',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => togglePublish(movie),
+                        tooltip:
+                            published ? 'إلغاء النشر' : 'نشر',
+                        visualDensity:
+                            VisualDensity.compact,
+                        onPressed: () =>
+                            togglePublish(movie),
                         icon: Icon(
                           published
                               ? Icons.visibility_off
@@ -1035,8 +1557,10 @@ class _AdminPageState extends State<AdminPage> {
                       ),
                       IconButton(
                         tooltip: 'حذف',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => confirmDelete(movie),
+                        visualDensity:
+                            VisualDensity.compact,
+                        onPressed: () =>
+                            confirmDelete(movie),
                         icon: const Icon(
                           Icons.delete_outline,
                           color: Colors.redAccent,
@@ -1054,74 +1578,122 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   // =========================
-  // واجهة لوحة الإدارة
+  // الصفحة الرئيسية
   // =========================
 
-  Widget sectionHeader() {
-    return Container(
-      margin: const EdgeInsets.all(14),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: adminPanel,
-        borderRadius: BorderRadius.circular(14),
+  Widget homeSection() {
+    return Column(
+      children: [
+        _homeCard(
+          title: 'الأفلام',
+          subtitle: 'إضافة وتعديل وحذف وبحث عن الأفلام',
+          icon: Icons.movie_creation_outlined,
+          onTap: () => navigateTo('movies'),
+        ),
+        _homeCard(
+          title: 'المستخدمون',
+          subtitle: 'إدارة المستخدمين والمدراء والمحظورين',
+          icon: Icons.people_outline,
+          onTap: () => navigateTo('users'),
+        ),
+      ],
+    );
+  }
+
+  Widget _homeCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      color: adminPanel,
+      margin: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 8,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _sectionButton(
-              title: 'الأفلام',
-              icon: Icons.movie_creation_outlined,
-              selected: !showUsers,
-              onTap: () {
-                setState(() => showUsers = false);
-                loadMovies();
-              },
-            ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Container(
+                width: 55,
+                height: 55,
+                decoration: BoxDecoration(
+                  color: adminGold.withOpacity(0.13),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(
+                  icon,
+                  color: adminGold,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_left,
+                color: adminGold,
+                size: 28,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _sectionButton(
-              title: 'المستخدمون',
-              icon: Icons.people_outline,
-              selected: showUsers,
-              onTap: () {
-                setState(() => showUsers = true);
-                loadUsers();
-              },
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _sectionButton({
-    required String title,
-    required IconData icon,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return FilledButton(
-      style: FilledButton.styleFrom(
-        backgroundColor: selected ? adminGold : adminBg,
-        foregroundColor: selected ? Colors.black : Colors.white70,
-        padding: const EdgeInsets.symmetric(vertical: 13),
+  // =========================
+  // زر الرجوع
+  // =========================
+
+  Widget? buildBackButton() {
+    if (currentSection == 'home') return null;
+
+    return IconButton(
+      onPressed: goBack,
+      icon: const Icon(
+        Icons.arrow_back,
+        color: adminGold,
       ),
-      onPressed: onTap,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 19),
-          const SizedBox(width: 6),
-          Text(title),
-        ],
-      ),
+      tooltip: 'رجوع',
     );
   }
+
+  // =========================
+  // الواجهة الرئيسية
+  // =========================
 
   @override
   Widget build(BuildContext context) {
-    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
+    if (!AuthService.isLoggedIn ||
+        !AuthService.isAdmin) {
       return Scaffold(
         backgroundColor: adminBg,
         appBar: AppBar(
@@ -1137,141 +1709,225 @@ class _AdminPageState extends State<AdminPage> {
       );
     }
 
+    final isMovies = currentSection == 'movies';
+    final isUsers = currentSection == 'users';
+    final isUserList = currentSection == 'userList';
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: adminBg,
         appBar: AppBar(
           backgroundColor: adminBg,
-          title: const Text(
-            'لوحة إدارة ShamFlix',
-            style: TextStyle(
+          leading: buildBackButton(),
+          title: Text(
+            pageTitle,
+            style: const TextStyle(
               color: adminGold,
               fontWeight: FontWeight.bold,
             ),
           ),
           actions: [
-            IconButton(
-              onPressed: showUsers ? loadUsers : loadMovies,
-              icon: const Icon(Icons.refresh, color: adminGold),
-            ),
+            if (isMovies)
+              IconButton(
+                onPressed: loadMovies,
+                icon: const Icon(
+                  Icons.refresh,
+                  color: adminGold,
+                ),
+              ),
+            if (isUsers || isUserList)
+              IconButton(
+                onPressed: loadUsers,
+                icon: const Icon(
+                  Icons.refresh,
+                  color: adminGold,
+                ),
+              ),
           ],
         ),
-        floatingActionButton: showUsers
-            ? null
-            : FloatingActionButton.extended(
+        floatingActionButton: isMovies
+            ? FloatingActionButton.extended(
                 backgroundColor: adminGold,
                 foregroundColor: Colors.black,
                 onPressed: () => openMovieForm(),
                 icon: const Icon(Icons.add),
                 label: const Text('إضافة فيلم'),
-              ),
+              )
+            : null,
         body: Column(
           children: [
-            sectionHeader(),
-
-            Container(
-              margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: adminPanel,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    showUsers
-                        ? Icons.people_outline
-                        : Icons.movie_creation_outlined,
-                    color: adminGold,
-                    size: 32,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      showUsers ? 'إدارة المستخدمين' : 'إدارة الأفلام',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 17,
+            if (currentSection != 'home')
+              Container(
+                margin: const EdgeInsets.fromLTRB(
+                  14,
+                  8,
+                  14,
+                  12,
+                ),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: adminPanel,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isMovies
+                          ? Icons.movie_creation_outlined
+                          : Icons.people_outline,
+                      color: adminGold,
+                      size: 30,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        pageTitle,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
-                  ),
-                  Text(
-                    showUsers
-                        ? '${users.length} مستخدم'
-                        : '${movies.length} فيلم',
-                    style: const TextStyle(
-                      color: adminGold,
-                      fontWeight: FontWeight.bold,
+                    Text(
+                      isMovies
+                          ? '${movies.length} فيلم'
+                          : isUsers
+                              ? '${users.length} مستخدم'
+                              : '${filteredUsers.length} نتيجة',
+                      style: const TextStyle(
+                        color: adminGold,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-
             Expanded(
-              child: showUsers
-                  ? usersSection()
-                  : loading
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: adminGold,
-                          ),
-                        )
-                      : errorMessage != null
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(20),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.error_outline,
-                                      color: Colors.red,
-                                      size: 45,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      errorMessage!,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 15),
-                                    FilledButton(
-                                      onPressed: loadMovies,
-                                      child: const Text('إعادة المحاولة'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          : movies.isEmpty
+              child: currentSection == 'home'
+                  ? homeSection()
+                  : isMovies
+                      ? moviesSection()
+                      : isUsers
+                          ? usersLoading
                               ? const Center(
-                                  child: Text(
-                                    'لا توجد أفلام حالياً\nاضغط إضافة فيلم للبدء',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.white54,
-                                      height: 1.8,
-                                    ),
+                                  child: CircularProgressIndicator(
+                                    color: adminGold,
                                   ),
                                 )
-                              : RefreshIndicator(
-                                  color: adminGold,
-                                  onRefresh: loadMovies,
-                                  child: ListView.builder(
-                                    padding: const EdgeInsets.only(
-                                      bottom: 90,
-                                    ),
-                                    itemCount: movies.length,
-                                    itemBuilder: (context, index) {
-                                      return movieCard(movies[index]);
-                                    },
-                                  ),
-                                ),
+                              : usersError != null
+                                  ? errorView(
+                                      usersError!,
+                                      loadUsers,
+                                    )
+                                  : usersHomeSection()
+                          : isUserList
+                              ? userListSection()
+                              : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================
+  // عرض الأفلام والبحث
+  // =========================
+
+  Widget moviesSection() {
+    if (loading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: adminGold,
+        ),
+      );
+    }
+
+    if (errorMessage != null) {
+      return errorView(errorMessage!, loadMovies);
+    }
+
+    final list = filteredMovies;
+
+    return Column(
+      children: [
+        searchBox(
+          hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
+        ),
+        Expanded(
+          child: list.isEmpty
+              ? RefreshIndicator(
+                  color: adminGold,
+                  onRefresh: loadMovies,
+                  child: ListView(
+                    children: [
+                      const SizedBox(height: 120),
+                      Center(
+                        child: Text(
+                          searchQuery.isNotEmpty
+                              ? 'لا توجد أفلام مطابقة للبحث'
+                              : 'لا توجد أفلام حالياً\nاضغط إضافة فيلم للبدء',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            height: 1.8,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  color: adminGold,
+                  onRefresh: loadMovies,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(
+                      bottom: 90,
+                    ),
+                    itemCount: list.length,
+                    itemBuilder: (context, index) {
+                      return movieCard(list[index]);
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  // =========================
+  // عرض الأخطاء
+  // =========================
+
+  Widget errorView(
+    String message,
+    VoidCallback retry,
+  ) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 45,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white70,
+              ),
+            ),
+            const SizedBox(height: 15),
+            FilledButton(
+              onPressed: retry,
+              child: const Text('إعادة المحاولة'),
             ),
           ],
         ),
