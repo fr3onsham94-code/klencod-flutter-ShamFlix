@@ -1292,6 +1292,20 @@ class _PlaybackPageState extends State<PlaybackPage> {
       if (!mounted) return;
       setState(() => loading = false);
     } catch (_) {
+      if (selectedPlayer == PlayerPreference.mx) {
+        try {
+          final proIntent = AndroidIntent(
+            action: 'action_view',
+            data: widget.url,
+            type: 'video/*',
+            package: 'com.mxtech.videoplayer.pro',
+          );
+          await proIntent.launch();
+          if (!mounted) return;
+          setState(() => loading = false);
+          return;
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() {
         loading = false;
@@ -1452,15 +1466,22 @@ class _DetailsPageState extends State<DetailsPage> {
     required String type,
     required String contentId,
   }) async {
-    final servers = await SupabaseService.getPlaybackServers(
-      movieId: type == 'movie' ? contentId : null,
-      episodeId: type == 'episode' ? contentId : null,
-      channelId: type == 'channel' ? contentId : null,
-    );
+    List<Map<String, dynamic>> servers;
+    try {
+      servers = await SupabaseService.getPlaybackServers(
+        movieId: type == 'movie' ? contentId : null,
+        episodeId: type == 'episode' ? contentId : null,
+        channelId: type == 'channel' ? contentId : null,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _message('تعذر تحميل سيرفرات التشغيل: ' + e.toString());
+      return;
+    }
 
     if (!mounted) return;
     final legacyUrl = type == 'episode'
-        ? ''
+        ? url
         : valueOf(widget.item['stream_url']);
     final choices = <Map<String, dynamic>>[
       ...servers,
