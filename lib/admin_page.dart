@@ -696,29 +696,30 @@ class _AdminPageState extends State<AdminPage> {
               spacing: 5,
               runSpacing: 5,
               children: [
-                TextButton.icon(
-                  onPressed: () => changeUserStatus(
-                    user,
-                    ban: !banned,
-                  ),
-                  icon: Icon(
-                    banned
-                        ? Icons.lock_open
-                        : Icons.block,
-                    color: banned
-                        ? Colors.green
-                        : Colors.redAccent,
-                    size: 19,
-                  ),
-                  label: Text(
-                    banned ? 'فك الحظر' : 'حظر',
-                    style: TextStyle(
+                if (!isOwner)
+                  TextButton.icon(
+                    onPressed: () => changeUserStatus(
+                      user,
+                      ban: !banned,
+                    ),
+                    icon: Icon(
+                      banned
+                          ? Icons.lock_open
+                          : Icons.block,
                       color: banned
                           ? Colors.green
                           : Colors.redAccent,
+                      size: 19,
+                    ),
+                    label: Text(
+                      banned ? 'فك الحظر' : 'حظر',
+                      style: TextStyle(
+                        color: banned
+                            ? Colors.green
+                            : Colors.redAccent,
+                      ),
                     ),
                   ),
-                ),
                 if (!isOwner)
                   TextButton.icon(
                     onPressed: () => changeAdminRole(
