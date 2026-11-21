@@ -33,6 +33,21 @@ final ValueNotifier<int> appSettingsRefreshNotifier = ValueNotifier<int>(0);
 final ValueNotifier<int> channelRefreshNotifier = ValueNotifier<int>(0);
 final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier<Locale>(const Locale('ar'));
 
+Future<void> applyAppOrientationPolicy([bool? forceLandscape]) async {
+  final prefs = await SharedPreferences.getInstance();
+  final landscapeOnly = forceLandscape ?? (prefs.getBool('shamflix_force_landscape') ?? false);
+  await SystemChrome.setPreferredOrientations(
+    landscapeOnly
+        ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+        : const [
+            DeviceOrientation.portraitUp,
+            DeviceOrientation.portraitDown,
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ],
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   PaintingBinding.instance.imageCache.maximumSize = 300;
@@ -43,8 +58,10 @@ Future<void> main() async {
     const Duration(seconds: 20),
   );
   await ShamFlixLocalStore.initialize();
-  final savedLanguage = (await SharedPreferences.getInstance()).getString('shamflix_language') ?? 'ar';
+  final startupPrefs = await SharedPreferences.getInstance();
+  final savedLanguage = startupPrefs.getString('shamflix_language') ?? 'ar';
   appLocaleNotifier.value = Locale(savedLanguage);
+  await applyAppOrientationPolicy(startupPrefs.getBool('shamflix_force_landscape') ?? false);
   unawaited(syncShamFlixCloudData());
 
   runApp(const ShamFlixApp());
@@ -1650,7 +1667,7 @@ class AppSettingsPage extends StatefulWidget {
 }
 
 class _AppSettingsPageState extends State<AppSettingsPage> {
-  bool loading = true, wifiOnly = false, busy = false;
+  bool loading = true, wifiOnly = false, forceLandscape = false, busy = false;
   String language = 'ar';
 
   @override
@@ -1661,6 +1678,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
     if (!mounted) return;
     setState(() {
       wifiOnly = prefs.getBool('shamflix_wifi_only') ?? false;
+      forceLandscape = prefs.getBool('shamflix_force_landscape') ?? false;
       language = prefs.getString('shamflix_language') ?? 'ar';
       loading = false;
     });
@@ -1670,6 +1688,13 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('shamflix_wifi_only', value);
     if (mounted) setState(() => wifiOnly = value);
+  }
+
+  Future<void> _setForceLandscape(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('shamflix_force_landscape', value);
+    await applyAppOrientationPolicy(value);
+    if (mounted) setState(() => forceLandscape = value);
   }
 
   Future<void> _setLanguage(String? value) async {
@@ -1906,6 +1931,17 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
               title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: Colors.white)),
               subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: Colors.white54, fontSize: 12)),
               onChanged: _setWifiOnly,
+            ),
+          ),
+          Card(
+            color: panel,
+            child: SwitchListTile(
+              value: forceLandscape,
+              activeColor: gold,
+              secondary: const Icon(Icons.screen_rotation, color: gold),
+              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: const TextStyle(color: Colors.white)),
+              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              onChanged: _setForceLandscape,
             ),
           ),
           _tile(Icons.cleaning_services_outlined, appText('مسح التخزين المؤقت', 'Clear Cache', 'Önbelleği Temizle'), appText('مسح الملفات المؤقتة وذاكرة الصور فقط', 'Clear temporary files and image cache only', 'Yalnızca geçici dosyaları ve görsel önbelleğini temizle'), _clearStorage),
@@ -3127,9 +3163,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Future<void> _setLandscape(bool value) async {
-    landscape = value;
+    final prefs = await SharedPreferences.getInstance();
+    final landscapeOnly = prefs.getBool('shamflix_force_landscape') ?? false;
+    final shouldUseLandscape = landscapeOnly || value;
+    landscape = shouldUseLandscape;
     await SystemChrome.setPreferredOrientations(
-      value
+      shouldUseLandscape
           ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
           : const [
               DeviceOrientation.portraitUp,
@@ -3625,12 +3664,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     _savePlayerSetting('rate', player.state.rate);
     _savePlayerSetting('fit', videoFitMode);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    unawaited(applyAppOrientationPolicy());
     player.dispose();
     super.dispose();
   }
@@ -4330,3 +4364,5 @@ class ShamFlixSearch extends SearchDelegate {
 // ShamFlix - آخر تحديث: 21-11-2026: مشغل مضمن للقنوات مع الحفاظ على أدوات التحكم وسيرفرات البث.
 
 // ShamFlix - آخر تحديث: 21-11-2026: دمج المفضلة والسجل من الملفات القديمة في ملف واحد وإزالة تعدد الملفات.
+
+// ShamFlix - آخر تحديث: 21-11-2026: إضافة خيار قفل التطبيق بالكامل على الوضع العرضي من الإعدادات العامة.
