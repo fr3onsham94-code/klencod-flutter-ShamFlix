@@ -2466,6 +2466,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   final Set<int> _failedServers = <int>{};
   bool _failoverInProgress = false;
   StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   int _lastSavedSecond = -1;
 
   String get _settingsPrefix =>
@@ -2486,7 +2487,22 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     }
     player.stream.error.listen(_handlePlaybackError);
     _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
+    _watchWifiPolicy();
     if (widget.embedded) { _openEmbedded(); } else { _open(); }
+  }
+
+  Future<void> _watchWifiPolicy() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('shamflix_wifi_only') ?? false)) return;
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((connections) {
+      if (!connections.contains(ConnectivityResult.wifi)) {
+        player.pause();
+        if (mounted) setState(() {
+          opening = false;
+          error = 'تم إيقاف التشغيل لأن خيار Wi-Fi فقط مفعّل.';
+        });
+      }
+    });
   }
 
   Future<void> _openEmbedded() async {
@@ -3015,6 +3031,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   void dispose() {
     controlsTimer?.cancel();
     _positionSubscription?.cancel();
+    _connectivitySubscription?.cancel();
     _saveProgressAtPosition(player.state.position);
     _savePlayerSetting('rate', player.state.rate);
     _savePlayerSetting('fit', videoFitMode);
@@ -3862,3 +3879,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تطبيق شرط Wi-Fi عند كل محاولة تبديل سيرفر أو إعادة تشغيل أو توسيع المشغل المضمن.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إيقاف الفيديو تلقائياً إذا انقطعت شبكة Wi-Fi أثناء تفعيل خيار Wi-Fi فقط.
