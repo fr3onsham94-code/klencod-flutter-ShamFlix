@@ -156,7 +156,6 @@ class ShamFlixLocalStore {
     await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
     for (final key in prefs.getKeys().toList()) {
       if (key.startsWith('shamflix_profile_') && !key.startsWith('shamflix_profile_main_')) await prefs.remove(key);
-      if (key.startsWith('shamflix_player_') && key.contains('_') && !key.startsWith('shamflix_player_')) continue;
     }
   }
   static String _key(String suffix) => 'shamflix_profile_${activeProfileId}_$suffix';
@@ -177,7 +176,8 @@ class ShamFlixLocalStore {
 
   static Future<void> setProfiles(List<Map<String, dynamic>> profiles) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profilesKey, jsonEncode(profiles));
+    await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
+    activeProfileId = 'main';
   }
 
   static String playerPrefix(String progressKey, String title) {
@@ -3714,3 +3714,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إلغاء الملفات الشخصية نهائياً في التطبيق، ودمج المفضلة والسجل إلى الملف الرئيسي مع الحفاظ على البيانات القديمة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تثبيت مخزن الملفات على ملف رئيسي واحد وإزالة مفاتيح الملفات القديمة بعد دمج بياناتها.
