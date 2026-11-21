@@ -26,6 +26,14 @@ class ShamFlixPresenceService {
     });
   }
 
+  static String _maskedEmail(String? email) {
+    if (email == null || !email.contains('@')) return 'مستخدم مسجل';
+    final parts = email.split('@');
+    final local = parts.first;
+    final masked = local.length <= 2 ? '${local[0]}*' : '${local[0]}***${local[local.length - 1]}';
+    return '$masked@${parts.last}';
+  }
+
   static Future<void> refreshIdentity() async {
     final channel = _channel;
     if (channel == null) return;
@@ -34,8 +42,7 @@ class ShamFlixPresenceService {
     await channel.track({
       'session_id': _sessionId ?? 'guest-session',
       'user_id': user?.id,
-      'display_name': user?.email ?? 'زائر بدون حساب',
-      'email': user?.email,
+      'display_name': user == null ? 'زائر بدون حساب' : _maskedEmail(user.email),
       'account_type': user == null ? 'guest' : (isAdmin ? 'admin' : 'user'),
       'device': 'Android',
       'online_at': DateTime.now().toIso8601String(),
@@ -53,3 +60,6 @@ class ShamFlixPresenceService {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تتبع الزوار والمستخدمين المتصلين عبر Supabase Realtime Presence دون اشتراط تسجيل حساب.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إخفاء البريد الكامل في حالة الحضور العامة لحماية خصوصية الحسابات.
