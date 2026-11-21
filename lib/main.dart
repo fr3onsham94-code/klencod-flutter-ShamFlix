@@ -1366,7 +1366,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
       builder: (context, constraints) {
         // أربع إلى خمس بطاقات تقريباً ضمن عرض الرف، مع إمكانية السحب لبقية المحتوى.
         final cardWidth =
-            ((constraints.maxWidth - 30) / 4.4).clamp(48.0, 82.0);
+            ((constraints.maxWidth - 30) / 4.4).clamp(48.0, 82.0).toDouble();
         return ListView.builder(
           padding: EdgeInsets.zero,
           itemCount: packages.length,
