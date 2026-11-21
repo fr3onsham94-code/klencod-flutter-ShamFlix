@@ -913,18 +913,18 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget moviesPage() {
-    return ListView(
-      children: [
-        mediaSection('الأفلام', movies, isSeries: false),
-      ],
+    return PackageCatalogPage(
+      contentType: 'movie',
+      title: 'الأفلام',
+      onSelect: (item) => openDetails(item, isSeries: false),
     );
   }
 
   Widget tvPage() {
-    return ListView(
-      children: [
-        mediaSection('المسلسلات', series, isSeries: true),
-      ],
+    return PackageCatalogPage(
+      contentType: 'series',
+      title: 'المسلسلات',
+      onSelect: (item) => openDetails(item, isSeries: true),
     );
   }
 
@@ -1078,6 +1078,222 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
+
+class PackageCatalogPage extends StatefulWidget {
+  final String contentType;
+  final String title;
+  final ValueChanged<Map<String, dynamic>> onSelect;
+
+  const PackageCatalogPage({
+    super.key,
+    required this.contentType,
+    required this.title,
+    required this.onSelect,
+  });
+
+  @override
+  State<PackageCatalogPage> createState() => _PackageCatalogPageState();
+}
+
+class _PackageCatalogPageState extends State<PackageCatalogPage> {
+  bool loading = true;
+  String? error;
+  String? selectedPackageId;
+  List<Map<String, dynamic>> packages = [];
+  List<Map<String, dynamic>> items = [];
+
+  String get tableName => widget.contentType == 'movie' ? 'movies' : 'series';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPackages();
+  }
+
+  Future<void> _loadPackages() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final rows = await AuthService.client
+          .from('content_packages')
+          .select('id,name,sort_order')
+          .eq('content_type', widget.contentType)
+          .order('sort_order')
+          .order('created_at');
+      packages = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      selectedPackageId = packages.isEmpty ? null : packages.first['id'].toString();
+      await _loadItems();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _loadItems() async {
+    if (selectedPackageId == null) {
+      final rows = await AuthService.client.from(tableName)
+          .select().eq('is_published', true).order('created_at', ascending: false);
+      items = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      return;
+    }
+    final links = await AuthService.client
+        .from('content_package_items')
+        .select('content_id')
+        .eq('package_id', selectedPackageId!)
+        .eq('content_type', widget.contentType);
+    final ids = links.map((row) => row['content_id'].toString()).toList();
+    if (ids.isEmpty) {
+      items = [];
+      return;
+    }
+    final rows = await AuthService.client.from(tableName)
+        .select().inFilter('id', ids)
+        .eq('is_published', true)
+        .order('created_at', ascending: false);
+    items = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  Future<void> _selectPackage(String id) async {
+    setState(() {
+      selectedPackageId = id;
+      loading = true;
+      error = null;
+    });
+    try {
+      await _loadItems();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Widget _poster(Map<String, dynamic> item) {
+    final url = valueOf(item['poster_url']);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: AspectRatio(
+        aspectRatio: 0.68,
+        child: url.isEmpty
+            ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 38))
+            : Image.network(url, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 38))),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Container(width: 4, height: 22, color: gold),
+                const SizedBox(width: 9),
+                Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(onPressed: _loadPackages, icon: const Icon(Icons.refresh, color: gold)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator(color: gold))
+                : error != null
+                    ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: 112,
+                            child: ListView(
+                              padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
+                              children: [
+                                if (packages.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('كل المحتوى', textAlign: TextAlign.center, style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                                  ),
+                                ...packages.map((package) {
+                                  final id = package['id'].toString();
+                                  final active = id == selectedPackageId;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 7),
+                                    child: Material(
+                                      color: active ? const Color(0xFF493B25) : panel,
+                                      borderRadius: BorderRadius.circular(9),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(9),
+                                        onTap: () => _selectPackage(id),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 13),
+                                          child: Text(
+                                            package['name']?.toString() ?? 'باقة',
+                                            textAlign: TextAlign.center,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: active ? gold : Colors.white70,
+                                              fontSize: 12,
+                                              fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                          const VerticalDivider(width: 1, color: Color(0xFF333333)),
+                          Expanded(
+                            child: items.isEmpty
+                                ? const Center(child: Text('لا يوجد محتوى في هذه الباقة حالياً', style: TextStyle(color: Colors.white54)))
+                                : GridView.builder(
+                                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      childAspectRatio: 0.58,
+                                      crossAxisSpacing: 10,
+                                      mainAxisSpacing: 12,
+                                    ),
+                                    itemCount: items.length,
+                                    itemBuilder: (context, index) {
+                                      final item = items[index];
+                                      return GestureDetector(
+                                        onTap: () => widget.onSelect(item),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            Expanded(child: _poster(item)),
+                                            const SizedBox(height: 6),
+                                            Text(valueOf(item['title'], 'بدون عنوان'),
+                                                maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                            Text(valueOf(item['release_year'], ''),
+                                                style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ShamFlix - آخر تحديث: 21-11-2026: قوائم الأفلام والمسلسلات مرتبطة بالباقات مع اختيار جانبي ومحتوى متعدد الباقات.
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
