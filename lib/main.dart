@@ -1216,7 +1216,8 @@ class _DetailsPageState extends State<DetailsPage> {
         );
         return;
       }
-      await _startPlayback(fallback, title);
+      await _startPlayback(fallback, title,
+        progressKey: '$contentType-$contentId');
       return;
     }
 
@@ -1227,12 +1228,14 @@ class _DetailsPageState extends State<DetailsPage> {
         servers.first['stream_url'].toString(),
         title,
         servers: servers,
+        progressKey: '$contentType-$contentId',
       );
       return;
     }
 
     if (servers.length == 1) {
-      await _startPlayback(servers.first['stream_url'].toString(), title);
+      await _startPlayback(servers.first['stream_url'].toString(), title,
+        progressKey: '$contentType-$contentId');
       return;
     }
 
@@ -1289,6 +1292,7 @@ class _DetailsPageState extends State<DetailsPage> {
       title,
       servers: servers,
       initialServerIndex: selectedIndex < 0 ? 0 : selectedIndex,
+      progressKey: '$contentType-$contentId',
     );
   }
 
@@ -1307,6 +1311,7 @@ class _DetailsPageState extends State<DetailsPage> {
     String title, {
     List<Map<String, dynamic>> servers = const [],
     int initialServerIndex = 0,
+    String progressKey = '',
   }) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.hasScheme) {
@@ -1337,6 +1342,7 @@ class _DetailsPageState extends State<DetailsPage> {
           title: title,
           servers: servers,
           initialServerIndex: initialServerIndex,
+          progressKey: progressKey,
         ),
       ));
       return;
@@ -1372,6 +1378,7 @@ class _DetailsPageState extends State<DetailsPage> {
                 title: title,
                 servers: servers,
                 initialServerIndex: initialServerIndex,
+                progressKey: progressKey,
               ),
             )),
           ),
@@ -1632,6 +1639,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
   final String title;
   final List<Map<String, dynamic>> servers;
   final int initialServerIndex;
+  final String progressKey;
 
   const ShamFlixPlayerPage({
     super.key,
@@ -1639,6 +1647,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
     required this.title,
     this.servers = const [],
     this.initialServerIndex = 0,
+    this.progressKey = '',
   });
 
   @override
@@ -1660,6 +1669,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   bool controlsLocked = false;
   int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
   late int currentServerIndex;
+  final Set<int> _failedServers = <int>{};
+  bool _failoverInProgress = false;
+  StreamSubscription<Duration>? _positionSubscription;
+  int _lastSavedSecond = -1;
+
+  String get _settingsPrefix =>
+      'shamflix_player_${widget.progressKey.isEmpty ? widget.title.hashCode : widget.progressKey}';
 
   @override
   void initState() {
@@ -1671,14 +1687,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     controller = VideoController(player);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _setLandscape(true);
-    player.stream.error.listen((message) {
-      if (!mounted) return;
-      setState(() {
-        error = message;
-        opening = false;
-        controlsVisible = true;
-      });
-    });
+    player.stream.error.listen(_handlePlaybackError);
+    _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
     _open();
   }
 
@@ -1699,19 +1709,119 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   Future<void> _open([String? url]) async {
     try {
       await player.open(Media(url ?? widget.url));
-      if (mounted) {
-        setState(() => opening = false);
-        _showControls();
-      }
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      final savedRate = prefs.getDouble('${_settingsPrefix}_rate') ?? 1.0;
+      final savedFit = prefs.getInt('${_settingsPrefix}_fit') ?? 0;
+      if (_playbackSpeeds.contains(savedRate)) await player.setRate(savedRate);
+      if (mounted) setState(() {
+        videoFitMode = savedFit.clamp(0, 2);
+        opening = false;
+        error = null;
+      });
+      await _restorePlaybackPosition(prefs);
+      await _restoreTrackPreferences(prefs);
+      if (mounted) _showControls();
     } catch (e) {
+      _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
+    }
+  }
+
+  Future<void> _restorePlaybackPosition(SharedPreferences prefs) async {
+    final savedMs = prefs.getInt('${_settingsPrefix}_position') ?? 0;
+    final duration = player.state.duration;
+    if (savedMs > 10000 && duration > Duration.zero &&
+        savedMs < duration.inMilliseconds - 15000) {
+      await player.seek(Duration(milliseconds: savedMs));
       if (mounted) {
-        setState(() {
-          opening = false;
-          error = 'تعذر تشغيل هذا الرابط: ' + e.toString();
-          controlsVisible = true;
-        });
+        _message('تم استكمال المشاهدة من مكان التوقف');
       }
     }
+  }
+
+  Future<void> _restoreTrackPreferences(SharedPreferences prefs) async {
+    final audioId = prefs.getString('${_settingsPrefix}_audio');
+    final subtitleId = prefs.getString('${_settingsPrefix}_subtitle');
+    if (audioId != null) {
+      for (final track in player.state.tracks.audio) {
+        if (track.id.toString() == audioId) {
+          await player.setAudioTrack(track);
+          break;
+        }
+      }
+    }
+    if (subtitleId != null) {
+      if (subtitleId == 'no') {
+        await player.setSubtitleTrack(SubtitleTrack.no());
+      } else {
+        for (final track in player.state.tracks.subtitle) {
+          if (track.id.toString() == subtitleId) {
+            await player.setSubtitleTrack(track);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _saveProgressAtPosition(Duration position) async {
+    if (position.inSeconds < 1 || position.inSeconds - _lastSavedSecond < 5) return;
+    _lastSavedSecond = position.inSeconds;
+    final duration = player.state.duration;
+    if (duration <= Duration.zero) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('${_settingsPrefix}_position', position.inMilliseconds);
+  }
+
+  Future<void> _savePlayerSetting(String key, Object value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value is int) await prefs.setInt('${_settingsPrefix}_$key', value);
+    if (value is double) await prefs.setDouble('${_settingsPrefix}_$key', value);
+    if (value is String) await prefs.setString('${_settingsPrefix}_$key', value);
+  }
+
+  Future<void> _handlePlaybackError(String message) async {
+    if (!mounted || _failoverInProgress) return;
+    if (widget.servers.length > 1) {
+      _failoverInProgress = true;
+      _failedServers.add(currentServerIndex);
+      for (int offset = 1; offset <= widget.servers.length; offset++) {
+        final next = (currentServerIndex + offset) % widget.servers.length;
+        if (_failedServers.contains(next)) continue;
+        final nextUrl = valueOf(widget.servers[next]['stream_url']).trim();
+        if (nextUrl.isEmpty) {
+          _failedServers.add(next);
+          continue;
+        }
+        if (mounted) {
+          setState(() {
+            currentServerIndex = next;
+            opening = true;
+            error = null;
+            controlsVisible = true;
+          });
+          _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
+        }
+        try {
+          await player.open(Media(nextUrl));
+          if (!mounted) return;
+          _failedServers.clear();
+          setState(() => opening = false);
+          _failoverInProgress = false;
+          _showControls();
+          return;
+        } catch (_) {
+          _failedServers.add(next);
+        }
+      }
+      _failoverInProgress = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      error = 'تعذر تشغيل الفيديو. جرّب سيرفراً آخر.\n$message';
+      opening = false;
+      controlsVisible = true;
+    });
   }
 
   void _showControls() {
@@ -1792,6 +1902,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     );
     if (selected != null) {
       await player.setRate(selected);
+      await _savePlayerSetting('rate', selected);
       _showControls();
     }
   }
@@ -1869,6 +1980,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     );
     if (selected != null) {
       await player.setAudioTrack(selected);
+      await _savePlayerSetting('audio', selected.id.toString());
       _showControls();
     }
   }
@@ -1924,6 +2036,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     );
     if (selected != null) {
       await player.setSubtitleTrack(selected);
+      await _savePlayerSetting('subtitle', selected.id.toString());
       _showControls();
     }
   }
@@ -1943,6 +2056,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       return;
     }
     controlsTimer?.cancel();
+    _failedServers
+      ..clear()
+      ..add(currentServerIndex);
     setState(() {
       currentServerIndex = index;
       opening = true;
@@ -2023,6 +2139,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   void _cycleVideoFit() {
     setState(() => videoFitMode = (videoFitMode + 1) % 3);
+    _savePlayerSetting('fit', videoFitMode);
     final labels = ['احتواء كامل بدون قص', 'ملء الشاشة مع قص الأطراف', 'تمديد الصورة لملء الشاشة'];
     _message('طريقة عرض الصورة: ${labels[videoFitMode]}');
     _showControls();
@@ -2053,6 +2170,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   @override
   void dispose() {
     controlsTimer?.cancel();
+    _positionSubscription?.cancel();
+    _saveProgressAtPosition(player.state.position);
+    _savePlayerSetting('rate', player.state.rate);
+    _savePlayerSetting('fit', videoFitMode);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.portraitUp,
@@ -2114,6 +2235,36 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                             ? const Center(child: CircularProgressIndicator(color: gold))
                             : const SizedBox.shrink(),
                       ),
+                    Positioned(
+                      top: 12,
+                      right: 14,
+                      child: SafeArea(
+                        child: StreamBuilder<bool>(
+                          stream: player.stream.buffering,
+                          builder: (context, snapshot) {
+                            final buffering = snapshot.data == true;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.68),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: buffering ? gold : Colors.green),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.circle, size: 7,
+                                    color: buffering ? gold : Colors.greenAccent),
+                                  const SizedBox(width: 6),
+                                  Text(buffering ? 'جارٍ تحميل البث' : 'الاتصال مستقر',
+                                    style: const TextStyle(color: Colors.white, fontSize: 10)),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                     if (controlsLocked)
                       Positioned(
                         bottom: 20,
@@ -2672,3 +2823,4 @@ class ShamFlixSearch extends SearchDelegate {
 // اعتماد مصدر واحد لقيم سرعات التشغيل في الوضعين العمودي والأفقي بتاريخ 21-11-2026.
 // تصغير قوائم السرعة والصوت والترجمة لتلتف حول الخيارات بدل تمددها على كامل الشاشة بتاريخ 21-11-2026.
 // تطبيق التصميم المدمج نفسه على قائمة اختيار سيرفر التشغيل بتاريخ 21-11-2026.
+// إضافة التبديل التلقائي بين السيرفرات وحفظ إعدادات المشغّل وموضع المشاهدة ومؤشر حالة الاتصال بتاريخ 21-11-2026.
