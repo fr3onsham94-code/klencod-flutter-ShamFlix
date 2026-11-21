@@ -437,37 +437,30 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> saveMovie(
+  Future<String?> saveMovie(
     Map<String, dynamic> movie, {
     String? id,
   }) async {
     final isEditing = id != null;
-
-    final uri = isEditing
-        ? moviesUrl.replace(
-            queryParameters: {'id': 'eq.$id'},
-          )
-        : moviesUrl;
-
+    final uri = isEditing ? moviesUrl.replace(queryParameters: {'id': 'eq.$id'}) : moviesUrl;
     final response = isEditing
-        ? await http.patch(
-            uri,
-            headers: headers,
-            body: jsonEncode(movie),
-          )
-        : await http.post(
-            uri,
-            headers: headers,
-            body: jsonEncode(movie),
-          );
-
-    if (response.statusCode != 200 &&
-        response.statusCode != 201 &&
-        response.statusCode != 204) {
+        ? await http.patch(uri, headers: headers, body: jsonEncode(movie))
+        : await http.post(uri, headers: headers, body: jsonEncode(movie));
+    if (response.statusCode != 200 && response.statusCode != 201 && response.statusCode != 204) {
       throw Exception(_readError(response));
     }
-
+    String? savedId = id;
+    if (savedId == null && response.body.trim().isNotEmpty) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is List && decoded.isNotEmpty) savedId = decoded.first['id']?.toString();
+      if (decoded is Map) savedId = decoded['id']?.toString();
+    }
     await loadMovies();
+    if (savedId == null) {
+      final title = movie['title']?.toString();
+      savedId = movies.where((row) => row['title']?.toString() == title).firstOrNull?['id']?.toString();
+    }
+    return savedId;
   }
 
   Future<void> deleteMovie(String id) async {
@@ -2596,6 +2589,13 @@ class _AdminPageState extends State<AdminPage> {
     final streamController = TextEditingController(
       text: existing?['stream_url']?.toString() ?? '',
     );
+    final backdropController = TextEditingController(text: existing?['backdrop_url']?.toString() ?? '');
+    final directorController = TextEditingController(text: existing?['director']?.toString() ?? '');
+    final castController = TextEditingController(text: existing?['cast_names']?.toString() ?? '');
+    final runtimeController = TextEditingController(text: existing?['runtime_minutes']?.toString() ?? '');
+    final packageOptions = await _loadPackages('movie');
+    final selectedPackageIds = <String>{};
+    if (existing?['id'] != null) selectedPackageIds.addAll(await _loadSelectedPackages('movie', existing!['id'].toString()));
 
     bool published =
         existing?['is_published'] == true;
@@ -2657,6 +2657,9 @@ class _AdminPageState extends State<AdminPage> {
                                         final fetchedTitle = data['title']?.toString() ?? '';
                                         if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                         posterController.text = data['poster_url']?.toString() ?? '';
+                                        backdropController.text = data['backdrop_url']?.toString() ?? '';
+                                        directorController.text = data['director']?.toString() ?? '';
+                                        castController.text = (data['cast'] as List? ?? []).map((person) => person['name']?.toString() ?? '').where((name) => name.isNotEmpty).join('، ');
                                         descriptionController.text = data['description']?.toString() ?? '';
                                         categoryController.text = data['category']?.toString() ?? '';
                                         yearController.text = data['release_year']?.toString() ?? '';
@@ -2751,10 +2754,29 @@ class _AdminPageState extends State<AdminPage> {
                           'وصف الفيلم',
                           maxLines: 4,
                         ),
-                        adminField(
-                          categoryController,
-                          'التصنيف',
-                        ),
+                        adminField(categoryController, 'النوع / التصنيف'),
+                        adminField(backdropController, 'رابط صورة الخلفية العريضة'),
+                        adminField(directorController, 'المخرج'),
+                        adminField(castController, 'الممثلون', maxLines: 2),
+                        adminField(runtimeController, 'مدة الفيلم بالدقائق', keyboard: TextInputType.number),
+                        const SizedBox(height: 6),
+                        Align(alignment: Alignment.centerRight, child: Text('إضافة الفيلم إلى الباقات', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                        if (packageOptions.isEmpty)
+                          const Padding(padding: EdgeInsets.all(8), child: Text('أنشئ باقة أولاً من زر إدارة باقات الأفلام', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                        ...packageOptions.map((package) => CheckboxListTile(
+                          dense: true, value: selectedPackageIds.contains(package['id'].toString()), activeColor: adminGold,
+                          title: Text(package['name']?.toString() ?? '', style: const TextStyle(color: Colors.white)),
+                          onChanged: (checked) => setDialogState(() {
+                            final id = package['id'].toString();
+                            if (checked == true) { selectedPackageIds.add(id); } else { selectedPackageIds.remove(id); }
+                          }),
+                        )),
+                        if (existing?['id'] != null)
+                          OutlinedButton.icon(
+                            onPressed: () => _managePlaybackServers(type: 'movie', contentId: existing!['id'].toString(), legacyUrl: streamController.text.trim()),
+                            icon: const Icon(Icons.dns_outlined), label: const Text('إدارة سيرفرات التشغيل'),
+                            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                          ),
                         adminField(
                           yearController,
                           'سنة الإصدار',
@@ -2845,8 +2867,11 @@ class _AdminPageState extends State<AdminPage> {
                         'rating': double.tryParse(
                           ratingController.text.trim(),
                         ),
-                        'stream_url':
-                            streamController.text.trim(),
+                        'stream_url': streamController.text.trim(),
+                        'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
+                        'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                        'cast_names': castController.text.trim().isEmpty ? null : castController.text.trim(),
+                        'runtime_minutes': int.tryParse(runtimeController.text.trim()),
                         'is_published': published,
                       });
                     },
@@ -2868,6 +2893,7 @@ class _AdminPageState extends State<AdminPage> {
     yearController.dispose();
     ratingController.dispose();
     streamController.dispose();
+    backdropController.dispose(); directorController.dispose(); castController.dispose(); runtimeController.dispose();
 
     if (result == null) return;
 
@@ -2875,13 +2901,14 @@ class _AdminPageState extends State<AdminPage> {
       final rawId = existing?['id'];
       final String? id = rawId?.toString();
 
-      await saveMovie(result, id: id);
-
-      showMessage(
-        existing == null
-            ? 'تمت إضافة الفيلم بنجاح'
-            : 'تم تعديل الفيلم بنجاح',
-      );
+      final savedId = await saveMovie(result, id: id);
+      if (savedId != null) {
+        await _savePackageAssignments('movie', savedId, selectedPackageIds);
+        if (existing == null) {
+          await _managePlaybackServers(type: 'movie', contentId: savedId, legacyUrl: result['stream_url']?.toString());
+        }
+      }
+      showMessage(existing == null ? 'تمت إضافة الفيلم بنجاح' : 'تم تعديل الفيلم بنجاح');
     } catch (e) {
       showMessage(e.toString(), isError: true);
     }
@@ -3558,3 +3585,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة شاشة المتصلين لحظياً عبر Realtime Presence لعرض الزوار والحسابات المسجلة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// نموذج الفيلم يدعم بيانات صفحة التفاصيل وربط الفيلم بأكثر من باقة وإدارة السيرفرات من نفس شاشة الإضافة.
