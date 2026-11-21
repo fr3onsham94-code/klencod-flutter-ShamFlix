@@ -1715,7 +1715,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       final savedFit = prefs.getInt('${_settingsPrefix}_fit') ?? 0;
       if (_playbackSpeeds.contains(savedRate)) await player.setRate(savedRate);
       if (mounted) setState(() {
-        videoFitMode = savedFit.clamp(0, 2);
+        videoFitMode = savedFit.clamp(0, 2).toInt();
         opening = false;
         error = null;
       });
@@ -1729,7 +1729,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _restorePlaybackPosition(SharedPreferences prefs) async {
     final savedMs = prefs.getInt('${_settingsPrefix}_position') ?? 0;
-    final duration = player.state.duration;
+    var duration = player.state.duration;
+    for (int attempt = 0; attempt < 8 && duration <= Duration.zero; attempt++) {
+      await Future.delayed(const Duration(milliseconds: 250));
+      duration = player.state.duration;
+    }
     if (savedMs > 10000 && duration > Duration.zero &&
         savedMs < duration.inMilliseconds - 15000) {
       await player.seek(Duration(milliseconds: savedMs));
@@ -2256,7 +2260,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                   Icon(Icons.circle, size: 7,
                                     color: buffering ? gold : Colors.greenAccent),
                                   const SizedBox(width: 6),
-                                  Text(buffering ? 'جارٍ تحميل البث' : 'الاتصال مستقر',
+                                  Text(buffering ? 'جارٍ تحميل البث' : 'البث متصل',
                                     style: const TextStyle(color: Colors.white, fontSize: 10)),
                                 ],
                               ),
