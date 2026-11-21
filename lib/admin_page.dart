@@ -987,6 +987,75 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<List<Map<String, dynamic>>> _loadPackages(String type) {
+    return _extraLoad('content_packages', {'content_type': 'eq.' + type}, order: 'sort_order.asc,name.asc');
+  }
+
+  Future<Set<String>> _loadSelectedPackages(String type, String contentId) async {
+    final rows = await _extraLoad('content_package_items', {'content_type': 'eq.' + type, 'content_id': 'eq.' + contentId});
+    return rows.map((row) => row['package_id'].toString()).toSet();
+  }
+
+  Future<void> _savePackageAssignments(String type, String contentId, Set<String> selected) async {
+    final old = await _extraLoad('content_package_items', {'content_type': 'eq.' + type, 'content_id': 'eq.' + contentId});
+    for (final row in old) { await _extraDelete('content_package_items', row['id'].toString()); }
+    for (final packageId in selected) {
+      await _extraSave('content_package_items', {'package_id': packageId, 'content_type': type, 'content_id': contentId});
+    }
+  }
+
+  Future<void> _manageContentPackages(String type) async {
+    late Future<List<Map<String, dynamic>>> packagesFuture;
+    packagesFuture = _loadPackages(type);
+    final typeLabel = type == 'movie' ? 'الأفلام' : type == 'series' ? 'المسلسلات' : 'القنوات';
+    await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => Directionality(textDirection: TextDirection.rtl, child: AlertDialog(
+        backgroundColor: adminPanel, title: Text('باقات ' + typeLabel, style: const TextStyle(color: adminGold)),
+        content: SizedBox(width: 480, child: FutureBuilder<List<Map<String, dynamic>>>(future: packagesFuture, builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
+          if (snapshot.hasError) return Text(snapshot.error.toString(), style: const TextStyle(color: Colors.redAccent));
+          final packages = snapshot.data ?? [];
+          return SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (packages.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('لا توجد باقات بعد. أضف أول باقة للبدء.', style: TextStyle(color: Colors.white60))),
+            ...packages.map((item) => Card(color: adminBg, child: ListTile(
+              title: Text(item['name']?.toString() ?? '', style: const TextStyle(color: Colors.white)),
+              subtitle: Text('ترتيب العرض: ' + (item['sort_order']?.toString() ?? '0'), style: const TextStyle(color: Colors.white54)),
+              trailing: Wrap(children: [
+                IconButton(icon: const Icon(Icons.edit, color: adminGold), onPressed: () async {
+                  final controller = TextEditingController(text: item['name']?.toString() ?? '');
+                  final value = await showDialog<String>(context: dialogContext, builder: (ctx) => AlertDialog(backgroundColor: adminPanel,
+                    title: const Text('تعديل اسم الباقة', style: TextStyle(color: adminGold)),
+                    content: TextField(controller: controller, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اسم الباقة')),
+                    actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')), FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('حفظ'))]));
+                  if (value != null && value.isNotEmpty) { await _extraSave('content_packages', {'name': value}, id: item['id'].toString()); packagesFuture = _loadPackages(type); setDialogState(() {}); }
+                  controller.dispose();
+                }),
+                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () async {
+                  final yes = await showDialog<bool>(context: dialogContext, builder: (ctx) => AlertDialog(backgroundColor: adminPanel,
+                    title: const Text('حذف الباقة', style: TextStyle(color: adminGold)), content: const Text('سيتم إزالة الباقة من المحتوى المرتبط بها. هل تريد المتابعة؟', style: TextStyle(color: Colors.white)),
+                    actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')), TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف'))]));
+                  if (yes == true) { await _extraDelete('content_packages', item['id'].toString()); packagesFuture = _loadPackages(type); setDialogState(() {}); }
+                }),
+              ]),
+            ))),
+          ]));
+        })),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق', style: TextStyle(color: Colors.white70))),
+          FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black), icon: const Icon(Icons.add), label: const Text('إضافة باقة'),
+            onPressed: () async {
+              final controller = TextEditingController();
+              final value = await showDialog<String>(context: dialogContext, builder: (ctx) => AlertDialog(backgroundColor: adminPanel,
+                title: const Text('إضافة باقة جديدة', style: TextStyle(color: adminGold)),
+                content: TextField(controller: controller, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اسم الباقة')),
+                actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')), FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('إضافة'))]));
+              if (value != null && value.isNotEmpty) { await _extraSave('content_packages', {'name': value, 'content_type': type}); packagesFuture = _loadPackages(type); setDialogState(() {}); }
+              controller.dispose();
+            }),
+        ],
+      )),
+    ));
+  }
   Future<void> _editPlaybackServer({
     required String type,
     required String contentId,
@@ -3402,3 +3471,5 @@ class _AdminPageState extends State<AdminPage> {
 // تم استعادة إدارة المواسم والحلقات والسيرفرات
 // مع الحفاظ على نسخة saveCatalogItem الحالية.
 // ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة إدارة باقات مستقلة للأفلام والمسلسلات والقنوات وربط المحتوى بعدة باقات.
