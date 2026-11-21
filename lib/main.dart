@@ -30,6 +30,7 @@ final GlobalKey<ScaffoldMessengerState> messengerKey =
 
 final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
 final ValueNotifier<int> appSettingsRefreshNotifier = ValueNotifier<int>(0);
+final ValueNotifier<int> channelRefreshNotifier = ValueNotifier<int>(0);
 final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier<Locale>(const Locale('ar'));
 
 Future<void> main() async {
@@ -578,6 +579,7 @@ class _HomePageState extends State<HomePage> {
     loadCategoryBadgeSetting();
     authRefreshNotifier.addListener(onAuthChanged);
     localProfileRefreshNotifier.addListener(onProfileChanged);
+    channelRefreshNotifier.addListener(onChannelsChanged);
   }
 
   // جلب إعداد الشارة من Supabase
@@ -611,10 +613,15 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() {});
   }
 
+  void onChannelsChanged() {
+    if (mounted) setState(() => channels = SupabaseService.getChannels());
+  }
+
   @override
   void dispose() {
     authRefreshNotifier.removeListener(onAuthChanged);
     localProfileRefreshNotifier.removeListener(onProfileChanged);
+    channelRefreshNotifier.removeListener(onChannelsChanged);
     super.dispose();
   }
 
@@ -1759,6 +1766,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
     setState(() => busy = true);
     try {
       await SupabaseService.getChannels();
+      channelRefreshNotifier.value++;
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث قائمة القنوات')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر تحديث القنوات: $e')));
@@ -2736,6 +2744,15 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
   void initState() {
     super.initState();
     _load();
+    channelRefreshNotifier.addListener(_onExternalRefresh);
+  }
+
+  void _onExternalRefresh() { _load(); }
+
+  @override
+  void dispose() {
+    channelRefreshNotifier.removeListener(_onExternalRefresh);
+    super.dispose();
   }
 
   Future<void> _load() async {
