@@ -139,6 +139,7 @@ class ShamFlixLocalStore {
     profiles.removeWhere((p) => p['id'] == id);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_profilesKey, jsonEncode(profiles));
+    unawaited(ShamFlixCloudService.removeProfile(id).catchError((_) {}));
     for (final key in prefs.getKeys().toList()) {
       if (key.startsWith('shamflix_profile_${id}_') ||
           key.startsWith('shamflix_player_${id}_')) {
@@ -3688,3 +3689,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة التنزيل المحلي للملفات المباشرة، تفضيل آخر سيرفر ناجح، وتحسين ذاكرة تخزين الصور.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تحسينات المزامنة السحابية والتقييمات والتوصيات والتنزيلات والتنبيهات وتفضيل السيرفر.
