@@ -402,6 +402,71 @@ class _AdminPageState extends State<AdminPage> {
     await saveThemePalette();
   }
 
+  Future<void> pickThemeColor(String key, String label) async {
+    const options = <Color>[
+      Color(0xFF090909), Color(0xFF191919), Color(0xFF303030),
+      Color(0xFF555555), Color(0xFF808080), Color(0xFFB3B3B3),
+      Color(0xFFFFFFFF), Color(0xFFE50914), Color(0xFFB20710),
+      Color(0xFFFF1744), Color(0xFFFF5252), Color(0xFFFF8A80),
+      Color(0xFFFF5722), Color(0xFFFF9800), Color(0xFFFFC107),
+      Color(0xFFFFEB3B), Color(0xFF8BC34A), Color(0xFF4CAF50),
+      Color(0xFF00C853), Color(0xFF009688), Color(0xFF00BCD4),
+      Color(0xFF03A9F4), Color(0xFF2196F3), Color(0xFF3F51B5),
+      Color(0xFF673AB7), Color(0xFF9C27B0), Color(0xFFE91E63),
+      Color(0xFF795548), Color(0xFF607D8B), Color(0xFF263238),
+    ];
+    final selected = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: adminPanel,
+        title: Text('اختيار لون: $label', style: TextStyle(color: AppTheme.text)),
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 11,
+              runSpacing: 13,
+              children: options.map((color) {
+                final current = AppTheme.color(key);
+                final isSelected = current.value == color.value;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () => Navigator.of(dialogContext).pop(color),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? adminGold : Colors.white38,
+                        width: isSelected ? 3 : 1,
+                      ),
+                    ),
+                    child: isSelected
+                        ? Icon(Icons.check, color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white, size: 19)
+                        : null,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('إلغاء'),
+          ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted) return;
+    themeColorControllers[key]?.text =
+        '#${selected.value.toRadixString(16).substring(2).toUpperCase()}';
+    previewThemePalette();
+  }
+
   Widget themePaletteSection() {
     final sections = <String, String>{'global': 'الألوان العامة', ...AppTheme.sectionLabels};
     final prefix = selectedThemeSection == 'global' ? '' : '${selectedThemeSection}_';
@@ -433,28 +498,46 @@ class _AdminPageState extends State<AdminPage> {
             for (final entry in AppTheme.colorLabels.entries)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Row(children: [
-                  Container(
-                    width: 32, height: 32,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: themeSaving
+                      ? null
+                      : () => pickThemeColor('${prefix}${entry.key}', entry.value),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: AppTheme.color('${prefix}${entry.key}'),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white24),
+                      color: AppTheme.color('${prefix}panel'),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.color('${prefix}border')),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(entry.value, style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 3),
+                              Text('اضغط لاختيار لون من القائمة', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: AppTheme.color('${prefix}${entry.key}'),
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: Colors.white54, width: 1.2),
+                          ),
+                          child: const Icon(Icons.palette_outlined, color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.chevron_left, color: AppTheme.secondaryText),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(child: TextField(
-                    controller: themeColorControllers['${prefix}${entry.key}'],
-                    textCapitalization: TextCapitalization.characters,
-                    textDirection: TextDirection.ltr,
-                    onChanged: (_) => previewThemePalette(),
-                    style: TextStyle(color: AppTheme.text),
-                    decoration: InputDecoration(
-                      labelText: entry.value, hintText: '#RRGGBB',
-                      labelStyle: TextStyle(color: AppTheme.secondaryText), isDense: true,
-                    ),
-                  )),
-                ]),
+                ),
               ),
             Container(
               padding: const EdgeInsets.all(14),
@@ -4344,4 +4427,4 @@ class _AdminPageState extends State<AdminPage> {
 
 // ==========================================
 
-// آخر تعديل: تحديث الأقسام فور حفظ إعداد عدد الأعمدة المشترك للأفلام والمسلسلات والقنوات | التاريخ: 2026-11-21 | الوقت: 23:33:00 بتوقيت تركيا
+// آخر تعديل: استبدال إدخال أكواد الألوان بلوحة اختيار ألوان مرئية بالنقر | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
