@@ -1636,6 +1636,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
 }
 
 class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
+  // قائمة سرعات موحدة للوضعين العمودي والأفقي.
+  static const List<double> _playbackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
   late final Player player;
   late final VideoController controller;
   Timer? controlsTimer;
@@ -1752,7 +1754,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                 shrinkWrap: true,
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 children: [
-                  for (final speed in <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0])
+                  for (final speed in _playbackSpeeds)
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -3),
@@ -2627,3 +2629,4 @@ class ShamFlixSearch extends SearchDelegate {
 
 // توحيد عرض قوائم السيرفرات والصوت والترجمة ليكون مدمجاً مثل قائمة السرعة بتاريخ 21-11-2026.
 // توحيد عرض قوائم السيرفرات والصوت والترجمة مع قائمة السرعة (112 بكسل) بتاريخ 21-11-2026.
+// اعتماد مصدر واحد لقيم سرعات التشغيل في الوضعين العمودي والأفقي بتاريخ 21-11-2026.
