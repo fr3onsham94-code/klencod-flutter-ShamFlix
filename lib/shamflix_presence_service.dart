@@ -42,7 +42,6 @@ class ShamFlixPresenceService {
     final isAdmin = AuthService.isAdmin;
     await channel.track({
       'session_id': _sessionId ?? 'guest-session',
-      'user_id': user?.id,
       'display_name': user == null ? 'زائر بدون حساب' : _maskedEmail(user.email),
       'account_type': user == null ? 'guest' : (isAdmin ? 'admin' : 'user'),
       'device': 'Android',
@@ -67,3 +66,6 @@ class ShamFlixPresenceService {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // معالجة البريد غير المكتمل قبل إخفائه.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// عدم بث معرفات الحسابات إلى قناة الحضور العامة؛ يكتفى باسم عرض مخفي جزئياً.
