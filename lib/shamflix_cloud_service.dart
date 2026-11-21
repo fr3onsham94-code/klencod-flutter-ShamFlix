@@ -52,6 +52,15 @@ class ShamFlixCloudService {
     return DateTime.tryParse(value?.toString() ?? '')?.millisecondsSinceEpoch ?? 0;
   }
 
+  static Future<void> removeProfile(String profileId) async {
+    final userId = _userId;
+    if (userId == null) return;
+    await _client.from('user_library').delete()
+        .eq('user_id', userId).eq('profile_id', profileId);
+    await _client.from('user_profiles').delete()
+        .eq('user_id', userId).eq('profile_id', profileId);
+  }
+
   static Future<List<Map<String, dynamic>>> syncCollection({
     required String profileId,
     required String collection,
@@ -232,3 +241,6 @@ class ShamFlixCloudService {
         .eq('id', id).eq('user_id', userId);
   }
 }
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// خدمة مزامنة الملفات الشخصية والمفضلة وسجل المشاهدة والتقييمات والإشعارات مع Supabase.
