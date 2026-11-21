@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+final ValueNotifier<int> appSettingsRefreshNotifier = ValueNotifier<int>(0);
+
 class AppTheme {
   static const Map<String, String> defaults = {
     // ألوان عامة للتوافق مع الشاشات والمكونات القديمة.
