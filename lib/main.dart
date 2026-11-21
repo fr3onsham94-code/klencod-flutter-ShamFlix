@@ -376,6 +376,10 @@ Future<void> saveWatchRecord({
 }
 
 Future<void> openWatchRecord(BuildContext context, Map<String, dynamic> record) async {
+  if (!await ShamFlixAppPreferences.canPlayOverCurrentNetwork()) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('التشغيل متاح عبر Wi-Fi فقط. غيّر إعداد الشبكة للسماح ببيانات الهاتف.')));
+    return;
+  }
   final item = Map<String, dynamic>.from(record['item'] is Map ? record['item'] as Map : <String, dynamic>{});
   final type = record['contentType']?.toString() ?? 'movie';
   final id = record['contentId']?.toString() ?? item['id']?.toString() ?? '';
@@ -3704,3 +3708,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تثبيت اتجاه النص الصحيح لكل لغة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تطبيق قيد Wi-Fi فقط أيضاً على استكمال المشاهدة من سجل المشاهدة والقنوات الأخيرة.
