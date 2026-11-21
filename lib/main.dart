@@ -1,5 +1,6 @@
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +29,7 @@ Future<void> main() async {
   await AuthService.initialize().timeout(
     const Duration(seconds: 20),
   );
+  await ShamFlixLocalStore.initialize();
 
   runApp(const ShamFlixApp());
 }
@@ -42,6 +44,214 @@ String valueOf(dynamic value, [String fallback = '']) {
   }
   return value.toString();
 }
+
+
+final ValueNotifier<int> localProfileRefreshNotifier = ValueNotifier<int>(0);
+
+class ShamFlixLocalStore {
+  static const String _profilesKey = 'shamflix_local_profiles';
+  static const String _activeProfileKey = 'shamflix_active_profile';
+  static String activeProfileId = 'main';
+
+  static Future<void> initialize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_profilesKey);
+    if (raw == null || raw.isEmpty) {
+      await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
+    }
+    final profiles = await getProfiles();
+    if (profiles.isEmpty) {
+      await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
+    }
+    final saved = prefs.getString(_activeProfileKey) ?? 'main';
+    final available = await getProfiles();
+    activeProfileId = available.any((p) => p['id'] == saved) ? saved : 'main';
+    await prefs.setString(_activeProfileKey, activeProfileId);
+  }
+
+  static String _key(String suffix) => 'shamflix_profile_\${activeProfileId}_$suffix';
+
+  static String playerPrefix(String progressKey, String title) {
+    final base = progressKey.isEmpty ? title.hashCode : progressKey;
+    return activeProfileId == 'main' ? 'shamflix_player_$base' : 'shamflix_player_\${activeProfileId}_$base';
+  }
+
+  static Future<List<Map<String, dynamic>>> getProfiles() async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final decoded = jsonDecode(prefs.getString(_profilesKey) ?? '[]') as List;
+      return decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+    } catch (_) {
+      return [{'id': 'main', 'name': 'ملفي الرئيسي'}];
+    }
+  }
+
+  static Future<bool> addProfile(String name) async {
+    final clean = name.trim();
+    if (clean.isEmpty) return false;
+    final profiles = await getProfiles();
+    if (profiles.length >= 5) return false;
+    profiles.add({'id': DateTime.now().microsecondsSinceEpoch.toString(), 'name': clean});
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_profilesKey, jsonEncode(profiles));
+    localProfileRefreshNotifier.value++;
+    return true;
+  }
+
+  static Future<void> setActiveProfile(String id) async {
+    final profiles = await getProfiles();
+    if (!profiles.any((p) => p['id'] == id)) return;
+    activeProfileId = id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_activeProfileKey, id);
+    localProfileRefreshNotifier.value++;
+  }
+
+  static Future<void> removeProfile(String id) async {
+    if (id == 'main') return;
+    final profiles = await getProfiles();
+    profiles.removeWhere((p) => p['id'] == id);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_profilesKey, jsonEncode(profiles));
+    if (activeProfileId == id) {
+      activeProfileId = 'main';
+      await prefs.setString(_activeProfileKey, 'main');
+    }
+    localProfileRefreshNotifier.value++;
+  }
+
+  static Future<List<Map<String, dynamic>>> _readList(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final decoded = jsonDecode(prefs.getString(_key(key)) ?? '[]') as List;
+      return decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> _writeList(String key, List<Map<String, dynamic>> value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key(key), jsonEncode(value));
+    localProfileRefreshNotifier.value++;
+  }
+
+  static Future<List<Map<String, dynamic>>> getFavorites() => _readList('favorites');
+  static Future<bool> isFavorite(String type, String id) async {
+    final items = await getFavorites();
+    return items.any((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id);
+  }
+
+  static Future<bool> toggleFavorite(Map<String, dynamic> record) async {
+    final items = await getFavorites();
+    final type = record['contentType']?.toString() ?? '';
+    final id = record['contentId']?.toString() ?? '';
+    final exists = items.any((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id);
+    if (exists) {
+      items.removeWhere((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id);
+    } else {
+      items.insert(0, record);
+    }
+    await _writeList('favorites', items);
+    return !exists;
+  }
+
+  static Future<void> removeFavorite(String type, String id) async {
+    final items = await getFavorites();
+    items.removeWhere((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id);
+    await _writeList('favorites', items);
+  }
+
+  static Future<List<Map<String, dynamic>>> getHistory() => _readList('history');
+  static Future<void> addHistory(Map<String, dynamic> record) async {
+    final items = await getHistory();
+    final type = record['contentType']?.toString() ?? '';
+    final id = record['contentId']?.toString() ?? '';
+    final old = items.where((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id).toList();
+    if (old.isNotEmpty) record['position'] = old.first['position'] ?? 0;
+    items.removeWhere((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id);
+    record['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+    items.insert(0, record);
+    if (items.length > 50) items.removeRange(50, items.length);
+    await _writeList('history', items);
+  }
+
+  static Future<void> updateProgress(String progressKey, int position) async {
+    final items = await getHistory();
+    final index = items.indexWhere((item) => item['progressKey'] == progressKey);
+    if (index < 0) return;
+    items[index]['position'] = position;
+    items[index]['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+    await _writeList('history', items);
+  }
+
+  static Future<void> removeHistory(String type, String id) async {
+    final items = await getHistory();
+    items.removeWhere((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id);
+    await _writeList('history', items);
+  }
+  static Future<void> clearHistory() async => _writeList('history', []);
+}
+
+String formatWatchPosition(dynamic milliseconds) {
+  final value = int.tryParse(milliseconds?.toString() ?? '') ?? 0;
+  final duration = Duration(milliseconds: value);
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+}
+
+Future<void> saveWatchRecord({
+  required String contentType,
+  required Map<String, dynamic> item,
+  required String title,
+  bool isSeries = false,
+  bool isChannel = false,
+  String? fallbackPoster,
+}) async {
+  final id = item['id']?.toString() ?? '';
+  if (id.isEmpty) return;
+  final savedItem = Map<String, dynamic>.from(item);
+  if (valueOf(savedItem['poster_url']).isEmpty && (fallbackPoster ?? '').isNotEmpty) savedItem['poster_url'] = fallbackPoster;
+  await ShamFlixLocalStore.addHistory({
+    'contentType': contentType, 'contentId': id, 'progressKey': '$contentType-$id',
+    'title': title, 'poster_url': valueOf(savedItem['poster_url'] ?? savedItem['logo_url']),
+    'item': savedItem, 'isSeries': isSeries, 'isChannel': isChannel, 'position': 0,
+  });
+}
+
+Future<void> openWatchRecord(BuildContext context, Map<String, dynamic> record) async {
+  final item = Map<String, dynamic>.from(record['item'] is Map ? record['item'] as Map : <String, dynamic>{});
+  final type = record['contentType']?.toString() ?? 'movie';
+  final id = record['contentId']?.toString() ?? item['id']?.toString() ?? '';
+  final title = record['title']?.toString() ?? 'ShamFlix';
+  final progressKey = record['progressKey']?.toString() ?? '$type-$id';
+  try {
+    final servers = id.isEmpty ? <Map<String, dynamic>>[] : await SupabaseService.getPlaybackServers(contentType: type, contentId: id);
+    final url = servers.isNotEmpty ? valueOf(servers.first['stream_url']) : valueOf(item['stream_url']);
+    final uri = Uri.tryParse(url);
+    if (url.isEmpty || uri == null || !uri.hasScheme) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('رابط استكمال المشاهدة غير متوفر حالياً')));
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final selectedPlayer = prefs.getString('shamflix_player_preference') ?? 'internal';
+    if (selectedPlayer != 'internal') {
+      final packages = selectedPlayer == 'vlc' ? <String>['org.videolan.vlc'] : <String>['com.mxtech.videoplayer.ad', 'com.mxtech.videoplayer.pro'];
+      for (final packageName in packages) {
+        final intent = AndroidIntent(action: 'action_view', data: url, type: 'video/*', package: packageName);
+        if (await intent.canResolveActivity() == true) { await intent.launch(); return; }
+      }
+    }
+    if (!context.mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(url: url, title: title, servers: servers, progressKey: progressKey)));
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر استكمال المشاهدة: $e')));
+  }
+}
+
 
 class ShamFlixApp extends StatefulWidget {
   const ShamFlixApp({super.key});
@@ -126,6 +336,7 @@ class _HomePageState extends State<HomePage> {
   late Future<List<Map<String, dynamic>>> movies;
   late Future<List<Map<String, dynamic>>> series;
   late Future<List<Map<String, dynamic>>> channels;
+  late Future<List<Map<String, dynamic>>> recentHistory;
 
   final List<String> categories = [
     'الكل',
@@ -140,8 +351,10 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     loadData();
+    recentHistory = ShamFlixLocalStore.getHistory();
     loadCategoryBadgeSetting();
     authRefreshNotifier.addListener(onAuthChanged);
+    localProfileRefreshNotifier.addListener(onProfileChanged);
   }
 
   // جلب إعداد الشارة من Supabase
@@ -170,9 +383,15 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() {});
   }
 
+  void onProfileChanged() {
+    recentHistory = ShamFlixLocalStore.getHistory();
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     authRefreshNotifier.removeListener(onAuthChanged);
+    localProfileRefreshNotifier.removeListener(onProfileChanged);
     super.dispose();
   }
 
@@ -183,7 +402,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> refreshData() async {
-    setState(loadData);
+    setState(() { loadData(); recentHistory = ShamFlixLocalStore.getHistory(); });
 
     await Future.wait([
       movies.then((_) {}).catchError((_) {}),
@@ -404,6 +623,43 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+
+  Widget continueWatchingSection() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: recentHistory,
+      builder: (context, snapshot) {
+        final records = (snapshot.data ?? []).where((item) =>
+          (int.tryParse(item['position']?.toString() ?? '') ?? 0) > 0).take(12).toList();
+        if (snapshot.connectionState == ConnectionState.waiting || records.isEmpty) return const SizedBox.shrink();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          sectionTitle('تابع المشاهدة'),
+          SizedBox(height: 205, child: ListView.builder(
+            scrollDirection: Axis.horizontal, reverse: true,
+            padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: records.length,
+            itemBuilder: (context, index) {
+              final record = records[index]; final poster = valueOf(record['poster_url']);
+              return GestureDetector(
+                onTap: () => openWatchRecord(context, record),
+                child: Container(width: 145, margin: const EdgeInsets.only(left: 12),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    ClipRRect(borderRadius: BorderRadius.circular(10), child: SizedBox(width: 145, height: 145,
+                      child: poster.isEmpty ? Container(color: panel, child: const Icon(Icons.play_circle, color: gold, size: 42)) :
+                        Image.network(poster, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
+                          Container(color: panel, child: const Icon(Icons.play_circle, color: gold, size: 42))))),
+                    const SizedBox(height: 7),
+                    Text(valueOf(record['title'], 'محتوى'), maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text('متابعة من \${formatWatchPosition(record['position'])}', style: const TextStyle(color: gold, fontSize: 11)),
+                  ]),
+                ),
+              );
+            },
+          )),
+        ]);
+      },
+    );
+  }
+
   Widget homeContent() {
     return RefreshIndicator(
       color: gold,
@@ -434,6 +690,14 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const Spacer(),
+                IconButton(
+                  tooltip: 'الملفات الشخصية',
+                  onPressed: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()));
+                    if (mounted) setState(() => recentHistory = ShamFlixLocalStore.getHistory());
+                  },
+                  icon: const Icon(Icons.account_circle_outlined, color: gold),
+                ),
                 IconButton(
                   onPressed: () {
                     showSearch(
@@ -516,6 +780,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
+          continueWatchingSection(),
           sectionTitle('التصنيفات'),
           SizedBox(
             height: 43,
@@ -965,11 +1230,10 @@ class _AccountPageState extends State<AccountPage> {
             ),
           ),
           const SizedBox(height: 15),
-          accountTile(
-            icon: Icons.favorite_outline,
-            title: 'المفضلة',
-            subtitle: 'احفظ أفلامك ومسلسلاتك المفضلة',
-          ),
+          accountTile(icon: Icons.people_alt_outlined, title: 'الملفات الشخصية', subtitle: 'حتى 5 ملفات مستقلة',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()))),
+          accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'أفلامك ومسلسلاتك المحفوظة',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
           accountTile(
             icon: Icons.settings_outlined,
             title: 'إعدادات المشغل',
@@ -984,11 +1248,8 @@ class _AccountPageState extends State<AccountPage> {
             },
           ),
 
-          accountTile(
-            icon: Icons.history,
-            title: 'سجل المشاهدة',
-            subtitle: 'تابع ما شاهدته',
-          ),
+          accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'آخر ما شاهدته على هذا الملف',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
         ] else ...[
           Card(
             color: panel,
@@ -1050,11 +1311,10 @@ class _AccountPageState extends State<AccountPage> {
               },
             ),
 
-          accountTile(
-            icon: Icons.favorite_outline,
-            title: 'المفضلة',
-            subtitle: 'قريباً: قائمة محتواك المفضل',
-          ),
+          accountTile(icon: Icons.people_alt_outlined, title: 'الملفات الشخصية', subtitle: 'حتى 5 ملفات مستقلة',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()))),
+          accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'أفلامك ومسلسلاتك المحفوظة',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
           accountTile(
             icon: Icons.settings_outlined,
             title: 'إعدادات المشغل',
@@ -1069,11 +1329,8 @@ class _AccountPageState extends State<AccountPage> {
             },
           ),
 
-          accountTile(
-            icon: Icons.history,
-            title: 'سجل المشاهدة',
-            subtitle: 'قريباً: آخر ما شاهدته',
-          ),
+          accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'آخر ما شاهدته على هذا الملف',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
 
           const SizedBox(height: 15),
 
@@ -1104,35 +1361,179 @@ class _AccountPageState extends State<AccountPage> {
   }
 }
 
-class FavoritesPage extends StatelessWidget {
-  const FavoritesPage({super.key});
+
+class ProfileManagerPage extends StatefulWidget {
+  const ProfileManagerPage({super.key});
+  @override
+  State<ProfileManagerPage> createState() => _ProfileManagerPageState();
+}
+class _ProfileManagerPageState extends State<ProfileManagerPage> {
+  late Future<List<Map<String, dynamic>>> profiles;
+  @override
+  void initState() { super.initState(); profiles = ShamFlixLocalStore.getProfiles(); }
+  void reload() => setState(() => profiles = ShamFlixLocalStore.getProfiles());
+
+  Future<void> addProfile() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
+      backgroundColor: panel, title: const Text('ملف شخصي جديد', style: TextStyle(color: gold)),
+      content: TextField(controller: controller, autofocus: true, maxLength: 24,
+        style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'اسم الملف الشخصي')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+          onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('إضافة')),
+      ],
+    ));
+    controller.dispose();
+    if (name == null || name.trim().isEmpty) return;
+    final added = await ShamFlixLocalStore.addProfile(name);
+    if (!mounted) return;
+    if (!added) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يمكنك إنشاء 5 ملفات شخصية كحد أقصى')));
+    reload();
+  }
+
+  Future<void> removeProfile(Map<String, dynamic> profile) async {
+    final id = profile['id']?.toString() ?? '';
+    if (id == 'main') return;
+    final confirm = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
+      backgroundColor: panel, title: const Text('حذف الملف الشخصي؟', style: TextStyle(color: Colors.white)),
+      content: Text('سيتم حذف ملف "\${profile['name']}" وبياناته المحلية من هذا الجهاز.', style: const TextStyle(color: Colors.white70)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+        TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف', style: TextStyle(color: Colors.redAccent))),
+      ],
+    ));
+    if (confirm != true) return;
+    await ShamFlixLocalStore.removeProfile(id);
+    if (mounted) reload();
+  }
 
   @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.favorite_outline, color: gold, size: 65),
-          SizedBox(height: 15),
-          Text(
-            'المفضلة',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 23,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'سنربط المفضلة بحسابك في الخطوة القادمة',
-            style: TextStyle(color: Colors.white54),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: Scaffold(
+      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('الملفات الشخصية')),
+      body: FutureBuilder<List<Map<String, dynamic>>>(future: profiles, builder: (context, snapshot) {
+        final items = snapshot.data ?? [];
+        return ListView(padding: const EdgeInsets.all(16), children: [
+          const Text('اختر ملفاً لمتابعة المشاهدة بقوائمه وسجله المستقل.', style: TextStyle(color: Colors.white60)),
+          const SizedBox(height: 14),
+          for (final profile in items)
+            Card(color: panel, child: ListTile(
+              leading: const CircleAvatar(backgroundColor: Color(0xFF493B25), child: Icon(Icons.person, color: gold)),
+              title: Text(valueOf(profile['name']), style: const TextStyle(color: Colors.white)),
+              subtitle: Text(profile['id'] == ShamFlixLocalStore.activeProfileId ? 'الملف النشط' : 'اضغط للتبديل',
+                style: const TextStyle(color: Colors.white54)),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (profile['id'] == ShamFlixLocalStore.activeProfileId) const Icon(Icons.check_circle, color: gold),
+                if (profile['id'] != 'main') IconButton(tooltip: 'حذف الملف', onPressed: () => removeProfile(profile),
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+              ]),
+              onTap: () async { await ShamFlixLocalStore.setActiveProfile(profile['id'].toString()); if (mounted) Navigator.pop(context); },
+            )),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(onPressed: items.length >= 5 ? null : addProfile, icon: const Icon(Icons.add),
+            label: const Text('إضافة ملف شخصي'),
+            style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold))),
+          const SizedBox(height: 8),
+          const Text('الملفات الشخصية محفوظة على هذا الجهاز ولا تغيّر حساب تسجيل الدخول.',
+            textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+        ]);
+      }),
+    ),
+  );
+}
+
+class FavoritesPage extends StatefulWidget {
+  const FavoritesPage({super.key});
+  @override
+  State<FavoritesPage> createState() => _FavoritesPageState();
+}
+class _FavoritesPageState extends State<FavoritesPage> {
+  late Future<List<Map<String, dynamic>>> favorites;
+  @override
+  void initState() { super.initState(); favorites = ShamFlixLocalStore.getFavorites(); localProfileRefreshNotifier.addListener(reload); }
+  void reload() { if (mounted) setState(() => favorites = ShamFlixLocalStore.getFavorites()); }
+  @override
+  void dispose() { localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: Scaffold(
+      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('المفضلة')),
+      body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+        final items = snapshot.data ?? [];
+        if (items.isEmpty) return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.favorite_border, color: gold, size: 64), SizedBox(height: 12),
+          Text('قائمتك فارغة حالياً', style: TextStyle(color: Colors.white70)),
+          SizedBox(height: 5), Text('أضف الأفلام والمسلسلات من صفحة التفاصيل', style: TextStyle(color: Colors.white38)),
+        ]));
+        return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
+          final record = items[index];
+          final item = Map<String, dynamic>.from(record['item'] is Map ? record['item'] as Map : <String, dynamic>{});
+          final poster = valueOf(record['poster_url']);
+          return Card(color: panel, child: ListTile(
+            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? const Icon(Icons.movie, color: gold) :
+              ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(Icons.movie, color: gold)))),
+            title: Text(valueOf(record['title'], 'محتوى'), style: const TextStyle(color: Colors.white)),
+            subtitle: Text(record['isSeries'] == true ? 'مسلسل' : record['isChannel'] == true ? 'قناة' : 'فيلم',
+              style: const TextStyle(color: gold)),
+            trailing: IconButton(icon: const Icon(Icons.favorite, color: gold), tooltip: 'إزالة من المفضلة',
+              onPressed: () async => ShamFlixLocalStore.removeFavorite(record['contentType'].toString(), record['contentId'].toString())),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(
+              item: item, isSeries: record['isSeries'] == true, isChannel: record['isChannel'] == true))),
+          ));
+        });
+      }),
+    ),
+  );
+}
+
+class WatchHistoryPage extends StatefulWidget {
+  const WatchHistoryPage({super.key});
+  @override
+  State<WatchHistoryPage> createState() => _WatchHistoryPageState();
+}
+class _WatchHistoryPageState extends State<WatchHistoryPage> {
+  late Future<List<Map<String, dynamic>>> history;
+  @override
+  void initState() { super.initState(); history = ShamFlixLocalStore.getHistory(); localProfileRefreshNotifier.addListener(reload); }
+  void reload() { if (mounted) setState(() => history = ShamFlixLocalStore.getHistory()); }
+  @override
+  void dispose() { localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: Scaffold(
+      backgroundColor: bg,
+      appBar: AppBar(backgroundColor: bg, title: const Text('سجل المشاهدة'),
+        actions: [IconButton(tooltip: 'مسح السجل', icon: const Icon(Icons.delete_sweep_outlined, color: gold),
+          onPressed: () async => ShamFlixLocalStore.clearHistory())]),
+      body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+        final items = snapshot.data ?? [];
+        if (items.isEmpty) return const Center(child: Text('لا يوجد سجل مشاهدة بعد', style: TextStyle(color: Colors.white54)));
+        return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
+          final record = items[index]; final poster = valueOf(record['poster_url']);
+          return Card(color: panel, child: ListTile(
+            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? const Icon(Icons.play_circle, color: gold) :
+              ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(Icons.play_circle, color: gold)))),
+            title: Text(valueOf(record['title'], 'محتوى'), style: const TextStyle(color: Colors.white)),
+            subtitle: Text('آخر مشاهدة: \${formatWatchPosition(record['position'])}', style: const TextStyle(color: Colors.white54)),
+            trailing: IconButton(icon: const Icon(Icons.close, color: Colors.white54),
+              onPressed: () async => ShamFlixLocalStore.removeHistory(record['contentType'].toString(), record['contentId'].toString())),
+            onTap: () => openWatchRecord(context, record),
+          ));
+        });
+      }),
+    ),
+  );
 }
 
 class DetailsPage extends StatefulWidget {
@@ -1152,6 +1553,7 @@ class DetailsPage extends StatefulWidget {
 }
 
 class _DetailsPageState extends State<DetailsPage> {
+  bool isFavorite = false;
   bool seasonsLoading = false;
   List<Map<String, dynamic>> seasons = [];
   String? seasonsError;
@@ -1159,7 +1561,32 @@ class _DetailsPageState extends State<DetailsPage> {
   @override
   void initState() {
     super.initState();
+    _loadFavoriteState();
     if (widget.isSeries) _loadSeasons();
+  }
+
+  Future<void> _loadFavoriteState() async {
+    final type = widget.isChannel ? 'channel' : widget.isSeries ? 'series' : 'movie';
+    final id = widget.item['id']?.toString() ?? '';
+    final saved = id.isNotEmpty && await ShamFlixLocalStore.isFavorite(type, id);
+    if (mounted) setState(() => isFavorite = saved);
+  }
+
+  Future<void> _toggleFavorite() async {
+    final type = widget.isChannel ? 'channel' : widget.isSeries ? 'series' : 'movie';
+    final id = widget.item['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    final saved = await ShamFlixLocalStore.toggleFavorite({
+      'contentType': type, 'contentId': id,
+      'title': valueOf(widget.item['title'] ?? widget.item['name'], 'محتوى'),
+      'poster_url': valueOf(widget.item['poster_url'] ?? widget.item['logo_url']),
+      'item': Map<String, dynamic>.from(widget.item),
+      'isSeries': widget.isSeries, 'isChannel': widget.isChannel,
+    });
+    if (mounted) {
+      setState(() => isFavorite = saved);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تمت الإضافة إلى المفضلة' : 'تمت الإزالة من المفضلة')));
+    }
   }
 
   Future<void> _loadSeasons() async {
@@ -1193,6 +1620,10 @@ class _DetailsPageState extends State<DetailsPage> {
     required String title,
     String? legacyUrl,
   }) async {
+    if (contentType != 'episode') {
+      await saveWatchRecord(contentType: contentType, item: widget.item, title: title,
+        isSeries: widget.isSeries, isChannel: widget.isChannel);
+    }
     List<Map<String, dynamic>> servers = [];
     try {
       servers = await SupabaseService.getPlaybackServers(
@@ -1429,12 +1860,14 @@ class _DetailsPageState extends State<DetailsPage> {
               title: Text('$number - $episodeTitle', style: const TextStyle(color: Colors.white)),
               subtitle: const Text('تشغيل الحلقة', style: TextStyle(color: Colors.white54)),
               trailing: const Icon(Icons.play_circle_outline, color: gold),
-              onTap: () => _chooseAndPlay(
-                contentType: 'episode',
-                contentId: episode['id'].toString(),
-                title: episodeTitle,
-                legacyUrl: episode['stream_url']?.toString(),
-              ),
+              onTap: () async {
+                final episodeRecord = Map<String, dynamic>.from(episode);
+                if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
+                await saveWatchRecord(contentType: 'episode', item: episodeRecord, title: episodeTitle,
+                  fallbackPoster: valueOf(widget.item['poster_url']));
+                await _chooseAndPlay(contentType: 'episode', contentId: episode['id'].toString(),
+                  title: episodeTitle, legacyUrl: episode['stream_url']?.toString());
+              },
             );
           }).toList(),
         );
@@ -1455,26 +1888,29 @@ class _DetailsPageState extends State<DetailsPage> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: Text(title)),
+        appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
+          IconButton(tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة', onPressed: _toggleFavorite,
+            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : Colors.white)),
+        ]),
         body: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: double.infinity,
-                height: 390,
-                child: poster.isEmpty
-                    ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))
-                    : Image.network(poster, fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))),
-              ),
+              SizedBox(width: double.infinity, height: 340, child: Stack(fit: StackFit.expand, children: [
+                poster.isEmpty ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)) :
+                  Image.network(poster, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))),
+                const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xEE090909)], stops: [0.35, 1.0]))),
+                Positioned(right: 20, left: 20, bottom: 22, child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 27, fontWeight: FontWeight.bold,
+                    shadows: [Shadow(color: Colors.black, blurRadius: 12)]))),
+              ])),
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
                     Wrap(
                       spacing: 16,
                       runSpacing: 8,
@@ -1675,7 +2111,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   int _lastSavedSecond = -1;
 
   String get _settingsPrefix =>
-      'shamflix_player_${widget.progressKey.isEmpty ? widget.title.hashCode : widget.progressKey}';
+      ShamFlixLocalStore.playerPrefix(widget.progressKey, widget.title);
 
   @override
   void initState() {
@@ -1775,6 +2211,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     if (duration <= Duration.zero) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('${_settingsPrefix}_position', position.inMilliseconds);
+    if (widget.progressKey.isNotEmpty) await ShamFlixLocalStore.updateProgress(widget.progressKey, position.inMilliseconds);
   }
 
   Future<void> _savePlayerSetting(String key, Object value) async {
@@ -2630,6 +3067,9 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
 }
 
 class ShamFlixSearch extends SearchDelegate {
+  String categoryFilter = 'الكل';
+  String yearFilter = '';
+
   Future<List<Map<String, dynamic>>> searchContent() async {
     final movieResults = await SupabaseService.getMovies();
     final seriesResults = await SupabaseService.getSeries();
@@ -2644,27 +3084,53 @@ class ShamFlixSearch extends SearchDelegate {
     if (searchText.isEmpty) return [];
 
     return allResults.where((item) {
-      return valueOf(item['title'])
-          .toLowerCase()
-          .contains(searchText);
+      final searchable = [valueOf(item['title']), valueOf(item['category']), valueOf(item['release_year']), valueOf(item['description'])].join(' ').toLowerCase();
+      final matchesText = searchable.contains(searchText);
+      final matchesCategory = categoryFilter == 'الكل' || valueOf(item['category']) == categoryFilter;
+      final matchesYear = yearFilter.trim().isEmpty || valueOf(item['release_year']).contains(yearFilter.trim());
+      return matchesText && matchesCategory && matchesYear;
     }).toList();
   }
 
   @override
   String get searchFieldLabel => 'ابحث عن فيلم أو مسلسل';
 
-  @override
-  List<Widget> buildActions(BuildContext context) {
-    return [
-      IconButton(
-        onPressed: () {
-          query = '';
-          showSuggestions(context);
-        },
-        icon: const Icon(Icons.clear),
+
+  Future<void> openFilters(BuildContext context) async {
+    final yearController = TextEditingController(text: yearFilter);
+    var selectedCategory = categoryFilter;
+    await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        backgroundColor: panel, title: const Text('تصفية البحث', style: TextStyle(color: gold)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: selectedCategory, dropdownColor: panel,
+            decoration: const InputDecoration(labelText: 'التصنيف', labelStyle: TextStyle(color: Colors.white60)),
+            items: const ['الكل', 'أكشن', 'دراما', 'كوميديا', 'رعب', 'خيال علمي']
+              .map((value) => DropdownMenuItem(value: value, child: Text(value, style: const TextStyle(color: Colors.white)))).toList(),
+            onChanged: (value) => setDialogState(() => selectedCategory = value ?? 'الكل')),
+          const SizedBox(height: 12),
+          TextField(controller: yearController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(labelText: 'سنة الإصدار', hintText: 'مثال: 2026')),
+        ]),
+        actions: [
+          TextButton(onPressed: () { categoryFilter = 'الكل'; yearFilter = ''; Navigator.pop(dialogContext); }, child: const Text('مسح التصفية')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+            onPressed: () { categoryFilter = selectedCategory; yearFilter = yearController.text; Navigator.pop(dialogContext); },
+            child: const Text('تطبيق')),
+        ],
       ),
-    ];
+    ));
+    yearController.dispose();
+    showResults(context);
   }
+
+  @override
+  List<Widget> buildActions(BuildContext context) => [
+    IconButton(tooltip: 'تصفية حسب التصنيف والسنة', onPressed: () => openFilters(context),
+      icon: Icon(Icons.tune, color: categoryFilter != 'الكل' || yearFilter.isNotEmpty ? gold : Colors.white)),
+    IconButton(onPressed: () { query = ''; showSuggestions(context); }, icon: const Icon(Icons.clear)),
+  ];
 
   @override
   Widget buildLeading(BuildContext context) {
@@ -2828,3 +3294,7 @@ class ShamFlixSearch extends SearchDelegate {
 // تصغير قوائم السرعة والصوت والترجمة لتلتف حول الخيارات بدل تمددها على كامل الشاشة بتاريخ 21-11-2026.
 // تطبيق التصميم المدمج نفسه على قائمة اختيار سيرفر التشغيل بتاريخ 21-11-2026.
 // إضافة التبديل التلقائي بين السيرفرات وحفظ إعدادات المشغّل وموضع المشاهدة ومؤشر حالة الاتصال بتاريخ 21-11-2026.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة متابعة المشاهدة والمفضلة وسجل المشاهدة والبحث المتقدم والملفات الشخصية المتعددة.
+// تطوير صفحة التفاصيل بتصميم سينمائي مع الحفاظ على منطق التشغيل والسيرفرات.
