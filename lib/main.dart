@@ -2967,9 +2967,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white, size: 19),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 9)),
+            Icon(icon, color: Colors.white, size: widget.embedded ? 14 : 19),
+            SizedBox(height: widget.embedded ? 1 : 4),
+            Text(label, style: TextStyle(color: Colors.white70, fontSize: widget.embedded ? 7 : 9)),
           ],
         ),
       ),
@@ -3848,3 +3848,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تصغير عناصر التحكم للمشغل المضمن كي تظهر أزرار الصوت والترجمة والسرعة والسيرفرات دون تجاوز مساحة المشغل العلوية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// ضبط حجم أيقونات وتسميات أدوات المشغل المضمن بما يناسب مساحة القنوات.
