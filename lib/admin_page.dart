@@ -426,7 +426,7 @@ class _AdminPageState extends State<AdminPage> {
       for (final entry in palette.entries) {
         themeColorControllers[entry.key]?.text = entry.value;
       }
-      showMessage('تم حفظ ألوان التطبيق وتطبيقها على إعدادات الواجهة العامة');
+      showMessage('تم حفظ الألوان وتطبيقها على القسم المختار');
     } catch (e) {
       showMessage('تعذر حفظ ألوان التطبيق: $e', isError: true);
     } finally {
@@ -4420,4 +4420,4 @@ class _AdminPageState extends State<AdminPage> {
 
 // ==========================================
 
-// آخر تعديل: إضافة تخصيص ألوان مستقل لكل قسم وإعداد عدد القنوات في الصف | التاريخ: 2026-11-21 | الوقت: 22:42:00 بتوقيت تركيا
+// آخر تعديل: توضيح رسالة حفظ ألوان القسم المختار | التاريخ: 2026-11-21 | الوقت: 23:14:00 بتوقيت تركيا
