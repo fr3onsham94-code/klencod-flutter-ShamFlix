@@ -7,7 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'admin_auth_service.dart';
 
 const Color bg = Color(0xFF090909);
-const Color gold = Color(0xFFD6AC55);
+const Color gold = Color(0xFFE50914);
 const Color panel = Color(0xFF191919);
 
 class AuthPage extends StatefulWidget {
@@ -245,7 +245,7 @@ class _AuthPageState extends State<AuthPage> {
                   ),
                   const SizedBox(height: 15),
                   const Text(
-                    'SHAMFLIX',
+                    'SHAM FLIX',
                     style: TextStyle(
                       color: gold,
                       fontSize: 30,
@@ -430,3 +430,5 @@ class _AuthPageState extends State<AuthPage> {
     );
   }
 }
+
+// آخر تعديل: اعتماد اللون الأحمر وتحديث اسم التطبيق إلى SHAM FLIX في شاشة تسجيل الدخول | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
