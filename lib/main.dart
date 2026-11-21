@@ -1292,6 +1292,9 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
       }));
 
       packages = loadedPackages;
+      selectedPackageId = loadedPackages.isNotEmpty
+          ? loadedPackages.first['id'].toString()
+          : null;
     } catch (e) {
       error = e.toString();
     }
@@ -1430,61 +1433,103 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
 
   Widget _sidebar() {
     return SizedBox(
-      width: 104,
+      width: 116,
       child: Container(
         color: const Color(0xFF101010),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(7, 8, 7, 12),
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 14),
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 9),
-              child: Text(
-                appText('الباقات', 'Packages', 'Paketler'),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: gold,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
+              padding: const EdgeInsets.fromLTRB(2, 5, 2, 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.video_library_rounded, color: gold, size: 16),
+                  const SizedBox(width: 5),
+                  Text(
+                    appText('الباقات', 'PACKAGES', 'PAKETLER'),
+                    style: const TextStyle(
+                      color: gold,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
               ),
             ),
-            ...packages.map((package) {
+            ...packages.asMap().entries.map((entry) {
+              final index = entry.key;
+              final package = entry.value;
               final id = package['id'].toString();
               final active = selectedPackageId == id;
               final count = (packageContents[id] ?? []).length;
               return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Material(
-                  color: active ? const Color(0xFF493B25) : panel,
-                  borderRadius: BorderRadius.circular(8),
+                  color: active ? const Color(0xFF332817) : panel,
+                  borderRadius: BorderRadius.circular(10),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     onTap: () => _openPackage(id),
-                    child: Padding(
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
+                        horizontal: 7,
                         vertical: 11,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: active ? gold : Colors.white.withOpacity(0.045),
+                          width: active ? 1.2 : 0.7,
+                        ),
                       ),
                       child: Column(
                         children: [
-                          Text(
-                            package['name']?.toString() ?? 'باقة',
-                            textAlign: TextAlign.center,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: active ? gold : Colors.white70,
-                              fontSize: 10,
-                              fontWeight:
-                                  active ? FontWeight.bold : FontWeight.normal,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (active)
+                                const Padding(
+                                  padding: EdgeInsetsDirectional.only(end: 4),
+                                  child: Icon(Icons.play_arrow_rounded,
+                                      color: gold, size: 14),
+                                ),
+                              Flexible(
+                                child: Text(
+                                  package['name']?.toString() ?? 'باقة',
+                                  textAlign: TextAlign.center,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: active ? gold : Colors.white70,
+                                    fontSize: 10,
+                                    height: 1.35,
+                                    fontWeight: active
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$count',
-                            style: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 9,
+                          const SizedBox(height: 7),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? gold.withOpacity(0.16)
+                                  : Colors.white.withOpacity(0.06),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '$count',
+                              style: TextStyle(
+                                color: active ? gold : Colors.white54,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
@@ -1528,10 +1573,15 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
           child: Row(
             children: [
-              IconButton(
-                onPressed: () => setState(() => selectedPackageId = null),
-                icon: const Icon(Icons.arrow_back, color: gold),
+              Container(
+                width: 3,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: gold,
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
+              const SizedBox(width: 9),
               Expanded(
                 child: Text(
                   package['name']?.toString() ?? '',
@@ -1668,9 +1718,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                                 color: Color(0xFF333333),
                               ),
                               Expanded(
-                                child: selectedPackageId == null
-                                    ? _allShelves()
-                                    : _packageDetails(),
+                                child: _packageDetails(),
                               ),
                             ],
                           ),
@@ -4744,7 +4792,5 @@ class ShamFlixSearch extends SearchDelegate {
 // ==========================================
 // ShamFlix - آخر تحديث: 21-11-2026
 // تمت إضافة تبديل نسبة عرض الفيديو بين الاحتواء والملء والتمديد من داخل المشغّل.
-// ==========================================
 
-
-// آخر تعديل: توحيد الهوية البصرية للتطبيق بالأسود والذهبي وتطبيق ألوان الهوية على الرئيسية والثيم العام | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
+// آخر تعديل: تطوير Sidebar لقسمي الأفلام والمسلسلات مع فتح أول باقة تلقائياً وعرض خمسة بوسترات في كل صف | التاريخ: 2026-11-21 | الوقت: 19:15:00 بتوقيت تركيا
