@@ -1722,8 +1722,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final h = value.inHours;
     final m = value.inMinutes.remainder(60);
     final s = value.inSeconds.remainder(60);
-    if (h > 0) return '\${two(h)}:\${two(m)}:\${two(s)}';
-    return '\${two(m)}:\${two(s)}';
+    if (h > 0) return '${two(h)}:${two(m)}:${two(s)}';
+    return '${two(m)}:${two(s)}';
   }
 
   Future<void> _pickSpeed() async {
@@ -2586,3 +2586,4 @@ class ShamFlixSearch extends SearchDelegate {
 // ==========================================
 
 // تم تعديل واجهة المشغل والسيرفرات وتسميات الصوت والترجمة والسرعة بتاريخ 21-11-2026.
+// إصلاح تنسيق الوقت أسفل شريط التقدم لمنع ظهور تعبيرات Dart كنص بتاريخ 21-11-2026.
