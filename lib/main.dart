@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_service.dart';
+import 'app_theme.dart';
 import 'admin_auth_service.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
@@ -58,6 +59,7 @@ Future<void> main() async {
     const Duration(seconds: 20),
   );
   await ShamFlixLocalStore.initialize();
+  await AppTheme.load();
   final startupPrefs = await SharedPreferences.getInstance();
   final savedLanguage = startupPrefs.getString('shamflix_language') ?? 'ar';
   appLocaleNotifier.value = Locale(savedLanguage);
@@ -491,7 +493,9 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Locale>(
+    return AnimatedBuilder(
+      animation: AppTheme.revision,
+      builder: (context, _) => ValueListenableBuilder<Locale>(
       valueListenable: appLocaleNotifier,
       builder: (context, locale, _) => MaterialApp(
       locale: locale,
@@ -505,44 +509,45 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       title: 'ShamFlix',
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: bg,
-        canvasColor: bg,
+        scaffoldBackgroundColor: AppTheme.background,
+        canvasColor: AppTheme.background,
         dividerColor: Colors.white12,
-        colorScheme: const ColorScheme.dark(
-          primary: gold,
-          secondary: gold,
-          surface: panel,
-          onPrimary: Colors.black,
-          onSecondary: Colors.black,
-          onSurface: Colors.white,
+        colorScheme: ColorScheme.dark(
+          primary: AppTheme.primary,
+          secondary: AppTheme.primary,
+          surface: AppTheme.panel,
+          onPrimary: AppTheme.text,
+          onSecondary: AppTheme.text,
+          onSurface: AppTheme.text,
         ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: bg,
-          foregroundColor: gold,
+        appBarTheme: AppBarTheme(
+          backgroundColor: AppTheme.background,
+          foregroundColor: AppTheme.primary,
           elevation: 0,
           surfaceTintColor: Colors.transparent,
         ),
-        iconTheme: const IconThemeData(color: gold),
-        progressIndicatorTheme: const ProgressIndicatorThemeData(
-          color: gold,
-          linearTrackColor: panel,
+        iconTheme: IconThemeData(color: AppTheme.primary),
+        progressIndicatorTheme: ProgressIndicatorThemeData(
+          color: AppTheme.primary,
+          linearTrackColor: AppTheme.panel,
         ),
-        textSelectionTheme: const TextSelectionThemeData(
-          cursorColor: gold,
-          selectionColor: Color(0x55D6AC55),
-          selectionHandleColor: gold,
+        textSelectionTheme: TextSelectionThemeData(
+          cursorColor: AppTheme.primary,
+          selectionColor: AppTheme.primary.withOpacity(0.25),
+          selectionHandleColor: AppTheme.primary,
         ),
-        snackBarTheme: const SnackBarThemeData(
-          backgroundColor: panel,
-          contentTextStyle: TextStyle(color: Colors.white),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: AppTheme.panel,
+          contentTextStyle: TextStyle(color: AppTheme.text),
           behavior: SnackBarBehavior.floating,
         ),
-        floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: gold,
-          foregroundColor: Colors.black,
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
+          backgroundColor: AppTheme.button,
+          foregroundColor: AppTheme.text,
         ),
       ),
       home: const HomePage(),
+    ),
     ),
     );
   }
@@ -4777,4 +4782,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: إضافة حقل صورة الخلفية للأفلام والمسلسلات وإزالة قسم تقييمك للمحتوى من صفحة التفاصيل | التاريخ: 2026-11-21 | الوقت: 21:00:00 بتوقيت تركيا
+// آخر تعديل: إضافة نظام تخصيص ألوان التطبيق ومعاينتها وحفظها من لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 21:30:00 بتوقيت تركيا
