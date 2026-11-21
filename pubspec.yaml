@@ -10,6 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   shared_preferences: ^2.2.2
   http: ^1.2.2
   supabase_flutter: ^2.8.0
@@ -22,6 +24,10 @@ dependencies:
   webview_flutter: ^4.13.1
   url_launcher: ^6.1.9
   path_provider: ^2.1.5
+  connectivity_plus: ^6.1.4
+  package_info_plus: ^8.3.0
+  open_filex: ^4.7.0
+  share_plus: ^10.1.4
 
 flutter:
   uses-material-design: true
@@ -31,3 +37,5 @@ flutter:
 # إضافة media_kit/libmpv لدعم صيغ فيديو متعددة، وWebView لصفحات مواقع المشاهدة.
 # ShamFlix - آخر تحديث: 21-11-2026
 # إضافة path_provider لحفظ التنزيلات داخل مساحة التطبيق الخاصة.
+# ShamFlix - آخر تحديث: 21-11-2026
+# إضافة دعم اللغات والشبكة ومشاركة رابط الدعوة والتحديث الداخلي.
