@@ -935,53 +935,161 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget featuredHero() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: movies,
+      builder: (context, snapshot) {
+        final items = snapshot.data ?? [];
+        final featured = items.isEmpty ? null : items.first;
+        final poster = featured == null ? '' : valueOf(featured['poster_url']);
+        final title = featured == null
+            ? appText('اكتشف أحدث الأفلام', 'Discover the latest movies', 'En Yeni Filmleri Keşfet')
+            : valueOf(featured['title'], appText('فيلم مميز', 'Featured movie', 'Öne Çıkan Film'));
+
+        return Container(
+          height: 365,
+          margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: const Color(0xFF171717),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (poster.isNotEmpty)
+                Image.network(
+                  poster,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF171717)),
+                )
+              else
+                const ColoredBox(color: Color(0xFF171717)),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.05),
+                      Colors.black.withOpacity(0.28),
+                      Colors.black.withOpacity(0.96),
+                    ],
+                    stops: const [0.0, 0.42, 1.0],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 14,
+                right: 14,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE50914),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Text(
+                    'SHAMFLIX',
+                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 18,
+                right: 18,
+                bottom: 20,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      appText('اختيارنا لك', 'FEATURED FOR YOU', 'SENİN İÇİN SEÇİLDİ'),
+                      style: const TextStyle(color: Color(0xFFFF4B55), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        if (featured != null)
+                          ElevatedButton.icon(
+                            onPressed: () => openDetails(featured, isSeries: false),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE50914),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                            ),
+                            icon: const Icon(Icons.play_arrow, size: 21),
+                            label: Text(appText('شاهد الآن', 'Watch now', 'Şimdi İzle'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          )
+                        else
+                          const SizedBox.shrink(),
+                        const SizedBox(width: 9),
+                        if (featured != null)
+                          OutlinedButton.icon(
+                            onPressed: () => openDetails(featured, isSeries: false),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white54),
+                              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                            ),
+                            icon: const Icon(Icons.info_outline, size: 18),
+                            label: Text(appText('التفاصيل', 'Details', 'Detaylar')),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget homeContent() {
     return RefreshIndicator(
-      color: gold,
+      color: const Color(0xFFE50914),
       backgroundColor: panel,
       onRefresh: refreshData,
       child: ListView(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
             child: Row(
               children: [
-                const Icon(Icons.movie_filter, color: gold, size: 32),
-                const SizedBox(width: 9),
                 const Text(
-                  'Sham',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  'SHAM',
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 const Text(
-                  'Flix',
-                  style: TextStyle(
-                    color: gold,
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  'FLIX',
+                  style: TextStyle(color: Color(0xFFE50914), fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 const Spacer(),
                 IconButton(
                   onPressed: () {
-                    showSearch(
-                      context: context,
-                      delegate: ShamFlixSearch(),
-                    );
+                    showSearch(context: context, delegate: ShamFlixSearch());
                   },
                   icon: const Icon(Icons.search, color: Colors.white),
                 ),
                 IconButton(
                   tooltip: appText('الإشعارات', 'Notifications', 'Bildirimler'),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
-                  icon: const Icon(Icons.notifications_none, color: gold),
+                  icon: const Icon(Icons.notifications_none, color: Colors.white),
                 ),
               ],
             ),
           ),
+          featuredHero(),
+          continueWatchingSection(),
           mediaSection(appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'), movies, isSeries: false),
           mediaSection(appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'), series, isSeries: true),
           mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), series, isSeries: true),
@@ -1542,7 +1650,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   }
 }
 
-// ShamFlix - آخر تحديث: 21-11-2026: تحويل قسمي الأفلام والمسلسلات إلى رفوف أفقية لكل باقة مع قائمة جانبية ومعاينة المحتوى وفتح الباقة كاملة.
+// آخر تعديل: اعتماد واجهة رئيسية بأسلوب Netflix مع بانر فيلم مميز وقسم تابع المشاهدة | التاريخ: 2026-11-21 | الوقت: 18:56 بتوقيت تركيا
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
