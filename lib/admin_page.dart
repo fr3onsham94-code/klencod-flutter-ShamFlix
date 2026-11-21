@@ -226,7 +226,7 @@ class _AdminPageState extends State<AdminPage> {
           .maybeSingle();
       final saved = int.tryParse(row?['setting_value']?.toString() ?? '');
       if (mounted) {
-        setState(() => catalogGridColumns = (saved ?? 5).clamp(2, 6));
+        setState(() => catalogGridColumns = (saved ?? 5).clamp(2, 6).toInt());
       }
     } catch (e) {
       if (mounted) showMessage('تعذر تحميل عدد البوسترات في الصف: $e', isError: true);
@@ -4175,6 +4175,5 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026: حفظ وعرض المخرج والممثلين في تفاصيل الأفلام والمسلسلات.
 
-// ShamFlix - آخر تحديث: 21-11-2026: إصلاح تعريف وحدات التحكم backdropController وdirectorController وcastController في نموذج المسلسلات.
 
 // آخر تعديل: إضافة إعداد موحّد لعدد أعمدة بوسترات الباقات للأفلام والمسلسلات | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
