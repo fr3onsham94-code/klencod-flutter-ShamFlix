@@ -482,6 +482,7 @@ class _HomePageState extends State<HomePage> {
     loadCategoryBadgeSetting();
     authRefreshNotifier.addListener(onAuthChanged);
     localProfileRefreshNotifier.addListener(onProfileChanged);
+    contentRefreshNotifier.addListener(onContentRefresh);
   }
 
   // جلب إعداد الشارة من Supabase
@@ -515,10 +516,17 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() {});
   }
 
+  void onContentRefresh() {
+    loadData();
+    recentHistory = ShamFlixLocalStore.getHistory();
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     authRefreshNotifier.removeListener(onAuthChanged);
     localProfileRefreshNotifier.removeListener(onProfileChanged);
+    contentRefreshNotifier.removeListener(onContentRefresh);
     super.dispose();
   }
 
@@ -3459,3 +3467,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة إعدادات المشغل واللغة والشبكة ومسح التخزين والسجل وتحديث التطبيق وسياسة الخصوصية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تحديث بيانات الشاشة الرئيسية فور طلب تحديث القنوات أو مسح سجل المشاهدة.
