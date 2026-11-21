@@ -546,9 +546,133 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
           foregroundColor: AppTheme.text,
         ),
       ),
-      home: const HomePage(),
+      home: const ShamFlixSplashGate(),
     ),
     ),
+    );
+  }
+}
+
+class ShamFlixSplashGate extends StatefulWidget {
+  const ShamFlixSplashGate({super.key});
+
+  @override
+  State<ShamFlixSplashGate> createState() => _ShamFlixSplashGateState();
+}
+
+class _ShamFlixSplashGateState extends State<ShamFlixSplashGate> {
+  bool _finished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 1700), () {
+      if (mounted) setState(() => _finished = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_finished) return const HomePage();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF090909),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.12),
+                radius: 0.85,
+                colors: [Color(0xFF241014), Color(0xFF100B0C), Color(0xFF090909)],
+                stops: [0, 0.48, 1],
+              ),
+            ),
+          ),
+          Center(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.82, end: 1),
+              duration: const Duration(milliseconds: 950),
+              curve: Curves.easeOutBack,
+              builder: (context, scale, child) => Transform.scale(
+                scale: scale,
+                child: child,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 112,
+                    height: 112,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF171111),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: const Color(0x66E50914), width: 1.4),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x55E50914), blurRadius: 42, spreadRadius: 3),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        const Icon(Icons.movie_creation_rounded, color: Color(0xFFE50914), size: 72),
+                        Positioned(
+                          bottom: 20,
+                          right: 19,
+                          child: Container(
+                            width: 27,
+                            height: 27,
+                            decoration: const BoxDecoration(color: Color(0xFFE50914), shape: BoxShape.circle),
+                            child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'SHAM FLIX',
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 29,
+                      letterSpacing: 5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  Container(
+                    width: 54,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE50914),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    appText('عالمك الترفيهي في مكان واحد', 'Your entertainment, all in one place', 'Eğlencen tek bir yerde'),
+                    style: const TextStyle(color: Color(0xFFB3B3B3), fontSize: 12, letterSpacing: 0.3),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 34,
+            child: Column(
+              children: [
+                const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE50914))),
+                const SizedBox(height: 10),
+                Text('PREMIUM ENTERTAINMENT', style: TextStyle(color: Colors.white.withOpacity(0.38), fontSize: 8, letterSpacing: 2.1)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1244,6 +1368,8 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   String? error;
   String? selectedPackageId;
   int gridColumns = 5;
+  final TextEditingController searchController = TextEditingController();
+  String searchQuery = '';
   List<Map<String, dynamic>> packages = [];
   final Map<String, List<Map<String, dynamic>>> packageContents = {};
 
@@ -1252,7 +1378,62 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   @override
   void initState() {
     super.initState();
+    searchController.addListener(() {
+      if (mounted) setState(() => searchQuery = searchController.text.trim());
+    });
     _loadPackages();
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  String get _themeSection => widget.contentType == 'movie' ? 'movies' : 'series';
+
+  List<Map<String, dynamic>> get filteredItems {
+    final query = searchQuery.toLowerCase();
+    if (query.isEmpty) return selectedItems;
+    return selectedItems.where((item) {
+      final title = valueOf(item['title']).toLowerCase();
+      final year = valueOf(item['release_year']).toLowerCase();
+      final category = valueOf(item['category']).toLowerCase();
+      return title.contains(query) || year.contains(query) || category.contains(query);
+    }).toList();
+  }
+
+  Widget _searchField() {
+    final primary = AppTheme.sectionColor(_themeSection, 'primary');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 8),
+      child: TextField(
+        controller: searchController,
+        textInputAction: TextInputAction.search,
+        style: TextStyle(color: AppTheme.sectionColor(_themeSection, 'text'), fontSize: 13),
+        decoration: InputDecoration(
+          hintText: appText('ابحث عن فيلم أو مسلسل...', 'Search movies or series...', 'Film veya dizi ara...'),
+          hintStyle: TextStyle(color: AppTheme.sectionColor(_themeSection, 'secondaryText'), fontSize: 12),
+          prefixIcon: Icon(Icons.search_rounded, color: primary),
+          suffixIcon: searchQuery.isEmpty ? null : IconButton(
+            tooltip: appText('مسح البحث', 'Clear search', 'Aramayı temizle'),
+            onPressed: searchController.clear,
+            icon: Icon(Icons.close_rounded, color: AppTheme.sectionColor(_themeSection, 'secondaryText')),
+          ),
+          filled: true,
+          fillColor: AppTheme.sectionColor(_themeSection, 'panel'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: primary.withOpacity(0.22)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: primary, width: 1.3),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadPackages() async {
@@ -1345,15 +1526,15 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           aspectRatio: 0.68,
           child: url.isEmpty
               ? Container(
-                  color: panel,
-                  child: Icon(Icons.movie, color: gold, size: 28),
+                  color: AppTheme.sectionColor(_themeSection, 'panel'),
+                  child: Icon(Icons.movie, color: AppTheme.sectionColor(_themeSection, 'primary'), size: 28),
                 )
               : Image.network(
                   url,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
-                    color: panel,
-                    child: Icon(Icons.movie, color: gold, size: 28),
+                    color: AppTheme.sectionColor(_themeSection, 'panel'),
+                    child: Icon(Icons.movie, color: AppTheme.sectionColor(_themeSection, 'primary'), size: 28),
                   ),
                 ),
         ),
@@ -1379,7 +1560,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: AppTheme.text,
+                    color: AppTheme.sectionColor(_themeSection, 'text'),
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1580,7 +1761,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
       (entry) => entry['id'].toString() == selectedPackageId,
       orElse: () => <String, dynamic>{},
     );
-    final contents = selectedItems;
+    final contents = filteredItems;
     return Column(
       children: [
         Padding(
@@ -1615,11 +1796,14 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
             ],
           ),
         ),
+        _searchField(),
         Expanded(
           child: contents.isEmpty
               ? Center(
                   child: Text(
-                    appText('لا يوجد محتوى في هذه الباقة حالياً',
+                    searchQuery.isNotEmpty
+                        ? appText('لا توجد نتائج مطابقة', 'No matching results', 'Eşleşen sonuç bulunamadı')
+                        : appText('لا يوجد محتوى في هذه الباقة حالياً',
                         'No content in this package yet',
                         'Bu pakette henüz içerik yok'),
                     style: TextStyle(color: AppTheme.secondaryText),
@@ -1650,7 +1834,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: AppTheme.text,
+                              color: AppTheme.sectionColor(_themeSection, 'text'),
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                             ),
@@ -3347,10 +3531,14 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   List<Map<String, dynamic>> selectedServers = [];
   String selectedUrl = '';
   bool starting = false;
+  int gridColumns = 5;
+  final TextEditingController searchController = TextEditingController();
+  String searchQuery = '';
 
   @override
   void initState() {
     super.initState();
+    searchController.addListener(() { if (mounted) setState(() => searchQuery = searchController.text.trim()); });
     _load();
     channelRefreshNotifier.addListener(_onExternalRefresh);
   }
@@ -3360,12 +3548,18 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   @override
   void dispose() {
     channelRefreshNotifier.removeListener(_onExternalRefresh);
+    searchController.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     setState(() { loading = true; error = null; });
     try {
+      try {
+        final gridSetting = await AuthService.client.from('app_settings')
+            .select('setting_value').eq('setting_key', 'channel_grid_columns').maybeSingle();
+        gridColumns = (int.tryParse(gridSetting?['setting_value']?.toString() ?? '') ?? 5).clamp(2, 8).toInt();
+      } catch (_) { gridColumns = 5; }
       final packageRows = await AuthService.client
           .from('content_packages')
           .select('id,name,sort_order')
@@ -3415,6 +3609,38 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     if (mounted) setState(() => loading = false);
   }
 
+  List<Map<String, dynamic>> get filteredChannels {
+    final query = searchQuery.toLowerCase();
+    if (query.isEmpty) return channels;
+    return channels.where((channel) => valueOf(channel['name']).toLowerCase().contains(query)).toList();
+  }
+
+  Widget _searchField() {
+    final primary = AppTheme.sectionColor('live', 'primary');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 8),
+      child: TextField(
+        controller: searchController,
+        textInputAction: TextInputAction.search,
+        style: TextStyle(color: AppTheme.sectionColor('live', 'text'), fontSize: 13),
+        decoration: InputDecoration(
+          hintText: appText('ابحث عن قناة...', 'Search channels...', 'Kanal ara...'),
+          hintStyle: TextStyle(color: AppTheme.sectionColor('live', 'secondaryText'), fontSize: 12),
+          prefixIcon: Icon(Icons.search_rounded, color: primary),
+          suffixIcon: searchQuery.isEmpty ? null : IconButton(
+            onPressed: searchController.clear,
+            icon: Icon(Icons.close_rounded, color: AppTheme.sectionColor('live', 'secondaryText')),
+          ),
+          filled: true,
+          fillColor: AppTheme.sectionColor('live', 'panel'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primary.withOpacity(0.22))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primary, width: 1.3)),
+        ),
+      ),
+    );
+  }
+
   Future<void> _playChannel(Map<String, dynamic> channel) async {
     if (starting) return;
     setState(() => starting = true);
@@ -3457,6 +3683,16 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         selectedServers = servers;
         selectedUrl = url;
       });
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => ShamFlixPlayerPage(
+          key: ValueKey('live-${channel['id']}-$url'),
+          url: url,
+          title: valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+          servers: servers,
+          progressKey: 'channel-$id',
+          embedded: false,
+        ),
+      ));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('تعذر تشغيل القناة: $e')),
@@ -3474,7 +3710,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       onTap: () => _playChannel(channel),
       child: Container(
         decoration: BoxDecoration(
-          color: active ? const Color(0xFF302719) : panel,
+          color: active ? AppTheme.sectionColor('live', 'primary').withOpacity(0.18) : AppTheme.sectionColor('live', 'panel'),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: active ? gold : Colors.white10, width: active ? 1.4 : 0.7),
         ),
@@ -3488,7 +3724,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                   Center(
                     child: Container(
                       width: double.infinity,
-                      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(color: AppTheme.sectionColor('live', 'background'), borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.all(5),
                       child: logo.isEmpty
                           ? Icon(Icons.live_tv, color: gold, size: 30)
@@ -3525,7 +3761,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     return Container(
       width: 126,
       decoration: BoxDecoration(
-        color: const Color(0xFF111111),
+        color: AppTheme.sectionColor('live', 'background'),
         border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
       ),
       child: ListView(
@@ -3542,7 +3778,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Material(
-                color: active ? const Color(0xFFE50914) : panel,
+                color: active ? AppTheme.sectionColor('live', 'primary') : AppTheme.sectionColor('live', 'panel'),
                 borderRadius: BorderRadius.circular(8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
@@ -3586,41 +3822,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
               IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: gold)),
             ]),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: selectedChannel == null || selectedUrl.isEmpty
-                    ? Container(
-                        color: Colors.black,
-                        child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.live_tv, color: gold, size: 48),
-                          const SizedBox(height: 8),
-                          Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'),
-                            style: TextStyle(color: AppTheme.secondaryText)),
-                          if (starting) Padding(padding: const EdgeInsets.only(top: 8),
-                            child: CircularProgressIndicator(color: gold)),
-                        ])),
-                      )
-                    : ShamFlixPlayerPage(
-                        key: ValueKey('${selectedChannel!['id']}-$selectedUrl'),
-                        url: selectedUrl,
-                        title: valueOf(selectedChannel!['name'], appText('قناة', 'Channel', 'Kanal')),
-                        servers: selectedServers,
-                        progressKey: 'channel-${selectedChannel!['id']}',
-                        embedded: true,
-                        onClose: () => setState(() {
-                          selectedChannel = null;
-                          selectedServers = [];
-                          selectedUrl = '';
-                        }),
-                      ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
+          _searchField(),
           Expanded(
             child: Row(
               textDirection: TextDirection.ltr,
@@ -3655,14 +3857,14 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                         onRefresh: _load,
                                         child: GridView.builder(
                                           padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
-                                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                            crossAxisCount: 5,
+                                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: gridColumns,
                                             crossAxisSpacing: 7,
                                             mainAxisSpacing: 7,
                                             childAspectRatio: 0.88,
                                           ),
-                                          itemCount: channels.length,
-                                          itemBuilder: (context, index) => _channelTile(channels[index]),
+                                          itemCount: filteredChannels.length,
+                                          itemBuilder: (context, index) => _channelTile(filteredChannels[index]),
                                         ),
                                       ),
                       ),
@@ -4877,4 +5079,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: تحويل صفحة القنوات إلى Sidebar يسار وشبكة من 5 قنوات مع شارة LIVE | التاريخ: 2026-11-21 | الوقت: 22:12:00 بتوقيت تركيا
+// آخر تعديل: إضافة شاشة بداية SHAM FLIX وبحث الأفلام والمسلسلات والقنوات وتشغيل القنوات بملء الشاشة | التاريخ: 2026-11-21 | الوقت: 22:50:00 بتوقيت تركيا
