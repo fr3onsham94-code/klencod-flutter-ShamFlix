@@ -50,7 +50,7 @@ Deno.serve(async (req: Request) => {
     const { data: authData, error: authError } = await userClient.auth.getUser(jwt);
     if (authError || !authData.user) return json({ error: "Invalid session" }, 401);
     const callerRole = authData.user.app_metadata?.role;
-    if (callerRole !== "admin" && callerRole !== "manager") {
+    if (authData.user.id !== "dda16adb-3b6e-4244-a028-83df88b7801d" && callerRole !== "admin" && callerRole !== "manager") {
       return json({ error: "Admin access required" }, 403);
     }
 
@@ -134,4 +134,4 @@ Deno.serve(async (req: Request) => {
   }
 });
 // ShamFlix - آخر تحديث: 21-11-2026
-// السماح للمدير والأدمن باستيراد بيانات الأفلام والمسلسلات من TMDB.
+// المالك الأساسي والمدير والأدمن يستطيعون استيراد بيانات TMDB.
