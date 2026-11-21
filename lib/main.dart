@@ -929,91 +929,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget channelsPage() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: channels,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: gold),
-          );
-        }
-
-        if (snapshot.hasError) {
-          return const Center(
-            child: Text(
-              'تعذر تحميل القنوات',
-              style: TextStyle(color: Colors.white54),
-            ),
-          );
-        }
-
-        final items = snapshot.data ?? [];
-
-        if (items.isEmpty) {
-          return const Center(
-            child: Text(
-              'لا توجد قنوات منشورة حالياً',
-              style: TextStyle(color: Colors.white54),
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          color: gold,
-          onRefresh: refreshData,
-          child: ListView.builder(
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final channel = items[index];
-
-              return Card(
-                color: panel,
-                margin: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: bg,
-                    backgroundImage:
-                        valueOf(channel['logo_url']).isNotEmpty
-                            ? NetworkImage(valueOf(channel['logo_url']))
-                            : null,
-                    child: valueOf(channel['logo_url']).isEmpty
-                        ? const Icon(Icons.live_tv, color: gold)
-                        : null,
-                  ),
-                  title: Text(
-                    valueOf(channel['name'], 'قناة'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  subtitle: Text(
-                    valueOf(channel['category'], 'بث مباشر'),
-                    style: const TextStyle(color: Colors.white54),
-                  ),
-                  trailing: const Icon(
-                    Icons.play_circle_outline,
-                    color: gold,
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => DetailsPage(
-                          item: channel,
-                          isSeries: false,
-                          isChannel: true,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
+    return const ChannelsPackagesPage();
   }
 
   @override
@@ -2778,12 +2694,260 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
   }
 }
 
+class ChannelsPackagesPage extends StatefulWidget {
+  const ChannelsPackagesPage({super.key});
+
+  @override
+  State<ChannelsPackagesPage> createState() => _ChannelsPackagesPageState();
+}
+
+class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
+  bool loading = true;
+  String? error;
+  List<Map<String, dynamic>> packages = [];
+  List<Map<String, dynamic>> channels = [];
+  String? selectedPackageId;
+  Map<String, dynamic>? selectedChannel;
+  List<Map<String, dynamic>> selectedServers = [];
+  String selectedUrl = '';
+  bool starting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      final packageRows = await AuthService.client
+          .from('content_packages')
+          .select('id,name,sort_order')
+          .eq('content_type', 'channel')
+          .order('sort_order');
+      packages = packageRows.map((row) => Map<String, dynamic>.from(row)).toList();
+      selectedPackageId = packages.isEmpty ? null : packages.first['id'].toString();
+      await _loadChannels();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _loadChannels() async {
+    if (selectedPackageId == null) {
+      channels = await SupabaseService.getChannels();
+      return;
+    }
+    final links = await AuthService.client
+        .from('content_package_items')
+        .select('content_id')
+        .eq('content_type', 'channel')
+        .eq('package_id', selectedPackageId!);
+    final ids = links.map((row) => row['content_id'].toString()).toList();
+    if (ids.isEmpty) {
+      channels = [];
+      return;
+    }
+    final rows = await AuthService.client.from('channels')
+        .select().inFilter('id', ids)
+        .eq('is_published', true)
+        .order('name');
+    channels = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  Future<void> _selectPackage(String? id) async {
+    setState(() { selectedPackageId = id; loading = true; error = null; });
+    try {
+      await _loadChannels();
+      selectedChannel = null;
+      selectedServers = [];
+      selectedUrl = '';
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _playChannel(Map<String, dynamic> channel) async {
+    if (starting) return;
+    setState(() => starting = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('shamflix_wifi_only') == true) {
+        final connections = await Connectivity().checkConnectivity();
+        if (!connections.contains(ConnectivityResult.wifi)) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط.')),
+          );
+          return;
+        }
+      }
+      final id = channel['id']?.toString() ?? '';
+      final servers = id.isEmpty ? <Map<String, dynamic>>[] :
+          await SupabaseService.getPlaybackServers(contentType: 'channel', contentId: id);
+      final url = servers.isNotEmpty
+          ? valueOf(servers.first['stream_url'])
+          : valueOf(channel['stream_url']);
+      final uri = Uri.tryParse(url);
+      if (url.isEmpty || uri == null || !uri.hasScheme) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('رابط القناة غير متوفر حالياً')),
+        );
+        return;
+      }
+      await ShamFlixLocalStore.addHistory({
+        'contentType': 'channel',
+        'contentId': id,
+        'title': valueOf(channel['name'], 'قناة'),
+        'poster_url': valueOf(channel['logo_url']),
+        'item': Map<String, dynamic>.from(channel),
+        'isChannel': true,
+        'progressKey': 'channel-$id',
+      });
+      if (!mounted) return;
+      setState(() {
+        selectedChannel = channel;
+        selectedServers = servers;
+        selectedUrl = url;
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تشغيل القناة: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => starting = false);
+    }
+  }
+
+  Widget _channelTile(Map<String, dynamic> channel) {
+    final active = selectedChannel?['id']?.toString() == channel['id']?.toString();
+    final logo = valueOf(channel['logo_url']);
+    return Card(
+      color: active ? const Color(0xFF302719) : panel,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: bg,
+          backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
+          child: logo.isEmpty ? const Icon(Icons.live_tv, color: gold) : null,
+        ),
+        title: Text(valueOf(channel['name'], 'قناة'),
+            style: TextStyle(color: active ? gold : Colors.white, fontWeight: FontWeight.bold)),
+        subtitle: Text(valueOf(channel['category'], 'بث مباشر'),
+            style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        trailing: Icon(active ? Icons.graphic_eq : Icons.play_circle_outline, color: gold),
+        onTap: () => _playChannel(channel),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+            child: Row(children: [
+              Container(width: 4, height: 22, color: gold),
+              const SizedBox(width: 9),
+              const Text('البث المباشر', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(onPressed: _load, icon: const Icon(Icons.refresh, color: gold)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: selectedChannel == null || selectedUrl.isEmpty
+                    ? Container(
+                        color: Colors.black,
+                        child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.live_tv, color: gold, size: 48),
+                          const SizedBox(height: 8),
+                          const Text('اختر قناة لبدء المشاهدة', style: TextStyle(color: Colors.white70)),
+                          if (starting) const Padding(padding: EdgeInsets.only(top: 8), child: CircularProgressIndicator(color: gold)),
+                        ])),
+                      )
+                    : ShamFlixPlayerPage(
+                        key: ValueKey('${selectedChannel!['id']}-$selectedUrl'),
+                        url: selectedUrl,
+                        title: valueOf(selectedChannel!['name'], 'قناة'),
+                        servers: selectedServers,
+                        progressKey: 'channel-${selectedChannel!['id']}',
+                        embedded: true,
+                        onClose: () => setState(() {
+                          selectedChannel = null;
+                          selectedServers = [];
+                          selectedUrl = '';
+                        }),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (packages.isNotEmpty)
+            SizedBox(
+              height: 42,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: packages.map((package) {
+                  final id = package['id'].toString();
+                  final active = id == selectedPackageId;
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 7),
+                    child: ChoiceChip(
+                      label: Text(package['name']?.toString() ?? 'باقة'),
+                      selected: active,
+                      selectedColor: const Color(0xFF493B25),
+                      backgroundColor: panel,
+                      labelStyle: TextStyle(color: active ? gold : Colors.white70, fontSize: 12),
+                      onSelected: (_) => _selectPackage(id),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator(color: gold))
+                : error != null
+                    ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
+                    : channels.isEmpty
+                        ? const Center(child: Text('لا توجد قنوات في هذه الباقة', style: TextStyle(color: Colors.white54)))
+                        : RefreshIndicator(
+                            color: gold,
+                            onRefresh: _load,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                              itemCount: channels.length,
+                              itemBuilder: (context, index) => _channelTile(channels[index]),
+                            ),
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ShamFlix - آخر تحديث: 21-11-2026: صفحة القنوات بباقات ومشغّل مضمّن يحتفظ بميزات المشغل وسيرفراته.
+
 class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
   final String title;
   final List<Map<String, dynamic>> servers;
   final int initialServerIndex;
   final String progressKey;
+  final bool embedded;
+  final VoidCallback? onClose;
 
   const ShamFlixPlayerPage({
     super.key,
@@ -2792,6 +2956,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
     this.servers = const [],
     this.initialServerIndex = 0,
     this.progressKey = '',
+    this.embedded = false,
+    this.onClose,
   });
 
   @override
@@ -2829,8 +2995,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
     player = Player();
     controller = VideoController(player);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    _setLandscape(true);
+    landscape = !widget.embedded;
+    if (!widget.embedded) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      _setLandscape(true);
+    }
     player.stream.error.listen(_handlePlaybackError);
     _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
     _open();
@@ -3366,8 +3535,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         const SizedBox(height: 18),
                         FilledButton(
                           style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('رجوع'),
+                          onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
+                          child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
                         ),
                       ],
                     ),
@@ -3474,9 +3643,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                     child: Row(
                                       children: [
                                         _controlButton(
-                                          icon: Icons.arrow_back_rounded,
+                                          icon: widget.embedded ? Icons.close_rounded : Icons.arrow_back_rounded,
                                           size: 22,
-                                          onTap: () => Navigator.pop(context),
+                                          onTap: widget.embedded ? (widget.onClose ?? () {}) : () => Navigator.pop(context),
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(
@@ -4037,3 +4206,4 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تقليل طلبات مزامنة تقدم المشاهدة السحابية إلى مرة كل 30 ثانية لكل محتوى.
+// ShamFlix - آخر تحديث: 21-11-2026: مشغل مضمن للقنوات مع الحفاظ على أدوات التحكم وسيرفرات البث.
