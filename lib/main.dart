@@ -131,20 +131,34 @@ class ShamFlixLocalStore {
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_profilesKey);
-    if (raw == null || raw.isEmpty) {
-      await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
+    List<Map<String, dynamic>> oldProfiles = [];
+    try {
+      final raw = prefs.getString(_profilesKey);
+      if (raw != null && raw.isNotEmpty) {
+        oldProfiles = (jsonDecode(raw) as List).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      }
+    } catch (_) {}
+    final ids = oldProfiles.map((p) => p['id']?.toString() ?? '').where((id) => id.isNotEmpty && id != 'main').toSet();
+    for (final id in ids) {
+      for (final collection in ['favorites', 'history']) {
+        final mainItems = await getListForProfile('main', collection);
+        final oldItems = await getListForProfile(id, collection);
+        final merged = <String, Map<String, dynamic>>{};
+        for (final item in [...mainItems, ...oldItems]) {
+          final key = '${item['contentType'] ?? ''}:${item['contentId'] ?? item['id'] ?? item['title'] ?? ''}';
+          merged[key] = item;
+        }
+        await setListForProfile('main', collection, merged.values.toList());
+      }
     }
-    final profiles = await getProfiles();
-    if (profiles.isEmpty) {
-      await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
+    activeProfileId = 'main';
+    await prefs.setString(_activeProfileKey, 'main');
+    await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
+    for (final key in prefs.getKeys().toList()) {
+      if (key.startsWith('shamflix_profile_') && !key.startsWith('shamflix_profile_main_')) await prefs.remove(key);
+      if (key.startsWith('shamflix_player_') && key.contains('_') && !key.startsWith('shamflix_player_')) continue;
     }
-    final saved = prefs.getString(_activeProfileKey) ?? 'main';
-    final available = await getProfiles();
-    activeProfileId = available.any((p) => p['id'] == saved) ? saved : 'main';
-    await prefs.setString(_activeProfileKey, activeProfileId);
   }
-
   static String _key(String suffix) => 'shamflix_profile_${activeProfileId}_$suffix';
   static String _keyForProfile(String profileId, String suffix) => 'shamflix_profile_${profileId}_$suffix';
 
@@ -172,57 +186,18 @@ class ShamFlixLocalStore {
   }
 
   static Future<List<Map<String, dynamic>>> getProfiles() async {
-    final prefs = await SharedPreferences.getInstance();
-    try {
-      final decoded = jsonDecode(prefs.getString(_profilesKey) ?? '[]') as List;
-      return decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
-    } catch (_) {
-      return [{'id': 'main', 'name': 'ملفي الرئيسي'}];
-    }
+    return [{'id': 'main', 'name': 'ملفي الرئيسي'}];
   }
 
-  static Future<bool> addProfile(String name) async {
-    final clean = name.trim();
-    if (clean.isEmpty) return false;
-    final profiles = await getProfiles();
-    if (profiles.length >= 5) return false;
-    profiles.add({'id': DateTime.now().microsecondsSinceEpoch.toString(), 'name': clean});
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profilesKey, jsonEncode(profiles));
-    localProfileRefreshNotifier.value++;
-    unawaited(syncShamFlixCloudData());
-    return true;
-  }
+  static Future<bool> addProfile(String name) async => false;
 
   static Future<void> setActiveProfile(String id) async {
-    final profiles = await getProfiles();
-    if (!profiles.any((p) => p['id'] == id)) return;
-    activeProfileId = id;
+    activeProfileId = 'main';
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_activeProfileKey, id);
-    localProfileRefreshNotifier.value++;
-    unawaited(syncShamFlixCloudData());
+    await prefs.setString(_activeProfileKey, 'main');
   }
 
-  static Future<void> removeProfile(String id) async {
-    if (id == 'main') return;
-    final profiles = await getProfiles();
-    profiles.removeWhere((p) => p['id'] == id);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profilesKey, jsonEncode(profiles));
-    unawaited(ShamFlixCloudService.removeProfile(id).catchError((_) {}));
-    for (final key in prefs.getKeys().toList()) {
-      if (key.startsWith('shamflix_profile_${id}_') ||
-          key.startsWith('shamflix_player_${id}_')) {
-        await prefs.remove(key);
-      }
-    }
-    if (activeProfileId == id) {
-      activeProfileId = 'main';
-      await prefs.setString(_activeProfileKey, 'main');
-    }
-    localProfileRefreshNotifier.value++;
-  }
+  static Future<void> removeProfile(String id) async {}
 
   static Future<List<Map<String, dynamic>>> _readList(String key) async {
     final prefs = await SharedPreferences.getInstance();
@@ -322,23 +297,14 @@ Future<void> syncShamFlixCloudData() async {
     final userId = AuthService.client.auth.currentUser?.id;
     if (userId == null) return;
     final previousOwner = prefs.getString('shamflix_cloud_owner_id');
-    var profiles = await ShamFlixLocalStore.getProfiles();
     if (previousOwner != null && previousOwner != userId) {
-      profiles = [{'id': 'main', 'name': 'ملفي الرئيسي'}];
-      await ShamFlixLocalStore.setProfiles(profiles);
       await ShamFlixLocalStore.setListForProfile('main', 'favorites', []);
       await ShamFlixLocalStore.setListForProfile('main', 'history', []);
     }
-    profiles = await ShamFlixCloudService.syncProfiles(profiles);
-    if (!profiles.any((p) => p['id'] == 'main')) profiles.insert(0, {'id': 'main', 'name': 'ملفي الرئيسي'});
-    await ShamFlixLocalStore.setProfiles(profiles);
-    for (final profile in profiles) {
-      final id = profile['id'].toString();
-      for (final collection in ['favorites', 'history']) {
-        final local = await ShamFlixLocalStore.getListForProfile(id, collection);
-        final merged = await ShamFlixCloudService.syncCollection(profileId: id, collection: collection, localRecords: local);
-        await ShamFlixLocalStore.setListForProfile(id, collection, merged);
-      }
+    for (final collection in ['favorites', 'history']) {
+      final local = await ShamFlixLocalStore.getListForProfile('main', collection);
+      final merged = await ShamFlixCloudService.syncCollection(profileId: 'main', collection: collection, localRecords: local);
+      await ShamFlixLocalStore.setListForProfile('main', collection, merged);
     }
     await prefs.setString('shamflix_cloud_owner_id', userId);
     localProfileRefreshNotifier.value++;
@@ -3745,3 +3711,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // مزامنة قوائم الباقات مع تحديث القنوات والمحتوى من الإعدادات أو السحب للتحديث.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إلغاء الملفات الشخصية نهائياً في التطبيق، ودمج المفضلة والسجل إلى الملف الرئيسي مع الحفاظ على البيانات القديمة.
