@@ -933,6 +933,7 @@ class _AdminPageState extends State<AdminPage> {
                                       final fetchedTitle = data['title']?.toString() ?? '';
                                       if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                       posterController.text = data['poster_url']?.toString() ?? '';
+                                      backdropController.text = data['backdrop_url']?.toString() ?? '';
                                       descriptionController.text = data['description']?.toString() ?? '';
                                       directorController.text = data['director']?.toString() ?? '';
                                       final castData = data['cast'];
@@ -1107,6 +1108,7 @@ class _AdminPageState extends State<AdminPage> {
 
     titleController.dispose();
     posterController.dispose();
+    backdropController.dispose();
     descriptionController.dispose();
     directorController.dispose();
     castController.dispose();
