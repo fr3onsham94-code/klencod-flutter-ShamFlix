@@ -1505,7 +1505,7 @@ class _AccountPageState extends State<AccountPage> {
         const SizedBox(height: 25),
 
         if (!loggedIn) ...[
-          const Center(
+          Center(
             child: Text(
               appText('أهلاً بك في ShamFlix', 'Welcome to ShamFlix', 'ShamFlix\'e hoş geldiniz'),
               style: TextStyle(
