@@ -2572,7 +2572,10 @@ class _DetailsPageState extends State<DetailsPage> {
     final isChannel = widget.isChannel;
     final title = valueOf(item['title'] ?? item['name'], appText('بدون عنوان', 'Untitled', 'Başlıksız'));
     final poster = valueOf(item['poster_url'] ?? item['logo_url']);
-    final description = valueOf(item['description'], 'لا يوجد وصف لهذا المحتوى حالياً.');
+    final backdrop = valueOf(item['backdrop_url']);
+    final director = valueOf(item['director']);
+    final cast = valueOf(item['cast']);
+    final description = valueOf(item['description'], appText('لا يوجد وصف لهذا المحتوى حالياً.', 'No description is available for this title yet.', 'Bu içerik için henüz açıklama yok.'));
 
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
@@ -2586,14 +2589,42 @@ class _DetailsPageState extends State<DetailsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: double.infinity, height: 340, child: Stack(fit: StackFit.expand, children: [
-                poster.isEmpty ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)) :
-                  Image.network(poster, fit: isChannel ? BoxFit.contain : BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))),
-                const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xEE090909)], stops: [0.35, 1.0]))),
-                Positioned(right: 20, left: 20, bottom: 22, child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 27, fontWeight: FontWeight.bold,
-                    shadows: [Shadow(color: Colors.black, blurRadius: 12)]))),
+              SizedBox(width: double.infinity, height: 350, child: Stack(fit: StackFit.expand, children: [
+                (backdrop.isNotEmpty || poster.isNotEmpty)
+                    ? Image.network(
+                        backdrop.isNotEmpty ? backdrop : poster,
+                        fit: isChannel ? BoxFit.contain : BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)),
+                      )
+                    : Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)),
+                const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x22000000), Color(0xF5090909)],
+                  stops: [0.05, 1.0],
+                ))),
+                Positioned(
+                  right: 18,
+                  left: 18,
+                  bottom: 18,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (!isChannel && poster.isNotEmpty)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(9),
+                          child: Image.network(poster, width: 92, height: 132, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(width: 92, height: 132, color: panel, child: const Icon(Icons.movie, color: gold))),
+                        ),
+                      if (!isChannel && poster.isNotEmpty) const SizedBox(width: 13),
+                      Expanded(
+                        child: Text(title, maxLines: 3, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
+                            shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
+                      ),
+                    ],
+                  ),
+                ),
               ])),
               Padding(
                 padding: const EdgeInsets.all(20),
@@ -2615,6 +2646,16 @@ class _DetailsPageState extends State<DetailsPage> {
                     Text(appText('القصة والوصف', 'Story & Description', 'Hikâye ve Açıklama'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
+                    if (director.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    ],
+                    if (cast.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+                    ],
                     const SizedBox(height: 18),
                     _engagementPanel(),
                     _recommendationsSection(),
@@ -2705,15 +2746,6 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
   void initState() {
     super.initState();
     _load();
-    channelRefreshNotifier.addListener(_onExternalRefresh);
-  }
-
-  void _onExternalRefresh() { _load(); }
-
-  @override
-  void dispose() {
-    channelRefreshNotifier.removeListener(_onExternalRefresh);
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -2794,6 +2826,15 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   void initState() {
     super.initState();
     _load();
+    channelRefreshNotifier.addListener(_onExternalRefresh);
+  }
+
+  void _onExternalRefresh() { _load(); }
+
+  @override
+  void dispose() {
+    channelRefreshNotifier.removeListener(_onExternalRefresh);
+    super.dispose();
   }
 
   Future<void> _load() async {
