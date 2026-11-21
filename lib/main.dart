@@ -1240,6 +1240,16 @@ class PackageCatalogPage extends StatefulWidget {
 }
 
 class _PackageCatalogPageState extends State<PackageCatalogPage> {
+  String get themeSection => widget.contentType == 'movie' ? 'movies' : 'series';
+  Color get sectionBackground => AppTheme.sectionColor(themeSection, 'background');
+  Color get sectionPrimary => AppTheme.sectionColor(themeSection, 'primary');
+  Color get sectionPanel => AppTheme.sectionColor(themeSection, 'panel');
+  Color get sectionText => AppTheme.sectionColor(themeSection, 'text');
+  Color get sectionSecondaryText => AppTheme.sectionColor(themeSection, 'secondaryText');
+  Color get sectionButton => AppTheme.sectionColor(themeSection, 'button');
+  Color get sectionBorder => AppTheme.sectionColor(themeSection, 'border');
+  Color get sectionBadge => AppTheme.sectionColor(themeSection, 'badge');
+
   bool loading = true;
   String? error;
   String? selectedPackageId;
@@ -1345,15 +1355,15 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           aspectRatio: 0.68,
           child: url.isEmpty
               ? Container(
-                  color: panel,
-                  child: Icon(Icons.movie, color: gold, size: 28),
+                  color: sectionPanel,
+                  child: Icon(Icons.movie, color: sectionPrimary, size: 28),
                 )
               : Image.network(
                   url,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
-                    color: panel,
-                    child: Icon(Icons.movie, color: gold, size: 28),
+                    color: sectionPanel,
+                    child: Icon(Icons.movie, color: sectionPrimary, size: 28),
                   ),
                 ),
         ),
@@ -1379,7 +1389,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: AppTheme.text,
+                    color: sectionText,
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1387,13 +1397,13 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
               Text(
                 '${contents.length} ${appText('عنصر', 'items', 'içerik')}',
-                style: TextStyle(color: AppTheme.secondaryText, fontSize: 10),
+                style: TextStyle(color: sectionSecondaryText, fontSize: 10),
               ),
               TextButton(
                 onPressed: () => _openPackage(id),
                 child: Text(
                   appText('عرض الكل', 'See all', 'Tümünü gör'),
-                  style: TextStyle(color: gold, fontSize: 11),
+                  style: TextStyle(color: sectionPrimary, fontSize: 11),
                 ),
               ),
             ],
@@ -1403,14 +1413,14 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               height: 82,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: panel,
+                color: sectionPanel,
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Text(
                 appText('لا يوجد محتوى في هذه الباقة حالياً',
                     'No content in this package yet',
                     'Bu pakette henüz içerik yok'),
-                style: TextStyle(color: AppTheme.secondaryText, fontSize: 11),
+                style: TextStyle(color: sectionSecondaryText, fontSize: 11),
               ),
             )
           else
@@ -1437,7 +1447,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: AppTheme.text,
+                              color: sectionText,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1450,7 +1460,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
             ),
           const SizedBox(height: 5),
-          const Divider(color: Color(0xFF303030), height: 1),
+          Divider(color: sectionBorder, height: 1),
         ],
       ),
     );
@@ -1491,7 +1501,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               appText('الباقات', 'PACKAGES', 'PAKETLER'),
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: gold,
+                color: sectionPrimary,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
@@ -1520,7 +1530,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: active ? gold : Colors.white24,
+                            color: active ? sectionPrimary : Colors.white24,
                             width: active ? 1.2 : 0.7,
                           ),
                         ),
@@ -1530,7 +1540,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: active ? gold : AppTheme.secondaryText,
+                            color: active ? sectionPrimary : sectionSecondaryText,
                             fontSize: 10,
                             height: 1.3,
                             fontWeight: active
@@ -1544,7 +1554,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                     Text(
                       '($count)',
                       style: TextStyle(
-                        color: active ? gold : AppTheme.secondaryText,
+                        color: active ? sectionPrimary : sectionSecondaryText,
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1591,7 +1601,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 width: 3,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: gold,
+                  color: sectionPrimary,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -1602,7 +1612,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: AppTheme.text,
+                    color: sectionText,
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1610,7 +1620,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
               Text(
                 '${contents.length}',
-                style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
+                style: TextStyle(color: sectionSecondaryText, fontSize: 12),
               ),
             ],
           ),
@@ -1622,7 +1632,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                     appText('لا يوجد محتوى في هذه الباقة حالياً',
                         'No content in this package yet',
                         'Bu pakette henüz içerik yok'),
-                    style: TextStyle(color: AppTheme.secondaryText),
+                    style: TextStyle(color: sectionSecondaryText),
                   ),
                 )
               : GridView.builder(
@@ -1650,7 +1660,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: AppTheme.text,
+                              color: sectionText,
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                             ),
@@ -1658,7 +1668,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                           Text(
                             valueOf(item['release_year'], ''),
                             style: TextStyle(
-                              color: AppTheme.secondaryText,
+                              color: sectionSecondaryText,
                               fontSize: 10,
                             ),
                           ),
@@ -1674,7 +1684,9 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
+    return Container(
+      color: sectionBackground,
+      child: Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar'
           ? TextDirection.rtl
           : TextDirection.ltr,
@@ -1684,12 +1696,12 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
-                Container(width: 4, height: 22, color: gold),
+                Container(width: 4, height: 22, color: sectionPrimary),
                 const SizedBox(width: 9),
                 Text(
                   widget.title,
                   style: TextStyle(
-                    color: AppTheme.text,
+                    color: sectionText,
                     fontSize: 19,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1697,7 +1709,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 const Spacer(),
                 IconButton(
                   onPressed: _loadPackages,
-                  icon: Icon(Icons.refresh, color: gold),
+                  icon: Icon(Icons.refresh, color: sectionPrimary),
                 ),
               ],
             ),
@@ -1705,7 +1717,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           Expanded(
             child: loading
                 ? Center(
-                    child: CircularProgressIndicator(color: gold),
+                    child: CircularProgressIndicator(color: sectionPrimary),
                   )
                 : error != null
                     ? Center(
@@ -1719,7 +1731,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             child: Text(
                               appText('لا توجد باقات حالياً',
                                   'No packages yet', 'Henüz paket yok'),
-                              style: TextStyle(color: AppTheme.secondaryText),
+                              style: TextStyle(color: sectionSecondaryText),
                             ),
                           )
                         : Row(
@@ -1739,7 +1751,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -1885,23 +1897,23 @@ class _AccountPageState extends State<AccountPage> {
     VoidCallback? onTap,
   }) {
     return Card(
-      color: panel,
+      color: sectionPanel,
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
-        leading: Icon(icon, color: gold),
+        leading: Icon(icon, color: sectionPrimary),
         title: Text(
           title,
-          style: TextStyle(color: AppTheme.text),
+          style: TextStyle(color: sectionText),
         ),
         subtitle: subtitle == null
             ? null
             : Text(
                 subtitle,
-                style: TextStyle(color: AppTheme.secondaryText),
+                style: TextStyle(color: sectionSecondaryText),
               ),
         trailing: Icon(
           Icons.chevron_left,
-          color: gold,
+          color: sectionPrimary,
         ),
         onTap: onTap,
       ),
@@ -1912,23 +1924,23 @@ class _AccountPageState extends State<AccountPage> {
     final linked = isGoogleLinked;
 
     return Card(
-      color: panel,
+      color: sectionPanel,
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
         leading: Icon(
           Icons.g_mobiledata,
-          color: gold,
+          color: sectionPrimary,
           size: 32,
         ),
         title: Text(
           linked ? 'حساب Google مربوط' : 'ربط حساب Google',
-          style: TextStyle(color: AppTheme.text),
+          style: TextStyle(color: sectionText),
         ),
         subtitle: Text(
           linked
               ? 'يمكنك تسجيل الدخول باستخدام Google'
               : 'اربط Gmail بحسابك الحالي دون إنشاء حساب جديد',
-          style: TextStyle(color: AppTheme.secondaryText),
+          style: TextStyle(color: sectionSecondaryText),
         ),
         trailing: linked
             ? const Icon(
@@ -1940,13 +1952,13 @@ class _AccountPageState extends State<AccountPage> {
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                      color: gold,
+                      color: sectionPrimary,
                       strokeWidth: 2,
                     ),
                   )
                 : Icon(
                     Icons.link,
-                    color: gold,
+                    color: sectionPrimary,
                   ),
         onTap: linked || linkingGoogle
             ? null
@@ -1965,7 +1977,7 @@ class _AccountPageState extends State<AccountPage> {
         const SizedBox(height: 25),
         Icon(
           Icons.account_circle,
-          color: gold,
+          color: sectionPrimary,
           size: 85,
         ),
         const SizedBox(height: 12),
@@ -1973,7 +1985,7 @@ class _AccountPageState extends State<AccountPage> {
           child: Text(
             appText('حسابي', 'My Account', 'Hesabım'),
             style: TextStyle(
-              color: AppTheme.text,
+              color: sectionText,
               fontSize: 25,
               fontWeight: FontWeight.bold,
             ),
@@ -1986,7 +1998,7 @@ class _AccountPageState extends State<AccountPage> {
             child: Text(
               appText('أهلاً بك في ShamFlix', 'Welcome to ShamFlix', 'ShamFlix\'e hoş geldiniz'),
               style: TextStyle(
-                color: AppTheme.secondaryText,
+                color: sectionSecondaryText,
                 fontSize: 16,
               ),
             ),
@@ -1997,7 +2009,7 @@ class _AccountPageState extends State<AccountPage> {
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: gold,
-                foregroundColor: AppTheme.text,
+                foregroundColor: sectionText,
               ),
               onPressed: openLogin,
               icon: const Icon(Icons.login),
@@ -2020,14 +2032,14 @@ class _AccountPageState extends State<AccountPage> {
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPage()))),
         ] else ...[
           Card(
-            color: panel,
+            color: sectionPanel,
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Column(
                 children: [
                   Icon(
                     Icons.account_circle,
-                    color: gold,
+                    color: sectionPrimary,
                     size: 55,
                   ),
                   const SizedBox(height: 10),
@@ -2035,7 +2047,7 @@ class _AccountPageState extends State<AccountPage> {
                     AuthService.userEmail ?? 'مستخدم ShamFlix',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppTheme.text,
+                      color: sectionText,
                       fontSize: 16,
                     ),
                   ),
@@ -2052,7 +2064,7 @@ class _AccountPageState extends State<AccountPage> {
                     child: Text(
                       AuthService.isAdmin ? appText('مدير', 'Admin', 'Yönetici') : appText('مستخدم', 'User', 'Kullanıcı'),
                       style: TextStyle(
-                        color: gold,
+                        color: sectionPrimary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -2098,14 +2110,14 @@ class _AccountPageState extends State<AccountPage> {
               onPressed: loading ? null : logout,
               style: OutlinedButton.styleFrom(
                 foregroundColor: gold,
-                side: BorderSide(color: gold),
+                side: BorderSide(color: sectionPrimary),
               ),
               icon: loading
                   ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                        color: gold,
+                        color: sectionPrimary,
                         strokeWidth: 2,
                       ),
                     )
@@ -2191,8 +2203,8 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: panel,
-        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: gold)),
-        content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: AppTheme.secondaryText)),
+        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: sectionPrimary)),
+        content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: sectionSecondaryText)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('مسح السجل', style: TextStyle(color: Colors.redAccent))),
@@ -2302,25 +2314,25 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: panel,
-          title: Text('يتوفر تحديث جديد', style: TextStyle(color: gold)),
+          title: Text('يتوفر تحديث جديد', style: TextStyle(color: sectionPrimary)),
           content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('الإصدار الحالي: ${packageInfo.version}', style: TextStyle(color: AppTheme.secondaryText)),
-              Text('الإصدار الجديد: $latest', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+              Text('الإصدار الحالي: ${packageInfo.version}', style: TextStyle(color: sectionSecondaryText)),
+              Text('الإصدار الجديد: $latest', style: TextStyle(color: sectionText, fontWeight: FontWeight.bold)),
               if ((value['release_notes']?.toString() ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text('ما الجديد؟', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                Text('ما الجديد؟', style: TextStyle(color: sectionPrimary, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 5),
-                Text(value['release_notes'].toString(), style: TextStyle(color: AppTheme.secondaryText)),
+                Text(value['release_notes'].toString(), style: TextStyle(color: sectionSecondaryText)),
               ],
             ],
           )),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('لاحقاً')),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: AppTheme.text),
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: sectionText),
               onPressed: () {
                 installAfterDialog = true;
                 Navigator.pop(dialogContext);
@@ -2341,19 +2353,19 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   }
 
   Widget _tile(IconData icon, String title, String subtitle, VoidCallback onTap) => Card(
-    color: panel,
+    color: sectionPanel,
     child: ListTile(
-      leading: Icon(icon, color: gold),
-      title: Text(title, style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
-      trailing: Icon(Icons.chevron_left, color: gold),
+      leading: Icon(icon, color: sectionPrimary),
+      title: Text(title, style: TextStyle(color: sectionText, fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: TextStyle(color: sectionSecondaryText, fontSize: 12)),
+      trailing: Icon(Icons.chevron_left, color: sectionPrimary),
       onTap: busy ? null : onTap,
     ),
   );
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return Scaffold(backgroundColor: bg, body: Center(child: CircularProgressIndicator(color: gold)));
+    if (loading) return Scaffold(backgroundColor: bg, body: Center(child: CircularProgressIndicator(color: sectionPrimary)));
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
@@ -2364,16 +2376,16 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage()));
           }),
           Card(
-            color: panel,
+            color: sectionPanel,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(children: [
-                Icon(Icons.language, color: gold),
+                Icon(Icons.language, color: sectionPrimary),
                 const SizedBox(width: 12),
-                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600))),
+                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: sectionText, fontWeight: FontWeight.w600))),
                 DropdownButton<String>(
                   value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
-                  style: TextStyle(color: AppTheme.text),
+                  style: TextStyle(color: sectionText),
                   items: const [
                     DropdownMenuItem(value: 'ar', child: Text('العربية')),
                     DropdownMenuItem(value: 'en', child: Text('English')),
@@ -2385,22 +2397,22 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             ),
           ),
           Card(
-            color: panel,
+            color: sectionPanel,
             child: SwitchListTile(
-              value: wifiOnly, activeColor: gold, secondary: Icon(Icons.wifi, color: gold),
-              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: AppTheme.text)),
-              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+              value: wifiOnly, activeColor: gold, secondary: Icon(Icons.wifi, color: sectionPrimary),
+              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: sectionText)),
+              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: sectionSecondaryText, fontSize: 12)),
               onChanged: _setWifiOnly,
             ),
           ),
           Card(
-            color: panel,
+            color: sectionPanel,
             child: SwitchListTile(
               value: forceLandscape,
               activeColor: gold,
-              secondary: Icon(Icons.screen_rotation, color: gold),
-              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: AppTheme.text)),
-              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+              secondary: Icon(Icons.screen_rotation, color: sectionPrimary),
+              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: sectionText)),
+              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: sectionSecondaryText, fontSize: 12)),
               onChanged: _setForceLandscape,
             ),
           ),
@@ -2408,7 +2420,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           _tile(Icons.history, appText('مسح السجل بالكامل', 'Clear Watch History', 'İzleme Geçmişini Temizle'), appText('حذف سجل المشاهدة من الجهاز والحساب', 'Delete watch history from this device and account', 'İzleme geçmişini cihazdan ve hesaptan sil'), _clearHistory),
           _tile(Icons.refresh, appText('تحديث قائمة القنوات', 'Refresh Channel List', 'Kanal Listesini Yenile'), appText('جلب أحدث القنوات المنشورة', 'Fetch the latest published channels', 'En yeni yayınlanan kanalları getir'), _refreshChannels),
           _tile(Icons.system_update_alt, appText('البحث عن تحديث للتطبيق', 'Check for App Updates', 'Uygulama Güncellemelerini Kontrol Et'), appText('التحقق من وجود إصدار جديد', 'Check whether a new version is available', 'Yeni sürüm olup olmadığını kontrol et'), _checkForUpdate),
-          if (busy) Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: gold))),
+          if (busy) Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: sectionPrimary))),
         ]),
       ),
     );
@@ -2424,15 +2436,15 @@ class PrivacyPage extends StatelessWidget {
       backgroundColor: bg,
       appBar: AppBar(backgroundColor: bg, title: Text(appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'))),
       body: ListView(padding: const EdgeInsets.all(20), children: [
-        Text('SHAM FLIX', style: TextStyle(color: gold, fontSize: 25, fontWeight: FontWeight.bold)),
+        Text('SHAM FLIX', style: TextStyle(color: sectionPrimary, fontSize: 25, fontWeight: FontWeight.bold)),
         SizedBox(height: 14),
-        Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: sectionPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text(appText('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', 'The SHAM FLIX name, design and interface are protected by their owners. Displayed content and streaming links remain subject to their respective rights holders.', 'ShamFlix adı, tasarımı ve arayüzü sahiplerine aittir. Gösterilen içerikler ve yayın bağlantıları ilgili hak sahiplerinin koşullarına tabidir.'), style: TextStyle(color: AppTheme.secondaryText, height: 1.7)),
+        Text(appText('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', 'The SHAM FLIX name, design and interface are protected by their owners. Displayed content and streaming links remain subject to their respective rights holders.', 'ShamFlix adı, tasarımı ve arayüzü sahiplerine aittir. Gösterilen içerikler ve yayın bağlantıları ilgili hak sahiplerinin koşullarına tabidir.'), style: TextStyle(color: sectionSecondaryText, height: 1.7)),
         SizedBox(height: 20),
-        Text(appText('الخصوصية', 'Privacy', 'Gizlilik'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(appText('الخصوصية', 'Privacy', 'Gizlilik'), style: TextStyle(color: sectionPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text(appText('يستخدم التطبيق بيانات أساسية لتشغيل الحسابات وحفظ المفضلة وسجل المشاهدة وتحسين الخدمة.', 'The app uses basic data to operate accounts, save favorites and watch history, and improve the service.', 'Uygulama; hesapları çalıştırmak, favorileri ve izleme geçmişini kaydetmek ve hizmeti geliştirmek için temel verileri kullanır.'), style: TextStyle(color: AppTheme.secondaryText, height: 1.7)),
+        Text(appText('يستخدم التطبيق بيانات أساسية لتشغيل الحسابات وحفظ المفضلة وسجل المشاهدة وتحسين الخدمة.', 'The app uses basic data to operate accounts, save favorites and watch history, and improve the service.', 'Uygulama; hesapları çalıştırmak, favorileri ve izleme geçmişini kaydetmek ve hizmeti geliştirmek için temel verileri kullanır.'), style: TextStyle(color: sectionSecondaryText, height: 1.7)),
       ]),
     ),
   );
@@ -2455,25 +2467,25 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
     child: Scaffold(
       backgroundColor: bg,
       appBar: AppBar(backgroundColor: bg, title: Text(appText('إشعارات ShamFlix', 'ShamFlix Notifications', 'ShamFlix Bildirimleri')),
-        actions: [IconButton(onPressed: reload, icon: Icon(Icons.refresh, color: gold))]),
+        actions: [IconButton(onPressed: reload, icon: Icon(Icons.refresh, color: sectionPrimary))]),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: notifications,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: gold));
-          if (snapshot.hasError) return Center(child: Text(appText('تعذر تحميل الإشعارات. سجّل الدخول وحاول مجدداً.', 'Could not load notifications. Sign in and try again.', 'Bildirimler yüklenemedi. Giriş yapıp tekrar deneyin.'), style: TextStyle(color: AppTheme.secondaryText)));
+          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: sectionPrimary));
+          if (snapshot.hasError) return Center(child: Text(appText('تعذر تحميل الإشعارات. سجّل الدخول وحاول مجدداً.', 'Could not load notifications. Sign in and try again.', 'Bildirimler yüklenemedi. Giriş yapıp tekrar deneyin.'), style: TextStyle(color: sectionSecondaryText)));
           final items = snapshot.data ?? [];
-          if (items.isEmpty) return Center(child: Text(appText('لا توجد إشعارات جديدة حالياً', 'No new notifications', 'Yeni bildirim yok'), style: TextStyle(color: AppTheme.secondaryText)));
+          if (items.isEmpty) return Center(child: Text(appText('لا توجد إشعارات جديدة حالياً', 'No new notifications', 'Yeni bildirim yok'), style: TextStyle(color: sectionSecondaryText)));
           return ListView.builder(
             padding: const EdgeInsets.all(12), itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
               final read = item['is_read'] == true;
-              return Card(color: panel, child: ListTile(
-                leading: Icon(item['content_type'] == 'episode' ? Icons.video_library : Icons.notifications_active, color: gold),
-                title: Text(valueOf(item['title'], appText('محتوى جديد', 'New Content', 'Yeni İçerik')), style: TextStyle(color: AppTheme.text, fontWeight: read ? FontWeight.normal : FontWeight.bold)),
-                subtitle: Text(valueOf(item['body']), style: TextStyle(color: AppTheme.secondaryText)),
+              return Card(color: sectionPanel, child: ListTile(
+                leading: Icon(item['content_type'] == 'episode' ? Icons.video_library : Icons.notifications_active, color: sectionPrimary),
+                title: Text(valueOf(item['title'], appText('محتوى جديد', 'New Content', 'Yeni İçerik')), style: TextStyle(color: sectionText, fontWeight: read ? FontWeight.normal : FontWeight.bold)),
+                subtitle: Text(valueOf(item['body']), style: TextStyle(color: sectionSecondaryText)),
                 trailing: PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert, color: AppTheme.secondaryText),
+                  icon: Icon(Icons.more_vert, color: sectionSecondaryText),
                   onSelected: (value) async {
                     if (value == 'read') await ShamFlixCloudService.markNotificationRead(item['id'].toString());
                     if (value == 'delete') await ShamFlixCloudService.deleteNotification(item['id'].toString());
@@ -2516,25 +2528,25 @@ class _FavoritesPageState extends State<FavoritesPage> {
     child: Scaffold(
       backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: gold));
+        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: sectionPrimary));
         final items = snapshot.data ?? [];
         if (items.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.favorite_border, color: gold, size: 64), const SizedBox(height: 12),
-          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: TextStyle(color: AppTheme.secondaryText)),
-          const SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: TextStyle(color: AppTheme.secondaryText)),
+          Icon(Icons.favorite_border, color: sectionPrimary, size: 64), const SizedBox(height: 12),
+          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: TextStyle(color: sectionSecondaryText)),
+          const SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: TextStyle(color: sectionSecondaryText)),
         ]));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index];
           final item = Map<String, dynamic>.from(record['item'] is Map ? record['item'] as Map : <String, dynamic>{});
           final poster = valueOf(record['poster_url']);
-          return Card(color: panel, child: ListTile(
-            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.movie, color: gold) :
+          return Card(color: sectionPanel, child: ListTile(
+            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.movie, color: sectionPrimary) :
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Icon(Icons.movie, color: gold)))),
-            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: AppTheme.text)),
+                errorBuilder: (_, __, ___) => Icon(Icons.movie, color: sectionPrimary)))),
+            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: sectionText)),
             subtitle: Text(record['isSeries'] == true ? appText('مسلسل', 'Series', 'Dizi') : record['isChannel'] == true ? appText('قناة', 'Channel', 'Kanal') : appText('فيلم', 'Movie', 'Film'),
-              style: TextStyle(color: gold)),
-            trailing: IconButton(icon: Icon(Icons.favorite, color: gold), tooltip: 'إزالة من المفضلة',
+              style: TextStyle(color: sectionPrimary)),
+            trailing: IconButton(icon: Icon(Icons.favorite, color: sectionPrimary), tooltip: 'إزالة من المفضلة',
               onPressed: () async => ShamFlixLocalStore.removeFavorite(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(
               item: item, isSeries: record['isSeries'] == true, isChannel: record['isChannel'] == true))),
@@ -2564,21 +2576,21 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
     child: Scaffold(
       backgroundColor: bg,
       appBar: AppBar(backgroundColor: bg, title: Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
-        actions: [IconButton(tooltip: 'مسح السجل', icon: Icon(Icons.delete_sweep_outlined, color: gold),
+        actions: [IconButton(tooltip: 'مسح السجل', icon: Icon(Icons.delete_sweep_outlined, color: sectionPrimary),
           onPressed: () async => ShamFlixLocalStore.clearHistory())]),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: gold));
+        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: sectionPrimary));
         final items = snapshot.data ?? [];
-        if (items.isEmpty) return Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: AppTheme.secondaryText)));
+        if (items.isEmpty) return Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: sectionSecondaryText)));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index]; final poster = valueOf(record['poster_url']);
-          return Card(color: panel, child: ListTile(
-            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.play_circle, color: gold) :
+          return Card(color: sectionPanel, child: ListTile(
+            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.play_circle, color: sectionPrimary) :
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Icon(Icons.play_circle, color: gold)))),
-            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: AppTheme.text)),
-            subtitle: Text('${appText('آخر مشاهدة:', 'Last watched:', 'Son izleme:')} ${formatWatchPosition(record['position'])}', style: TextStyle(color: AppTheme.secondaryText)),
-            trailing: IconButton(icon: Icon(Icons.close, color: AppTheme.secondaryText),
+                errorBuilder: (_, __, ___) => Icon(Icons.play_circle, color: sectionPrimary)))),
+            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: sectionText)),
+            subtitle: Text('${appText('آخر مشاهدة:', 'Last watched:', 'Son izleme:')} ${formatWatchPosition(record['position'])}', style: TextStyle(color: sectionSecondaryText)),
+            trailing: IconButton(icon: Icon(Icons.close, color: sectionSecondaryText),
               onPressed: () async => ShamFlixLocalStore.removeHistory(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => openWatchRecord(context, record),
           ));
@@ -2686,29 +2698,29 @@ class _DetailsPageState extends State<DetailsPage> {
     final average = (ratingSummary['average'] as num?)?.toDouble() ?? 0;
     final count = ratingSummary['count'] ?? 0;
     return Card(
-      color: panel,
+      color: sectionPanel,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(appText('تقييمك للمحتوى', 'Your Rating', 'Puanınız'), style: TextStyle(color: gold, fontSize: 17, fontWeight: FontWeight.bold)),
+          Text(appText('تقييمك للمحتوى', 'Your Rating', 'Puanınız'), style: TextStyle(color: sectionPrimary, fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Row(children: [
             for (int i = 1; i <= 5; i++)
               IconButton(
                 visualDensity: VisualDensity.compact,
                 onPressed: () => _saveEngagement(rating: i.toDouble()),
-                icon: Icon(i <= myRating ? Icons.star : Icons.star_border, color: gold),
+                icon: Icon(i <= myRating ? Icons.star : Icons.star_border, color: sectionPrimary),
               ),
             const Spacer(),
-            Text(average == 0 ? appText('لا يوجد تقييم', 'No rating yet', 'Henüz puan yok') : average.toStringAsFixed(1), style: TextStyle(color: AppTheme.text)),
-            Icon(Icons.star, color: gold, size: 17),
-            Text(' ($count)', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+            Text(average == 0 ? appText('لا يوجد تقييم', 'No rating yet', 'Henüz puan yok') : average.toStringAsFixed(1), style: TextStyle(color: sectionText)),
+            Icon(Icons.star, color: sectionPrimary, size: 17),
+            Text(' ($count)', style: TextStyle(color: sectionSecondaryText, fontSize: 12)),
           ]),
           Row(children: [
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'like'),
-              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? gold : AppTheme.secondaryText), label: Text(appText('إعجاب', 'Like', 'Beğen'))),
+              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? gold : sectionSecondaryText), label: Text(appText('إعجاب', 'Like', 'Beğen'))),
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'dislike'),
-              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : AppTheme.secondaryText), label: Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
+              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : sectionSecondaryText), label: Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
           ]),
         ]),
       ),
@@ -2733,7 +2745,7 @@ class _DetailsPageState extends State<DetailsPage> {
         if (items.isEmpty) return const SizedBox.shrink();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const SizedBox(height: 22),
-          Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: sectionPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           SizedBox(height: 195, child: ListView.builder(
             reverse: true, scrollDirection: Axis.horizontal, itemCount: items.length,
@@ -2745,10 +2757,10 @@ class _DetailsPageState extends State<DetailsPage> {
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(item: relatedItem, isSeries: isSeriesItem))),
                 child: Container(width: 112, margin: const EdgeInsets.only(left: 10), child: Column(children: [
                   Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(9), child: posterUrl.isEmpty
-                    ? Container(color: panel, child: Icon(Icons.movie, color: gold))
-                    : Image.network(posterUrl, width: 112, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: Icon(Icons.movie, color: gold))))),
+                    ? Container(color: sectionPanel, child: Icon(Icons.movie, color: sectionPrimary))
+                    : Image.network(posterUrl, width: 112, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: sectionPanel, child: Icon(Icons.movie, color: sectionPrimary))))),
                   const SizedBox(height: 6),
-                  Text(valueOf(relatedItem['title']), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppTheme.text, fontSize: 12)),
+                  Text(valueOf(relatedItem['title']), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: sectionText, fontSize: 12)),
                 ])),
               );
             },
@@ -2865,7 +2877,7 @@ class _DetailsPageState extends State<DetailsPage> {
                     padding: const EdgeInsets.all(12),
                     children: [
                       Text(appText('اختر سيرفر التشغيل', 'Choose a Server', 'Sunucu Seçin'), textAlign: TextAlign.center,
-                        style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold)),
+                        style: TextStyle(color: sectionPrimary, fontSize: 14, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       ...servers.map((server) => ListTile(
                         dense: true,
@@ -2873,7 +2885,7 @@ class _DetailsPageState extends State<DetailsPage> {
                         contentPadding: EdgeInsets.zero,
                         title: Text('${valueOf(server['server_name'], 'سيرفر')}${valueOf(server['id'] ?? server['server_name']) == preferredServer ? ' • المفضل' : ''}',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: AppTheme.text, fontSize: 12)),
+                          style: TextStyle(color: sectionText, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, server),
                       )),
                     ],
@@ -3014,7 +3026,7 @@ class _DetailsPageState extends State<DetailsPage> {
       future: SupabaseService.getEpisodes(seasonId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: gold)));
+          return Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: sectionPrimary)));
         }
         if (snapshot.hasError) {
           return const Padding(padding: EdgeInsets.all(12), child: Text('تعذر تحميل الحلقات', style: TextStyle(color: Colors.redAccent)));
@@ -3023,7 +3035,7 @@ class _DetailsPageState extends State<DetailsPage> {
         if (episodes.isEmpty) {
           return Padding(padding: const EdgeInsets.all(12), child: Text(
             appText('لا توجد حلقات منشورة في هذا الموسم', 'No episodes published in this season', 'Bu sezonda yayınlanmış bölüm yok'),
-            style: TextStyle(color: AppTheme.secondaryText)));
+            style: TextStyle(color: sectionSecondaryText)));
         }
         return Column(children: episodes.asMap().entries.map((entry) {
           final episode = entry.value;
@@ -3037,13 +3049,13 @@ class _DetailsPageState extends State<DetailsPage> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
               leading: Container(
                 width: 46, height: 46, alignment: Alignment.center,
-                decoration: BoxDecoration(color: gold.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
-                child: Text(number, style: TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 16))),
+                decoration: BoxDecoration(color: sectionPrimary.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
+                child: Text(number, style: TextStyle(color: sectionPrimary, fontWeight: FontWeight.bold, fontSize: 16))),
               title: Text(episodeTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600, fontSize: 14)),
+                style: TextStyle(color: sectionText, fontWeight: FontWeight.w600, fontSize: 14)),
               subtitle: Text(duration.isEmpty ? appText('تشغيل الحلقة', 'Play episode', 'Bölümü oynat') : '$duration • ${appText('دقيقة', 'min', 'dk')}',
-                style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
-              trailing: Icon(Icons.play_circle_fill_rounded, color: gold, size: 30),
+                style: TextStyle(color: sectionSecondaryText, fontSize: 12)),
+              trailing: Icon(Icons.play_circle_fill_rounded, color: sectionPrimary, size: 30),
               onTap: () async {
                 final episodeRecord = Map<String, dynamic>.from(episode);
                 if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
@@ -3069,8 +3081,8 @@ class _DetailsPageState extends State<DetailsPage> {
       width: double.infinity, height: heroHeight,
       child: Stack(fit: StackFit.expand, children: [
         if (heroImage.isNotEmpty)
-          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: panel))
-        else ColoredBox(color: panel),
+          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: sectionPanel))
+        else ColoredBox(color: sectionPanel),
         const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
           colors: [Color(0x22000000), Color(0x55000000), Color(0xFF090909)],
@@ -3082,19 +3094,19 @@ class _DetailsPageState extends State<DetailsPage> {
               borderRadius: BorderRadius.circular(9),
               child: SizedBox(width: posterWidth, height: posterHeight,
                 child: poster.isEmpty
-                  ? Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))
+                  ? Container(color: sectionPanel, child: Icon(Icons.movie, color: sectionPrimary, size: 42))
                   : Image.network(poster, width: posterWidth, height: posterHeight, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))))),
+                      errorBuilder: (_, __, ___) => Container(color: sectionPanel, child: Icon(Icons.movie, color: sectionPrimary, size: 42))))),
             if (!isChannel) const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: sectionPrimary, borderRadius: BorderRadius.circular(4)),
                 child: Text(isChannel ? appText('مباشر', 'LIVE', 'CANLI') : 'SHAM FLIX',
-                  style: TextStyle(color: AppTheme.text, fontSize: 9, fontWeight: FontWeight.bold))),
+                  style: TextStyle(color: sectionText, fontSize: 9, fontWeight: FontWeight.bold))),
               const SizedBox(height: 8),
               Text(title, maxLines: isLandscape ? 2 : 3, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: AppTheme.text, fontSize: 25, fontWeight: FontWeight.bold,
+                style: TextStyle(color: sectionText, fontSize: 25, fontWeight: FontWeight.bold,
                   shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
             ])),
           ]),
@@ -3122,21 +3134,21 @@ class _DetailsPageState extends State<DetailsPage> {
         Wrap(spacing: 8, runSpacing: 8, children: category.split(RegExp(r'[,،|]')).map((genre) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
           decoration: BoxDecoration(color: const Color(0xFF292929), borderRadius: BorderRadius.circular(20)),
-          child: Text(genre.trim(), style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+          child: Text(genre.trim(), style: TextStyle(color: sectionSecondaryText, fontSize: 12)),
         )).toList()),
       ],
       const SizedBox(height: 20),
       Text(appText('القصة والوصف', 'About this title', 'Hikâye ve Açıklama'),
-        style: TextStyle(color: AppTheme.text, fontSize: 18, fontWeight: FontWeight.bold)),
+        style: TextStyle(color: sectionText, fontSize: 18, fontWeight: FontWeight.bold)),
       const SizedBox(height: 9),
-      Text(description, style: TextStyle(color: AppTheme.secondaryText, height: 1.7, fontSize: 14)),
+      Text(description, style: TextStyle(color: sectionSecondaryText, height: 1.7, fontSize: 14)),
       if (director.isNotEmpty) ...[
         const SizedBox(height: 14),
-        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: TextStyle(color: AppTheme.secondaryText, fontSize: 13)),
+        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: TextStyle(color: sectionSecondaryText, fontSize: 13)),
       ],
       if (cast.isNotEmpty) ...[
         const SizedBox(height: 8),
-        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: TextStyle(color: AppTheme.secondaryText, fontSize: 13, height: 1.5)),
+        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: TextStyle(color: sectionSecondaryText, fontSize: 13, height: 1.5)),
       ],
       const SizedBox(height: 18),
       _recommendationsSection(),
@@ -3145,7 +3157,7 @@ class _DetailsPageState extends State<DetailsPage> {
 
   Widget _moviePlaySection(Map<String, dynamic> item, String title, {required bool isChannel}) {
     return SizedBox(width: double.infinity, child: FilledButton.icon(
-      style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: AppTheme.text,
+      style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: sectionText,
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 18),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
       onPressed: () => _chooseAndPlay(contentType: isChannel ? 'channel' : 'movie',
@@ -3160,19 +3172,19 @@ class _DetailsPageState extends State<DetailsPage> {
     final selectedSeason = seasons.isNotEmpty ? seasons[selectedSeasonIndex.clamp(0, seasons.length - 1).toInt()] : null;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Container(width: 4, height: 22, decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4))),
+        Container(width: 4, height: 22, decoration: BoxDecoration(color: sectionPrimary, borderRadius: BorderRadius.circular(4))),
         const SizedBox(width: 9),
         Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'),
-          style: TextStyle(color: AppTheme.text, fontSize: 19, fontWeight: FontWeight.bold)),
+          style: TextStyle(color: sectionText, fontSize: 19, fontWeight: FontWeight.bold)),
       ]),
       const SizedBox(height: 14),
       if (seasonsLoading)
-        Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: gold)))
+        Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: sectionPrimary)))
       else if (seasonsError != null)
         Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
       else if (seasons.isEmpty)
         Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'),
-          style: TextStyle(color: AppTheme.secondaryText))
+          style: TextStyle(color: sectionSecondaryText))
       else ...[
         SizedBox(height: 42, child: ListView.separated(
           scrollDirection: Axis.horizontal, reverse: true, itemCount: seasons.length,
@@ -3185,7 +3197,7 @@ class _DetailsPageState extends State<DetailsPage> {
               label: Text(label), selected: selected,
               onSelected: (_) => setState(() => selectedSeasonIndex = index),
               selectedColor: gold, backgroundColor: const Color(0xFF292929),
-              labelStyle: TextStyle(color: AppTheme.text, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+              labelStyle: TextStyle(color: sectionText, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
               side: BorderSide.none, showCheckmark: false,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
             );
@@ -3218,7 +3230,7 @@ class _DetailsPageState extends State<DetailsPage> {
         appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
           IconButton(tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
             onPressed: _toggleFavorite,
-            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : AppTheme.text)),
+            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : sectionText)),
         ]),
         body: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -3247,9 +3259,9 @@ class _DetailsPageState extends State<DetailsPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: gold, size: 16),
+        Icon(icon, color: sectionPrimary, size: 16),
         const SizedBox(width: 5),
-        Text(text, style: TextStyle(color: AppTheme.secondaryText)),
+        Text(text, style: TextStyle(color: sectionSecondaryText)),
       ],
     );
   }
@@ -3299,11 +3311,11 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
         backgroundColor: bg,
         appBar: AppBar(backgroundColor: bg, title: Text(appText('إعدادات المشغل', 'Player Settings', 'Oynatıcı Ayarları'))),
         body: loading
-            ? Center(child: CircularProgressIndicator(color: gold))
+            ? Center(child: CircularProgressIndicator(color: sectionPrimary))
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  Text(appText('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', 'Choose the default player for movies, episodes and channels', 'Film, bölüm ve kanallar için varsayılan oynatıcıyı seçin'), style: TextStyle(color: AppTheme.secondaryText)),
+                  Text(appText('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', 'Choose the default player for movies, episodes and channels', 'Film, bölüm ve kanallar için varsayılan oynatıcıyı seçin'), style: TextStyle(color: sectionSecondaryText)),
                   const SizedBox(height: 14),
                   _playerOption('internal', 'المشغل الداخلي', 'تشغيل داخل تطبيق ShamFlix', Icons.smart_display),
                   _playerOption('vlc', 'VLC', 'يتطلب تثبيت تطبيق VLC', Icons.play_circle),
@@ -3316,14 +3328,14 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
 
   Widget _playerOption(String value, String title, String subtitle, IconData icon) {
     return Card(
-      color: panel,
+      color: sectionPanel,
       child: RadioListTile<String>(
         value: value,
         groupValue: selectedPlayer,
         activeColor: gold,
-        secondary: Icon(icon, color: gold),
-        title: Text(title, style: TextStyle(color: AppTheme.text)),
-        subtitle: Text(subtitle, style: TextStyle(color: AppTheme.secondaryText)),
+        secondary: Icon(icon, color: sectionPrimary),
+        title: Text(title, style: TextStyle(color: sectionText)),
+        subtitle: Text(subtitle, style: TextStyle(color: sectionSecondaryText)),
         onChanged: (next) { if (next != null) _save(next); },
       ),
     );
@@ -3491,7 +3503,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         decoration: BoxDecoration(
           color: active ? const Color(0xFF302719) : panel,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: active ? gold : Colors.white10, width: active ? 1.4 : 0.7),
+          border: Border.all(color: active ? sectionPrimary : Colors.white10, width: active ? 1.4 : 0.7),
         ),
         padding: const EdgeInsets.all(6),
         child: Column(
@@ -3506,9 +3518,9 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.all(5),
                       child: logo.isEmpty
-                          ? Icon(Icons.live_tv, color: gold, size: 30)
+                          ? Icon(Icons.live_tv, color: sectionPrimary, size: 30)
                           : Image.network(logo, fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: gold, size: 30)),
+                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: sectionPrimary, size: 30)),
                     ),
                   ),
                   Positioned(
@@ -3520,7 +3532,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                     ),
                   ),
                   if (active)
-                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: gold, size: 16)),
+                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: sectionPrimary, size: 16)),
                 ],
               ),
             ),
@@ -3528,7 +3540,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             Text(
               valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
               maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
-              style: TextStyle(color: active ? gold : AppTheme.text, fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(color: active ? sectionPrimary : sectionText, fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -3549,7 +3561,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(7, 4, 7, 10),
             child: Text(appText('الباقات', 'PACKAGES', 'PAKETLER'),
-              style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, fontWeight: FontWeight.bold)),
+              style: TextStyle(color: sectionSecondaryText, fontSize: 11, fontWeight: FontWeight.bold)),
           ),
           ...packages.map((package) {
             final id = package['id'].toString();
@@ -3565,12 +3577,12 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                     child: Row(children: [
-                      Icon(Icons.live_tv, color: active ? Colors.white : AppTheme.secondaryText, size: 17),
+                      Icon(Icons.live_tv, color: active ? Colors.white : sectionSecondaryText, size: 17),
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(package['name']?.toString() ?? 'باقة',
                           maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: active ? Colors.white : AppTheme.text, fontSize: 11,
+                          style: TextStyle(color: active ? Colors.white : sectionText, fontSize: 11,
                             fontWeight: active ? FontWeight.bold : FontWeight.normal)),
                       ),
                     ]),
@@ -3593,18 +3605,18 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
             child: Row(children: [
-              Container(width: 4, height: 22, color: gold),
+              Container(width: 4, height: 22, color: sectionPrimary),
               const SizedBox(width: 9),
               Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
-                style: TextStyle(color: AppTheme.text, fontSize: 19, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: sectionText, fontSize: 19, fontWeight: FontWeight.bold)),
               const Spacer(),
-              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: gold)),
+              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: sectionPrimary)),
             ]),
           ),
           if (starting)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: LinearProgressIndicator(color: gold, backgroundColor: panel),
+              child: LinearProgressIndicator(color: sectionPrimary, backgroundColor: panel),
             ),
           Expanded(
             child: Row(
@@ -3623,20 +3635,20 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                             child: Text(
                               packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
                                 orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
-                              style: TextStyle(color: AppTheme.text, fontSize: 14, fontWeight: FontWeight.bold),
+                              style: TextStyle(color: sectionText, fontSize: 14, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
                       Expanded(
                         child: loading
-                            ? Center(child: CircularProgressIndicator(color: gold))
+                            ? Center(child: CircularProgressIndicator(color: sectionPrimary))
                             : error != null
                                 ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
                                 : channels.isEmpty
                                     ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
-                                        style: TextStyle(color: AppTheme.secondaryText)))
+                                        style: TextStyle(color: sectionSecondaryText)))
                                     : RefreshIndicator(
-                                        color: gold,
+                                        color: sectionPrimary,
                                         onRefresh: _load,
                                         child: GridView.builder(
                                           padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
@@ -3946,7 +3958,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         visualDensity: const VisualDensity(vertical: -3),
                         contentPadding: EdgeInsets.zero,
                         title: Text('${speed}x', textAlign: TextAlign.center,
-                          style: TextStyle(color: player.state.rate == speed ? gold : AppTheme.text, fontSize: 13)),
+                          style: TextStyle(color: player.state.rate == speed ? gold : sectionText, fontSize: 13)),
                         onTap: () => Navigator.pop(sheetContext, speed),
                       ),
                   ],
@@ -4018,13 +4030,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   shrinkWrap: true,
                   children: [
                     ListTile(title: Text(appText('مسار الصوت', 'Audio Track', 'Ses Parçası'), textAlign: TextAlign.center,
-                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                      style: TextStyle(color: sectionPrimary, fontSize: 14, fontWeight: FontWeight.bold))),
                     for (int index = 0; index < tracks.length; index++)
                       ListTile(
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                          style: TextStyle(color: AppTheme.text, fontSize: 12)),
+                          style: TextStyle(color: sectionText, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, tracks[index]),
                       ),
                   ],
@@ -4067,12 +4079,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   shrinkWrap: true,
                   children: [
                     ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
-                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                      style: TextStyle(color: sectionPrimary, fontSize: 14, fontWeight: FontWeight.bold))),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
                       title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
-                        style: TextStyle(color: AppTheme.text, fontSize: 12)),
+                        style: TextStyle(color: sectionText, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
                     ),
                     for (int index = 0; index < tracks.length; index++)
@@ -4080,7 +4092,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                          style: TextStyle(color: AppTheme.text, fontSize: 12)),
+                          style: TextStyle(color: sectionText, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, tracks[index]),
                       ),
                   ],
@@ -4133,7 +4145,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       child: Tooltip(
         message: name,
         child: Material(
-          color: active ? gold : Colors.black.withOpacity(0.62),
+          color: active ? sectionPrimary : Colors.black.withOpacity(0.62),
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
@@ -4144,7 +4156,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               child: Center(
                 child: Text('S${index + 1}',
                   style: TextStyle(
-                    color: active ? Colors.black : AppTheme.text,
+                    color: active ? Colors.black : sectionText,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -4185,9 +4197,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: AppTheme.text, size: 19),
+            Icon(icon, color: sectionText, size: 19),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(color: AppTheme.secondaryText, fontSize: 9)),
+            Text(label, style: TextStyle(color: sectionSecondaryText, fontSize: 9)),
           ],
         ),
       ),
@@ -4251,13 +4263,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.error_outline, color: gold, size: 48),
+                        Icon(Icons.error_outline, color: sectionPrimary, size: 48),
                         const SizedBox(height: 14),
                         Text(error!, textAlign: TextAlign.center,
-                            style: TextStyle(color: AppTheme.secondaryText)),
+                            style: TextStyle(color: sectionSecondaryText)),
                         const SizedBox(height: 18),
                         FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: AppTheme.text),
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: sectionText),
                           onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
                           child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
                         ),
@@ -4279,12 +4291,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         controls: NoVideoControls,
                       ),
                     if (opening)
-                      Center(child: CircularProgressIndicator(color: gold)),
+                      Center(child: CircularProgressIndicator(color: sectionPrimary)),
                     if (!opening)
                       StreamBuilder<bool>(
                         stream: player.stream.buffering,
                         builder: (context, snapshot) => snapshot.data == true
-                            ? Center(child: CircularProgressIndicator(color: gold))
+                            ? Center(child: CircularProgressIndicator(color: sectionPrimary))
                             : const SizedBox.shrink(),
                       ),
                     Positioned(
@@ -4309,7 +4321,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                     color: buffering ? gold : Colors.greenAccent),
                                   const SizedBox(width: 6),
                                   Text(buffering ? appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor') : appText('البث متصل', 'Stream Connected', 'Yayın Bağlandı'),
-                                    style: TextStyle(color: AppTheme.text, fontSize: 10)),
+                                    style: TextStyle(color: sectionText, fontSize: 10)),
                                 ],
                               ),
                             );
@@ -4329,9 +4341,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                               shape: const StadiumBorder(),
                               child: TextButton.icon(
                                 onPressed: _toggleControlsLock,
-                                icon: Icon(Icons.lock_open_rounded, color: gold),
+                                icon: Icon(Icons.lock_open_rounded, color: sectionPrimary),
                                 label: Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
-                                    style: TextStyle(color: AppTheme.text)),
+                                    style: TextStyle(color: sectionText)),
                               ),
                             ),
                           ),
@@ -4380,7 +4392,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                  color: AppTheme.text,
+                                                  color: sectionText,
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -4388,7 +4400,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                               Text(
                                                 'SHAM FLIX PLAYER',
                                                 style: TextStyle(
-                                                  color: gold,
+                                                  color: sectionPrimary,
                                                   fontSize: 9,
                                                   letterSpacing: 2,
                                                   fontWeight: FontWeight.w700,
@@ -4510,17 +4522,17 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 Row(
                                                   children: [
                                                     Text(_time(position),
-                                                        style: TextStyle(color: AppTheme.secondaryText, fontSize: 9)),
+                                                        style: TextStyle(color: sectionSecondaryText, fontSize: 9)),
                                                     const Spacer(),
                                                     Text(_time(duration),
-                                                        style: TextStyle(color: AppTheme.secondaryText, fontSize: 9)),
+                                                        style: TextStyle(color: sectionSecondaryText, fontSize: 9)),
                                                   ],
                                                 ),
                                                 const SizedBox(height: 8),
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                                   decoration: BoxDecoration(
-                                                    color: AppTheme.text.withOpacity(0.07),
+                                                    color: sectionText.withOpacity(0.07),
                                                     borderRadius: BorderRadius.circular(16),
                                                     border: Border.all(color: Colors.white12),
                                                   ),
@@ -4597,7 +4609,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: SizedBox(
           width: size + 12,
           height: size + 12,
-          child: Icon(icon, color: filled ? Colors.black : AppTheme.text, size: size),
+          child: Icon(icon, color: filled ? Colors.black : sectionText, size: size),
         ),
       ),
     );
@@ -4668,13 +4680,13 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
         ),
         body: Column(children: [
           if (progress < 100)
-            LinearProgressIndicator(value: progress / 100, color: gold, backgroundColor: panel),
+            LinearProgressIndicator(value: progress / 100, color: sectionPrimary, backgroundColor: panel),
           Expanded(
             child: pageError != null
                 ? Center(child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Text(pageError!, textAlign: TextAlign.center,
-                        style: TextStyle(color: AppTheme.secondaryText)),
+                        style: TextStyle(color: sectionSecondaryText)),
                   ))
                 : WebViewWidget(controller: controller),
           ),
@@ -4719,21 +4731,21 @@ class ShamFlixSearch extends SearchDelegate {
     var selectedCategory = categoryFilter;
     await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setDialogState) => AlertDialog(
-        backgroundColor: panel, title: Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: gold)),
+        backgroundColor: panel, title: Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: sectionPrimary)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
             value: selectedCategory, dropdownColor: panel,
-            decoration: InputDecoration(labelText: 'التصنيف', labelStyle: TextStyle(color: AppTheme.secondaryText)),
+            decoration: InputDecoration(labelText: 'التصنيف', labelStyle: TextStyle(color: sectionSecondaryText)),
             items: const ['الكل', 'أكشن', 'دراما', 'كوميديا', 'رعب', 'خيال علمي']
-              .map((value) => DropdownMenuItem(value: value, child: Text(value, style: TextStyle(color: AppTheme.text)))).toList(),
+              .map((value) => DropdownMenuItem(value: value, child: Text(value, style: TextStyle(color: sectionText)))).toList(),
             onChanged: (value) => setDialogState(() => selectedCategory = value ?? 'الكل')),
           const SizedBox(height: 12),
-          TextField(controller: yearController, keyboardType: TextInputType.number, style: TextStyle(color: AppTheme.text),
+          TextField(controller: yearController, keyboardType: TextInputType.number, style: TextStyle(color: sectionText),
             decoration: const InputDecoration(labelText: 'سنة الإصدار', hintText: 'مثال: 2026')),
         ]),
         actions: [
           TextButton(onPressed: () { categoryFilter = 'الكل'; yearFilter = ''; Navigator.pop(dialogContext); }, child: Text(appText('مسح التصفية', 'Clear Filters', 'Filtreleri Temizle'))),
-          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: AppTheme.text),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: sectionText),
             onPressed: () { categoryFilter = selectedCategory; yearFilter = yearController.text; Navigator.pop(dialogContext); },
             child: Text(appText('تطبيق', 'Apply', 'Uygula'))),
         ],
@@ -4746,7 +4758,7 @@ class ShamFlixSearch extends SearchDelegate {
   @override
   List<Widget> buildActions(BuildContext context) => [
     IconButton(tooltip: 'تصفية حسب التصنيف والسنة', onPressed: () => openFilters(context),
-      icon: Icon(Icons.tune, color: categoryFilter != 'الكل' || yearFilter.isNotEmpty ? gold : AppTheme.text)),
+      icon: Icon(Icons.tune, color: categoryFilter != 'الكل' || yearFilter.isNotEmpty ? gold : sectionText)),
     IconButton(onPressed: () { query = ''; showSuggestions(context); }, icon: const Icon(Icons.clear)),
   ];
 
@@ -4763,7 +4775,7 @@ class ShamFlixSearch extends SearchDelegate {
       return Center(
         child: Text(
           'اكتب اسم الفيلم أو المسلسل أو استخدم التصفية',
-          style: TextStyle(color: AppTheme.secondaryText),
+          style: TextStyle(color: sectionSecondaryText),
         ),
       );
     }
@@ -4773,7 +4785,7 @@ class ShamFlixSearch extends SearchDelegate {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
-            child: CircularProgressIndicator(color: gold),
+            child: CircularProgressIndicator(color: sectionPrimary),
           );
         }
 
@@ -4781,7 +4793,7 @@ class ShamFlixSearch extends SearchDelegate {
           return Center(
             child: Text(
               'حدث خطأ أثناء البحث',
-              style: TextStyle(color: AppTheme.secondaryText),
+              style: TextStyle(color: sectionSecondaryText),
             ),
           );
         }
@@ -4792,7 +4804,7 @@ class ShamFlixSearch extends SearchDelegate {
           return Center(
             child: Text(
               'لا توجد نتائج',
-              style: TextStyle(color: AppTheme.secondaryText),
+              style: TextStyle(color: sectionSecondaryText),
             ),
           );
         }
@@ -4811,14 +4823,14 @@ class ShamFlixSearch extends SearchDelegate {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
                   child: poster.isEmpty
-                      ? Icon(Icons.movie, color: gold)
+                      ? Icon(Icons.movie, color: sectionPrimary)
                       : Image.network(
                           poster,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) {
                             return Icon(
                               Icons.movie,
-                              color: gold,
+                              color: sectionPrimary,
                             );
                           },
                         ),
@@ -4826,11 +4838,11 @@ class ShamFlixSearch extends SearchDelegate {
               ),
               title: Text(
                 valueOf(item['title'], appText('بدون عنوان', 'Untitled', 'Başlıksız')),
-                style: TextStyle(color: AppTheme.text),
+                style: TextStyle(color: sectionText),
               ),
               subtitle: Text(
                 isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film'),
-                style: TextStyle(color: gold),
+                style: TextStyle(color: sectionPrimary),
               ),
               onTap: () {
                 close(context, null);
@@ -4862,4 +4874,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: إزالة المشغّل المضمّن وفتح القناة بملء الشاشة مع بطاقات مربعة وربط الأعمدة بإعداد الكتالوج المشترك | التاريخ: 2026-11-21 | الوقت: 23:18:00 بتوقيت تركيا
+// آخر تعديل: ربط ألوان صفحات باقات الأفلام والمسلسلات بلوحة ألوان كل قسم بشكل مستقل | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
