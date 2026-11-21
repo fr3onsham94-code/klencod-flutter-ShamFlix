@@ -56,9 +56,12 @@ Future<void> main() async {
   PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
   MediaKit.ensureInitialized();
 
-  await AuthService.initialize().timeout(
-    const Duration(seconds: 20),
-  );
+  // لا نمنع فتح التطبيق إذا تعذر تهيئة خدمة السحابة؛ تبقى البيانات المحلية متاحة.
+  try {
+    await AuthService.initialize().timeout(const Duration(seconds: 8));
+  } catch (_) {
+    // تعمل الواجهة المحلية حتى عودة الاتصال أو إعادة المحاولة لاحقاً.
+  }
   await ShamFlixLocalStore.initialize();
   await AppTheme.load();
   final startupPrefs = await SharedPreferences.getInstance();
@@ -441,7 +444,8 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     unawaited(ShamFlixPresenceService.start());
 
-    authSubscription =
+    if (AuthService.isInitialized) {
+      authSubscription =
         AuthService.client.auth.onAuthStateChange.listen(
       (data) {
         authRefreshNotifier.value++;
@@ -473,6 +477,7 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
         );
       },
     );
+    }
   }
 
   @override
@@ -11435,3 +11440,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 
 // آخر تعديل: توسيع اكتشاف روابط الوسائط وقوائم البث وروابط RTSP/RTMP وUDP/RTP/TCP لتوجيهها إلى المشغل الداخلي أو الخارجي بدلاً من WebView | التاريخ والوقت: 22/11/2026, 00:40:00 بتوقيت تركيا.
+
+
+// آخر تعديل: منع تعطل شاشة البداية عند تعذر تهيئة Supabase، مع إبقاء المزامنة والخدمات السحابية اختيارية | التاريخ والوقت: 22/11/2026، 00:55 بتوقيت تركيا.
