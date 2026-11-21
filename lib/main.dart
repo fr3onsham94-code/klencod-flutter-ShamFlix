@@ -1960,7 +1960,10 @@ class _DetailsPageState extends State<DetailsPage> {
     final isChannel = widget.isChannel;
     final title = valueOf(item['title'] ?? item['name'], 'بدون عنوان');
     final poster = valueOf(item['poster_url'] ?? item['logo_url']);
+    final backdrop = valueOf(item['backdrop_url']).isNotEmpty ? valueOf(item['backdrop_url']) : poster;
     final description = valueOf(item['description'], 'لا يوجد وصف لهذا المحتوى حالياً.');
+    final director = valueOf(item['director']);
+    final castNames = valueOf(item['cast_names']);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -1974,12 +1977,16 @@ class _DetailsPageState extends State<DetailsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: double.infinity, height: 340, child: Stack(fit: StackFit.expand, children: [
-                poster.isEmpty ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)) :
-                  Image.network(poster, fit: isChannel ? BoxFit.contain : BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))),
+              SizedBox(width: double.infinity, height: 360, child: Stack(fit: StackFit.expand, children: [
+                backdrop.isEmpty ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)) :
+                  Image.network(backdrop, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))),
                 const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xEE090909)], stops: [0.35, 1.0]))),
-                Positioned(right: 20, left: 20, bottom: 22, child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  end: Alignment.bottomCenter, colors: [Color(0x22000000), Color(0xF5090909)], stops: [0.12, 1.0]))),
+                if (!isChannel && poster.isNotEmpty)
+                  Positioned(left: 20, bottom: 20, child: ClipRRect(borderRadius: BorderRadius.circular(9),
+                    child: Image.network(poster, width: 92, height: 132, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox(width: 92, height: 132)))),
+                Positioned(right: 20, left: isChannel ? 20 : 128, bottom: 22, child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontSize: 27, fontWeight: FontWeight.bold,
                     shadows: [Shadow(color: Colors.black, blurRadius: 12)]))),
               ])),
@@ -1996,9 +2003,15 @@ class _DetailsPageState extends State<DetailsPage> {
                         if (valueOf(item['release_year']).isNotEmpty) _detailTag(Icons.calendar_today, valueOf(item['release_year'])),
                         if (valueOf(item['category']).isNotEmpty) _detailTag(Icons.category, valueOf(item['category'])),
                         if (valueOf(item['rating']).isNotEmpty) _detailTag(Icons.star, valueOf(item['rating'])),
+                        if (valueOf(item['runtime_minutes']).isNotEmpty) _detailTag(Icons.schedule, valueOf(item['runtime_minutes']) + ' دقيقة'),
                         _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie, isChannel ? 'قناة' : isSeries ? 'مسلسل' : 'فيلم'),
                       ],
                     ),
+                    if (director.isNotEmpty || castNames.isNotEmpty) ...[
+                      const SizedBox(height: 18),
+                      if (director.isNotEmpty) Text('المخرج: $director', style: const TextStyle(color: Colors.white70)),
+                      if (castNames.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 7), child: Text('الممثلون: $castNames', style: const TextStyle(color: Colors.white70, height: 1.5))),
+                    ],
                     const SizedBox(height: 25),
                     const Text('القصة والوصف', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
@@ -3549,3 +3562,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تشغيل تتبع المتصلين تلقائياً للزائر والحساب المسجل وتحديث الهوية عند الدخول والخروج.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تطوير صفحة تفاصيل الفيلم والمسلسل بخلفية عريضة وبوستر ومعلومات المخرج والممثلين والمدة.
