@@ -1701,7 +1701,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: active ? gold : Colors.white24,
+                            color: active ? AppTheme.sectionColor(_themeSection, 'primary') : AppTheme.sectionColor(_themeSection, 'border'),
                             width: active ? 1.2 : 0.7,
                           ),
                         ),
@@ -1711,7 +1711,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: active ? gold : AppTheme.sectionColor(_themeSection, 'secondaryText'),
+                            color: active ? AppTheme.sectionColor(_themeSection, 'primary') : AppTheme.sectionColor(_themeSection, 'secondaryText'),
                             fontSize: 10,
                             height: 1.3,
                             fontWeight: active
@@ -1725,7 +1725,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                     Text(
                       '($count)',
                       style: TextStyle(
-                        color: active ? gold : AppTheme.sectionColor(_themeSection, 'secondaryText'),
+                        color: active ? AppTheme.sectionColor(_themeSection, 'primary') : AppTheme.sectionColor(_themeSection, 'secondaryText'),
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3715,7 +3715,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         decoration: BoxDecoration(
           color: active ? AppTheme.sectionColor('live', 'primary').withOpacity(0.18) : AppTheme.sectionColor('live', 'panel'),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: active ? gold : Colors.white10, width: active ? 1.4 : 0.7),
+          border: Border.all(color: active ? AppTheme.sectionColor('live', 'primary') : AppTheme.sectionColor('live', 'border'), width: active ? 1.4 : 0.7),
         ),
         padding: const EdgeInsets.all(6),
         child: Column(
@@ -3752,7 +3752,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             Text(
               valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
               maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
-              style: TextStyle(color: active ? gold : AppTheme.sectionColor('live', 'text'), fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(color: active ? AppTheme.sectionColor('live', 'primary') : AppTheme.sectionColor('live', 'text'), fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -5085,4 +5085,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: ربط عدد أعمدة القنوات بنفس إعداد عدد بوسترات الأفلام والمسلسلات | التاريخ: 2026-11-21 | الوقت: 23:25:00 بتوقيت تركيا
+// آخر تعديل: استكمال ربط ألوان الباقات والقنوات النشطة بمتغيرات ألوان الأقسام | التاريخ: 2026-11-21 | الوقت: 23:17:00 بتوقيت تركيا
