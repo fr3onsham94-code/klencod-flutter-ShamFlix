@@ -1,10 +1,16 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -17,12 +23,15 @@ import 'admin_auth_service.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
-import 'shamflix_download_service.dart';
+import 'shamflix_presence_service.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
 final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
+final ValueNotifier<int> appSettingsRefreshNotifier = ValueNotifier<int>(0);
+final ValueNotifier<int> channelRefreshNotifier = ValueNotifier<int>(0);
+final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier<Locale>(const Locale('ar'));
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +43,8 @@ Future<void> main() async {
     const Duration(seconds: 20),
   );
   await ShamFlixLocalStore.initialize();
+  final savedLanguage = (await SharedPreferences.getInstance()).getString('shamflix_language') ?? 'ar';
+  appLocaleNotifier.value = Locale(savedLanguage);
   unawaited(syncShamFlixCloudData());
 
   runApp(const ShamFlixApp());
@@ -48,6 +59,17 @@ String valueOf(dynamic value, [String fallback = '']) {
     return fallback;
   }
   return value.toString();
+}
+
+String appText(String arabic, String english, String turkish) {
+  switch (appLocaleNotifier.value.languageCode) {
+    case 'en':
+      return english;
+    case 'tr':
+      return turkish;
+    default:
+      return arabic;
+  }
 }
 
 
@@ -69,10 +91,58 @@ class ShamFlixLocalStore {
     if (profiles.isEmpty) {
       await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
     }
-    final saved = prefs.getString(_activeProfileKey) ?? 'main';
     final available = await getProfiles();
-    activeProfileId = available.any((p) => p['id'] == saved) ? saved : 'main';
-    await prefs.setString(_activeProfileKey, activeProfileId);
+    await consolidateLocalProfiles(available);
+    activeProfileId = 'main';
+    await prefs.setString(_activeProfileKey, 'main');
+  }
+
+  static Future<void> consolidateLocalProfiles(
+    List<Map<String, dynamic>> profiles,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = profiles.map((profile) => profile['id']?.toString() ?? 'main').toSet();
+    ids.add('main');
+    for (final collection in ['favorites', 'history']) {
+      final combined = <Map<String, dynamic>>[];
+      for (final id in ids) {
+        combined.addAll(await getListForProfile(id, collection));
+      }
+      await setListForProfile('main', collection, mergeRecords(combined));
+    }
+    await setProfiles([{'id': 'main', 'name': 'ملفي الرئيسي'}]);
+    activeProfileId = 'main';
+    await prefs.setString(_activeProfileKey, 'main');
+    for (final id in ids.where((id) => id != 'main')) {
+      for (final key in prefs.getKeys().toList()) {
+        if (key.startsWith('shamflix_profile_${id}_') ||
+            key.startsWith('shamflix_player_${id}_')) {
+          await prefs.remove(key);
+        }
+      }
+    }
+  }
+
+  static List<Map<String, dynamic>> mergeRecords(
+    List<Map<String, dynamic>> records,
+  ) {
+    final byContent = <String, Map<String, dynamic>>{};
+    for (final record in records) {
+      final type = record['contentType']?.toString() ?? '';
+      final id = record['contentId']?.toString() ?? '';
+      if (type.isEmpty || id.isEmpty) continue;
+      final key = '$type:$id';
+      final old = byContent[key];
+      final nextTime = int.tryParse(record['updatedAt']?.toString() ?? '') ?? 0;
+      final oldTime = int.tryParse(old?['updatedAt']?.toString() ?? '') ?? -1;
+      if (old == null || nextTime >= oldTime) {
+        byContent[key] = Map<String, dynamic>.from(record);
+      }
+    }
+    final merged = byContent.values.toList()
+      ..sort((a, b) => (int.tryParse(b['updatedAt']?.toString() ?? '') ?? 0)
+          .compareTo(int.tryParse(a['updatedAt']?.toString() ?? '') ?? 0));
+    return merged.take(50).toList();
   }
 
   static String _key(String suffix) => 'shamflix_profile_${activeProfileId}_$suffix';
@@ -109,49 +179,6 @@ class ShamFlixLocalStore {
     } catch (_) {
       return [{'id': 'main', 'name': 'ملفي الرئيسي'}];
     }
-  }
-
-  static Future<bool> addProfile(String name) async {
-    final clean = name.trim();
-    if (clean.isEmpty) return false;
-    final profiles = await getProfiles();
-    if (profiles.length >= 5) return false;
-    profiles.add({'id': DateTime.now().microsecondsSinceEpoch.toString(), 'name': clean});
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profilesKey, jsonEncode(profiles));
-    localProfileRefreshNotifier.value++;
-    unawaited(syncShamFlixCloudData());
-    return true;
-  }
-
-  static Future<void> setActiveProfile(String id) async {
-    final profiles = await getProfiles();
-    if (!profiles.any((p) => p['id'] == id)) return;
-    activeProfileId = id;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_activeProfileKey, id);
-    localProfileRefreshNotifier.value++;
-    unawaited(syncShamFlixCloudData());
-  }
-
-  static Future<void> removeProfile(String id) async {
-    if (id == 'main') return;
-    final profiles = await getProfiles();
-    profiles.removeWhere((p) => p['id'] == id);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profilesKey, jsonEncode(profiles));
-    unawaited(ShamFlixCloudService.removeProfile(id).catchError((_) {}));
-    for (final key in prefs.getKeys().toList()) {
-      if (key.startsWith('shamflix_profile_${id}_') ||
-          key.startsWith('shamflix_player_${id}_')) {
-        await prefs.remove(key);
-      }
-    }
-    if (activeProfileId == id) {
-      activeProfileId = 'main';
-      await prefs.setString(_activeProfileKey, 'main');
-    }
-    localProfileRefreshNotifier.value++;
   }
 
   static Future<List<Map<String, dynamic>>> _readList(String key) async {
@@ -260,16 +287,38 @@ Future<void> syncShamFlixCloudData() async {
       await ShamFlixLocalStore.setListForProfile('main', 'history', []);
     }
     profiles = await ShamFlixCloudService.syncProfiles(profiles);
-    if (!profiles.any((p) => p['id'] == 'main')) profiles.insert(0, {'id': 'main', 'name': 'ملفي الرئيسي'});
-    await ShamFlixLocalStore.setProfiles(profiles);
+    if (!profiles.any((p) => p['id'] == 'main')) {
+      profiles.insert(0, {'id': 'main', 'name': 'ملفي الرئيسي'});
+    }
+    for (final collection in ['favorites', 'history']) {
+      final combined = <Map<String, dynamic>>[];
+      for (final profile in profiles) {
+        final id = profile['id'].toString();
+        final local = await ShamFlixLocalStore.getListForProfile(id, collection);
+        final merged = await ShamFlixCloudService.syncCollection(
+          profileId: id,
+          collection: collection,
+          localRecords: local,
+        );
+        combined.addAll(merged);
+      }
+      final consolidated = ShamFlixLocalStore.mergeRecords(combined);
+      final mainRecords = await ShamFlixCloudService.syncCollection(
+        profileId: 'main',
+        collection: collection,
+        localRecords: consolidated,
+      );
+      await ShamFlixLocalStore.setListForProfile('main', collection, mainRecords);
+    }
     for (final profile in profiles) {
       final id = profile['id'].toString();
-      for (final collection in ['favorites', 'history']) {
-        final local = await ShamFlixLocalStore.getListForProfile(id, collection);
-        final merged = await ShamFlixCloudService.syncCollection(profileId: id, collection: collection, localRecords: local);
-        await ShamFlixLocalStore.setListForProfile(id, collection, merged);
+      if (id != 'main') {
+        await ShamFlixCloudService.removeProfile(id);
       }
     }
+    await ShamFlixLocalStore.setProfiles([{'id': 'main', 'name': 'ملفي الرئيسي'}]);
+    ShamFlixLocalStore.activeProfileId = 'main';
+    await prefs.setString('shamflix_active_profile', 'main');
     await prefs.setString('shamflix_cloud_owner_id', userId);
     localProfileRefreshNotifier.value++;
   } catch (_) {
@@ -312,6 +361,16 @@ Future<void> openWatchRecord(BuildContext context, Map<String, dynamic> record) 
   final title = record['title']?.toString() ?? 'ShamFlix';
   final progressKey = record['progressKey']?.toString() ?? '$type-$id';
   try {
+    final networkPrefs = await SharedPreferences.getInstance();
+    if (networkPrefs.getBool('shamflix_wifi_only') == true) {
+      final connections = await Connectivity().checkConnectivity();
+      if (!connections.contains(ConnectivityResult.wifi)) {
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط.')),
+        );
+        return;
+      }
+    }
     var servers = <Map<String, dynamic>>[];
     if (id.isNotEmpty) {
       try {
@@ -353,17 +412,22 @@ class ShamFlixApp extends StatefulWidget {
   State<ShamFlixApp> createState() => _ShamFlixAppState();
 }
 
-class _ShamFlixAppState extends State<ShamFlixApp> {
+class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
   StreamSubscription<AuthState>? authSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(ShamFlixPresenceService.start());
 
     authSubscription =
         AuthService.client.auth.onAuthStateChange.listen(
       (data) {
         authRefreshNotifier.value++;
+        if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.signedOut || data.event == AuthChangeEvent.initialSession) {
+          unawaited(ShamFlixPresenceService.sendHeartbeat());
+        }
         if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.initialSession) {
           unawaited(syncShamFlixCloudData());
         }
@@ -392,14 +456,34 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ShamFlixPresenceService.start());
+    } else {
+      unawaited(ShamFlixPresenceService.stop());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(ShamFlixPresenceService.stop());
     authSubscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return ValueListenableBuilder<Locale>(
+      valueListenable: appLocaleNotifier,
+      builder: (context, locale, _) => MaterialApp(
+      locale: locale,
+      supportedLocales: const [Locale('ar'), Locale('en'), Locale('tr')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       title: 'ShamFlix',
@@ -411,6 +495,7 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
         ),
       ),
       home: const HomePage(),
+    ),
     );
   }
 }
@@ -451,6 +536,7 @@ class _HomePageState extends State<HomePage> {
     loadCategoryBadgeSetting();
     authRefreshNotifier.addListener(onAuthChanged);
     localProfileRefreshNotifier.addListener(onProfileChanged);
+    channelRefreshNotifier.addListener(onChannelsChanged);
   }
 
   // جلب إعداد الشارة من Supabase
@@ -484,10 +570,17 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() {});
   }
 
+  void onChannelsChanged() {
+    if (mounted) setState(() {
+      channels = SupabaseService.getChannels();
+    });
+  }
+
   @override
   void dispose() {
     authRefreshNotifier.removeListener(onAuthChanged);
     localProfileRefreshNotifier.removeListener(onProfileChanged);
+    channelRefreshNotifier.removeListener(onChannelsChanged);
     super.dispose();
   }
 
@@ -639,7 +732,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              valueOf(item['title'], 'بدون عنوان'),
+              valueOf(item['title'], appText('بدون عنوان', 'Untitled', 'Başlıksız')),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -689,7 +782,13 @@ class _HomePageState extends State<HomePage> {
                 );
               }
 
-              final items = filterCategory(snapshot.data ?? []);
+              final sourceItems = snapshot.data ?? [];
+              final items = title == appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler')
+                  ? sourceItems.where((item) {
+                      final category = valueOf(item['category']).toLowerCase();
+                      return category.contains('أنمي') || category.contains('انمي') || category.contains('anime');
+                    }).toList()
+                  : sourceItems;
 
               if (items.isEmpty) {
                 return const Center(
@@ -720,6 +819,69 @@ class _HomePageState extends State<HomePage> {
   }
 
 
+  Widget recentChannelsSection() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: recentHistory,
+      builder: (context, snapshot) {
+        final records = (snapshot.data ?? []).where((item) {
+          final type = valueOf(item['contentType']).toLowerCase();
+          return type == 'channel' || item['isChannel'] == true;
+        }).take(12).toList();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            sectionTitle(appText('آخر القنوات مشاهدة', 'Recently Watched Channels', 'Son İzlenen Kanallar')),
+            SizedBox(
+              height: 112,
+              child: snapshot.connectionState == ConnectionState.waiting
+                  ? const Center(child: CircularProgressIndicator(color: gold))
+                  : records.isEmpty
+                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: Colors.white54)))
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          reverse: true,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: records.length,
+                          itemBuilder: (context, index) {
+                            final record = records[index];
+                            final item = record['item'] is Map
+                                ? Map<String, dynamic>.from(record['item'] as Map)
+                                : <String, dynamic>{};
+                            final logo = valueOf(item['logo_url'] ?? record['poster_url']);
+                            return GestureDetector(
+                              onTap: () => openWatchRecord(context, record),
+                              child: Container(
+                                width: 150,
+                                margin: const EdgeInsets.only(left: 10),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(12)),
+                                child: Row(children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(30),
+                                    child: SizedBox(
+                                      width: 48, height: 48,
+                                      child: logo.isEmpty
+                                          ? const ColoredBox(color: bg, child: Icon(Icons.live_tv, color: gold))
+                                          : Image.network(logo, fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => const ColoredBox(color: bg, child: Icon(Icons.live_tv, color: gold))),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(valueOf(record['title'], appText('قناة', 'Channel', 'Kanal')), maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                                ]),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget continueWatchingSection() {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: recentHistory,
@@ -743,7 +905,7 @@ class _HomePageState extends State<HomePage> {
                         Image.network(poster, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
                           Container(color: panel, child: const Icon(Icons.play_circle, color: gold, size: 42))))),
                     const SizedBox(height: 7),
-                    Text(valueOf(record['title'], 'محتوى'), maxLines: 1, overflow: TextOverflow.ellipsis,
+                    Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     Text('متابعة من ${formatWatchPosition(record['position'])}', style: const TextStyle(color: gold, fontSize: 11)),
                   ]),
@@ -787,14 +949,6 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const Spacer(),
                 IconButton(
-                  tooltip: 'الملفات الشخصية',
-                  onPressed: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()));
-                    if (mounted) setState(() => recentHistory = ShamFlixLocalStore.getHistory());
-                  },
-                  icon: const Icon(Icons.account_circle_outlined, color: gold),
-                ),
-                IconButton(
                   onPressed: () {
                     showSearch(
                       context: context,
@@ -804,127 +958,17 @@ class _HomePageState extends State<HomePage> {
                   icon: const Icon(Icons.search, color: Colors.white),
                 ),
                 IconButton(
-                  tooltip: 'التنزيلات',
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixDownloadsPage())),
-                  icon: const Icon(Icons.download_for_offline_outlined, color: gold),
-                ),
-                IconButton(
-                  tooltip: 'الإشعارات',
+                  tooltip: appText('الإشعارات', 'Notifications', 'Bildirimler'),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
                   icon: const Icon(Icons.notifications_none, color: gold),
                 ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              height: 220,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF604821),
-                    Color(0xFF211A10),
-                    panel,
-                  ],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  const Positioned(
-                    left: 20,
-                    top: 30,
-                    child: Icon(
-                      Icons.local_movies,
-                      color: Color(0x44FFFFFF),
-                      size: 130,
-                    ),
-                  ),
-                  Positioned(
-                    right: 18,
-                    bottom: 20,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'ShamFlix ORIGINAL',
-                          style: TextStyle(
-                            color: gold,
-                            fontSize: 12,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'اكتشف عالم السينما',
-                          style: TextStyle(
-                            fontSize: 23,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: gold,
-                            foregroundColor: Colors.black,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              selectedTab = 1;
-                            });
-                          },
-                          icon: const Icon(Icons.play_arrow),
-                          label: const Text('استكشف الآن'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          continueWatchingSection(),
-          sectionTitle('التصنيفات'),
-          SizedBox(
-            height: 43,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: categories.length,
-              itemBuilder: (context, index) {
-                final active = selectedCategory == index;
-
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      selectedCategory = index;
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 5),
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    decoration: BoxDecoration(
-                      color: active ? gold : panel,
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      categories[index],
-                      style: TextStyle(
-                        color: active ? Colors.black : Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          mediaSection('أحدث الأفلام', movies, isSeries: false),
-          mediaSection('المسلسلات', series, isSeries: true),
+          mediaSection(appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'), movies, isSeries: false),
+          mediaSection(appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'), series, isSeries: true),
+          mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), series, isSeries: true),
+          recentChannelsSection(),
           const SizedBox(height: 30),
         ],
       ),
@@ -932,107 +976,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget moviesPage() {
-    return ListView(
-      children: [
-        mediaSection('الأفلام', movies, isSeries: false),
-      ],
+    return PackageCatalogPage(
+      contentType: 'movie',
+      title: appText('الأفلام', 'Movies', 'Filmler'),
+      onSelect: (item) => openDetails(item, isSeries: false),
     );
   }
 
   Widget tvPage() {
-    return ListView(
-      children: [
-        mediaSection('المسلسلات', series, isSeries: true),
-      ],
+    return PackageCatalogPage(
+      contentType: 'series',
+      title: appText('المسلسلات', 'Series', 'Diziler'),
+      onSelect: (item) => openDetails(item, isSeries: true),
     );
   }
 
   Widget channelsPage() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: channels,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: gold),
-          );
-        }
-
-        if (snapshot.hasError) {
-          return const Center(
-            child: Text(
-              'تعذر تحميل القنوات',
-              style: TextStyle(color: Colors.white54),
-            ),
-          );
-        }
-
-        final items = snapshot.data ?? [];
-
-        if (items.isEmpty) {
-          return const Center(
-            child: Text(
-              'لا توجد قنوات منشورة حالياً',
-              style: TextStyle(color: Colors.white54),
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          color: gold,
-          onRefresh: refreshData,
-          child: ListView.builder(
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final channel = items[index];
-
-              return Card(
-                color: panel,
-                margin: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: bg,
-                    backgroundImage:
-                        valueOf(channel['logo_url']).isNotEmpty
-                            ? NetworkImage(valueOf(channel['logo_url']))
-                            : null,
-                    child: valueOf(channel['logo_url']).isEmpty
-                        ? const Icon(Icons.live_tv, color: gold)
-                        : null,
-                  ),
-                  title: Text(
-                    valueOf(channel['name'], 'قناة'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  subtitle: Text(
-                    valueOf(channel['category'], 'بث مباشر'),
-                    style: const TextStyle(color: Colors.white54),
-                  ),
-                  trailing: const Icon(
-                    Icons.play_circle_outline,
-                    color: gold,
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => DetailsPage(
-                          item: channel,
-                          isSeries: false,
-                          isChannel: true,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
+    return const ChannelsPackagesPage();
   }
 
   @override
@@ -1047,7 +1007,7 @@ class _HomePageState extends State<HomePage> {
     ];
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         body: SafeArea(
           child: IndexedStack(
@@ -1064,32 +1024,32 @@ class _HomePageState extends State<HomePage> {
               selectedTab = index;
             });
           },
-          destinations: const [
+          destinations: [
             NavigationDestination(
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home, color: gold),
-              label: 'الرئيسية',
+              label: appText('الرئيسية', 'Home', 'Ana Sayfa'),
             ),
             NavigationDestination(
               icon: Icon(Icons.movie_outlined),
-              label: 'الأفلام',
+              label: appText('الأفلام', 'Movies', 'Filmler'),
             ),
             NavigationDestination(
               icon: Icon(Icons.video_library_outlined),
-              label: 'المسلسلات',
+              label: appText('المسلسلات', 'Series', 'Diziler'),
             ),
             NavigationDestination(
               icon: Icon(Icons.live_tv_outlined),
-              label: 'مباشر',
+              label: appText('مباشر', 'Live TV', 'Canlı TV'),
             ),
             NavigationDestination(
               icon: Icon(Icons.favorite_outline),
-              label: 'المفضلة',
+              label: appText('المفضلة', 'Favorites', 'Favoriler'),
             ),
             NavigationDestination(
               icon: Icon(Icons.person_outline),
               selectedIcon: Icon(Icons.person, color: gold),
-              label: 'حسابي',
+              label: appText('حسابي', 'My Account', 'Hesabım'),
             ),
           ],
         ),
@@ -1097,6 +1057,222 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
+
+class PackageCatalogPage extends StatefulWidget {
+  final String contentType;
+  final String title;
+  final ValueChanged<Map<String, dynamic>> onSelect;
+
+  const PackageCatalogPage({
+    super.key,
+    required this.contentType,
+    required this.title,
+    required this.onSelect,
+  });
+
+  @override
+  State<PackageCatalogPage> createState() => _PackageCatalogPageState();
+}
+
+class _PackageCatalogPageState extends State<PackageCatalogPage> {
+  bool loading = true;
+  String? error;
+  String? selectedPackageId;
+  List<Map<String, dynamic>> packages = [];
+  List<Map<String, dynamic>> items = [];
+
+  String get tableName => widget.contentType == 'movie' ? 'movies' : 'series';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPackages();
+  }
+
+  Future<void> _loadPackages() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final rows = await AuthService.client
+          .from('content_packages')
+          .select('id,name,sort_order')
+          .eq('content_type', widget.contentType)
+          .order('sort_order')
+          .order('created_at');
+      packages = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      selectedPackageId = packages.isEmpty ? null : packages.first['id'].toString();
+      await _loadItems();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _loadItems() async {
+    if (selectedPackageId == null) {
+      final rows = await AuthService.client.from(tableName)
+          .select().eq('is_published', true).order('created_at', ascending: false);
+      items = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      return;
+    }
+    final links = await AuthService.client
+        .from('content_package_items')
+        .select('content_id')
+        .eq('package_id', selectedPackageId!)
+        .eq('content_type', widget.contentType);
+    final ids = links.map((row) => row['content_id'].toString()).toList();
+    if (ids.isEmpty) {
+      items = [];
+      return;
+    }
+    final rows = await AuthService.client.from(tableName)
+        .select().inFilter('id', ids)
+        .eq('is_published', true)
+        .order('created_at', ascending: false);
+    items = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  Future<void> _selectPackage(String id) async {
+    setState(() {
+      selectedPackageId = id;
+      loading = true;
+      error = null;
+    });
+    try {
+      await _loadItems();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Widget _poster(Map<String, dynamic> item) {
+    final url = valueOf(item['poster_url']);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: AspectRatio(
+        aspectRatio: 0.68,
+        child: url.isEmpty
+            ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 38))
+            : Image.network(url, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 38))),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Container(width: 4, height: 22, color: gold),
+                const SizedBox(width: 9),
+                Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(onPressed: _loadPackages, icon: const Icon(Icons.refresh, color: gold)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator(color: gold))
+                : error != null
+                    ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: 112,
+                            child: ListView(
+                              padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
+                              children: [
+                                if (packages.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Text(appText('كل المحتوى', 'All Content', 'Tüm İçerik'), textAlign: TextAlign.center, style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                                  ),
+                                ...packages.map((package) {
+                                  final id = package['id'].toString();
+                                  final active = id == selectedPackageId;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 7),
+                                    child: Material(
+                                      color: active ? const Color(0xFF493B25) : panel,
+                                      borderRadius: BorderRadius.circular(9),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(9),
+                                        onTap: () => _selectPackage(id),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 13),
+                                          child: Text(
+                                            package['name']?.toString() ?? 'باقة',
+                                            textAlign: TextAlign.center,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: active ? gold : Colors.white70,
+                                              fontSize: 12,
+                                              fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                          const VerticalDivider(width: 1, color: Color(0xFF333333)),
+                          Expanded(
+                            child: items.isEmpty
+                                ? Center(child: Text(appText('لا يوجد محتوى في هذه الباقة حالياً', 'No content in this package yet', 'Bu pakette henüz içerik yok'), style: TextStyle(color: Colors.white54)))
+                                : GridView.builder(
+                                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      childAspectRatio: 0.58,
+                                      crossAxisSpacing: 10,
+                                      mainAxisSpacing: 12,
+                                    ),
+                                    itemCount: items.length,
+                                    itemBuilder: (context, index) {
+                                      final item = items[index];
+                                      return GestureDetector(
+                                        onTap: () => widget.onSelect(item),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            Expanded(child: _poster(item)),
+                                            const SizedBox(height: 6),
+                                            Text(valueOf(item['title'], appText('بدون عنوان', 'Untitled', 'Başlıksız')),
+                                                maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                                            Text(valueOf(item['release_year'], ''),
+                                                style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ShamFlix - آخر تحديث: 21-11-2026: قوائم الأفلام والمسلسلات مرتبطة بالباقات مع اختيار جانبي ومحتوى متعدد الباقات.
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -1205,6 +1381,26 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
+  Future<void> inviteFriend() async {
+    try {
+      final row = await AuthService.client.from('app_settings')
+          .select('setting_value').eq('setting_key', 'invite_link').maybeSingle();
+      final raw = row?['setting_value'];
+      final link = valueOf(raw is Map ? raw['url'] : raw);
+      if (link.isEmpty) {
+        showMessage('رابط الدعوة لم تتم إضافته بعد من لوحة الإدارة');
+        return;
+      }
+      await AndroidIntent(
+        action: 'android.intent.action.SEND',
+        type: 'text/plain',
+        arguments: {'android.intent.extra.TEXT': 'جرّب تطبيق ShamFlix: $link'},
+      ).launch();
+    } catch (e) {
+      showMessage('تعذر فتح المشاركة: $e');
+    }
+  }
+
   Widget accountTile({
     required IconData icon,
     required String title,
@@ -1296,9 +1492,9 @@ class _AccountPageState extends State<AccountPage> {
           size: 85,
         ),
         const SizedBox(height: 12),
-        const Center(
+        Center(
           child: Text(
-            'حسابي',
+            appText('حسابي', 'My Account', 'Hesabım'),
             style: TextStyle(
               color: Colors.white,
               fontSize: 25,
@@ -1309,9 +1505,9 @@ class _AccountPageState extends State<AccountPage> {
         const SizedBox(height: 25),
 
         if (!loggedIn) ...[
-          const Center(
+          Center(
             child: Text(
-              'أهلاً بك في ShamFlix',
+              appText('أهلاً بك في ShamFlix', 'Welcome to ShamFlix', 'ShamFlix\'e hoş geldiniz'),
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 16,
@@ -1328,33 +1524,23 @@ class _AccountPageState extends State<AccountPage> {
               ),
               onPressed: openLogin,
               icon: const Icon(Icons.login),
-              label: const Text(
-                'تسجيل الدخول أو إنشاء حساب',
+              label: Text(
+                appText('تسجيل الدخول أو إنشاء حساب', 'Sign in or create an account', 'Giriş yap veya hesap oluştur'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ),
           const SizedBox(height: 15),
-          accountTile(icon: Icons.people_alt_outlined, title: 'الملفات الشخصية', subtitle: 'حتى 5 ملفات مستقلة',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()))),
-          accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'أفلامك ومسلسلاتك المحفوظة',
+          accountTile(icon: Icons.favorite_outline, title: appText('المفضلة', 'Favorites', 'Favoriler'), subtitle: appText('أفلامك ومسلسلاتك المحفوظة', 'Your saved movies and series', 'Kaydettiğiniz film ve diziler'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-          accountTile(
-            icon: Icons.settings_outlined,
-            title: 'إعدادات المشغل',
-            subtitle: 'اختيار المشغل الداخلي أو VLC أو MX Player',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ShamFlixPlayerSettingsPage(),
-                ),
-              );
-            },
-          ),
-
-          accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'آخر ما شاهدته على هذا الملف',
+          accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText(appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'), 'What you watched recently', 'Son izledikleriniz'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
+          accountTile(icon: Icons.settings_outlined, title: appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'), subtitle: appText('المشغل واللغة والشبكة والتخزين', 'Player, language, network and storage', 'Oynatıcı, dil, ağ ve depolama'),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppSettingsPage()))),
+          accountTile(icon: Icons.person_add_alt_1, title: appText('دعوة صديق', 'Invite a Friend', 'Arkadaşını Davet Et'), subtitle: appText('مشاركة رابط ShamFlix', 'Share the ShamFlix link', 'ShamFlix bağlantısını paylaş'),
+            onTap: inviteFriend),
+          accountTile(icon: Icons.policy_outlined, title: appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPage()))),
         ] else ...[
           Card(
             color: panel,
@@ -1387,7 +1573,7 @@ class _AccountPageState extends State<AccountPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      AuthService.isAdmin ? 'مدير' : 'مستخدم',
+                      AuthService.isAdmin ? appText('مدير', 'Admin', 'Yönetici') : appText('مستخدم', 'User', 'Kullanıcı'),
                       style: const TextStyle(
                         color: gold,
                         fontWeight: FontWeight.bold,
@@ -1404,8 +1590,8 @@ class _AccountPageState extends State<AccountPage> {
           if (AuthService.isAdmin)
             accountTile(
               icon: Icons.admin_panel_settings,
-              title: 'إدارة ShamFlix',
-              subtitle: 'إعدادات وأدوات الإدارة',
+              title: appText('إدارة ShamFlix', 'ShamFlix Admin', 'ShamFlix Yönetimi'),
+              subtitle: appText('إعدادات وأدوات الإدارة', 'Administration settings and tools', 'Yönetim ayarları ve araçları'),
               onTap: () {
                 Navigator.push(
                   context,
@@ -1416,26 +1602,16 @@ class _AccountPageState extends State<AccountPage> {
               },
             ),
 
-          accountTile(icon: Icons.people_alt_outlined, title: 'الملفات الشخصية', subtitle: 'حتى 5 ملفات مستقلة',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()))),
-          accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'أفلامك ومسلسلاتك المحفوظة',
+          accountTile(icon: Icons.favorite_outline, title: appText('المفضلة', 'Favorites', 'Favoriler'), subtitle: appText('أفلامك ومسلسلاتك المحفوظة', 'Your saved movies and series', 'Kaydettiğiniz film ve diziler'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-          accountTile(
-            icon: Icons.settings_outlined,
-            title: 'إعدادات المشغل',
-            subtitle: 'اختيار المشغل الداخلي أو VLC أو MX Player',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ShamFlixPlayerSettingsPage(),
-                ),
-              );
-            },
-          ),
-
-          accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'آخر ما شاهدته على هذا الملف',
+          accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText(appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'), 'What you watched recently', 'Son izledikleriniz'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
+          accountTile(icon: Icons.settings_outlined, title: appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'), subtitle: appText('المشغل واللغة والشبكة والتخزين', 'Player, language, network and storage', 'Oynatıcı, dil, ağ ve depolama'),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppSettingsPage()))),
+          accountTile(icon: Icons.person_add_alt_1, title: appText('دعوة صديق', 'Invite a Friend', 'Arkadaşını Davet Et'), subtitle: appText('مشاركة رابط ShamFlix', 'Share the ShamFlix link', 'ShamFlix bağlantısını paylaş'),
+            onTap: inviteFriend),
+          accountTile(icon: Icons.policy_outlined, title: appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPage()))),
 
           const SizedBox(height: 15),
 
@@ -1457,7 +1633,7 @@ class _AccountPageState extends State<AccountPage> {
                       ),
                     )
                   : const Icon(Icons.logout),
-              label: const Text('تسجيل الخروج'),
+              label: Text(appText('تسجيل الخروج', 'Sign out', 'Çıkış yap')),
             ),
           ),
         ],
@@ -1467,141 +1643,301 @@ class _AccountPageState extends State<AccountPage> {
 }
 
 
-class ProfileManagerPage extends StatefulWidget {
-  const ProfileManagerPage({super.key});
+class AppSettingsPage extends StatefulWidget {
+  const AppSettingsPage({super.key});
   @override
-  State<ProfileManagerPage> createState() => _ProfileManagerPageState();
+  State<AppSettingsPage> createState() => _AppSettingsPageState();
 }
-class _ProfileManagerPageState extends State<ProfileManagerPage> {
-  late Future<List<Map<String, dynamic>>> profiles;
-  @override
-  void initState() { super.initState(); profiles = ShamFlixLocalStore.getProfiles(); }
-  void reload() => setState(() => profiles = ShamFlixLocalStore.getProfiles());
 
-  Future<void> addProfile() async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
-      backgroundColor: panel, title: const Text('ملف شخصي جديد', style: TextStyle(color: gold)),
-      content: TextField(controller: controller, autofocus: true, maxLength: 24,
-        style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'اسم الملف الشخصي')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
-          onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('إضافة')),
-      ],
-    ));
-    controller.dispose();
-    if (name == null || name.trim().isEmpty) return;
-    final added = await ShamFlixLocalStore.addProfile(name);
+class _AppSettingsPageState extends State<AppSettingsPage> {
+  bool loading = true, wifiOnly = false, busy = false;
+  String language = 'ar';
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    if (!added) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يمكنك إنشاء 5 ملفات شخصية كحد أقصى')));
-    reload();
+    setState(() {
+      wifiOnly = prefs.getBool('shamflix_wifi_only') ?? false;
+      language = prefs.getString('shamflix_language') ?? 'ar';
+      loading = false;
+    });
   }
 
-  Future<void> removeProfile(Map<String, dynamic> profile) async {
-    final id = profile['id']?.toString() ?? '';
-    if (id == 'main') return;
-    final confirm = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
-      backgroundColor: panel, title: const Text('حذف الملف الشخصي؟', style: TextStyle(color: Colors.white)),
-      content: Text('سيتم حذف ملف "${profile['name']}" وبياناته المحلية من هذا الجهاز.', style: const TextStyle(color: Colors.white70)),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-        TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف', style: TextStyle(color: Colors.redAccent))),
-      ],
-    ));
+  Future<void> _setWifiOnly(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('shamflix_wifi_only', value);
+    if (mounted) setState(() => wifiOnly = value);
+  }
+
+  Future<void> _setLanguage(String? value) async {
+    if (value == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('shamflix_language', value);
+    appLocaleNotifier.value = Locale(value);
+    if (mounted) setState(() => language = value);
+    appSettingsRefreshNotifier.value++;
+  }
+
+  Future<void> _clearStorage() async {
+    setState(() => busy = true);
+    try {
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      final temp = await getTemporaryDirectory();
+      if (await temp.exists()) {
+        for (final entity in temp.listSync()) {
+          try { await entity.delete(recursive: true); } catch (_) {}
+        }
+      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم مسح الملفات المؤقتة وذاكرة الصور')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر مسح التخزين: $e')));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _clearHistory() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: gold)),
+        content: const Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('مسح السجل', style: TextStyle(color: Colors.redAccent))),
+        ],
+      ),
+    );
     if (confirm != true) return;
-    await ShamFlixLocalStore.removeProfile(id);
-    if (mounted) reload();
+    await ShamFlixLocalStore.clearHistory();
+    try {
+      await ShamFlixCloudService.clearCollection(profileId: ShamFlixLocalStore.activeProfileId, collection: 'history');
+    } catch (_) {}
+    localProfileRefreshNotifier.value++;
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم مسح سجل المشاهدة بالكامل')));
   }
 
-  @override
-  Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
-    child: Scaffold(
-      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('الملفات الشخصية')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(future: profiles, builder: (context, snapshot) {
-        final items = snapshot.data ?? [];
-        return ListView(padding: const EdgeInsets.all(16), children: [
-          const Text('اختر ملفاً لمتابعة المشاهدة بقوائمه وسجله المستقل.', style: TextStyle(color: Colors.white60)),
-          const SizedBox(height: 14),
-          for (final profile in items)
-            Card(color: panel, child: ListTile(
-              leading: const CircleAvatar(backgroundColor: Color(0xFF493B25), child: Icon(Icons.person, color: gold)),
-              title: Text(valueOf(profile['name']), style: const TextStyle(color: Colors.white)),
-              subtitle: Text(profile['id'] == ShamFlixLocalStore.activeProfileId ? 'الملف النشط' : 'اضغط للتبديل',
-                style: const TextStyle(color: Colors.white54)),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (profile['id'] == ShamFlixLocalStore.activeProfileId) const Icon(Icons.check_circle, color: gold),
-                if (profile['id'] != 'main') IconButton(tooltip: 'حذف الملف', onPressed: () => removeProfile(profile),
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
-              ]),
-              onTap: () async { await ShamFlixLocalStore.setActiveProfile(profile['id'].toString()); if (mounted) Navigator.pop(context); },
-            )),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(onPressed: items.length >= 5 ? null : addProfile, icon: const Icon(Icons.add),
-            label: const Text('إضافة ملف شخصي'),
-            style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold))),
-          const SizedBox(height: 8),
-          const Text('الملفات الشخصية محفوظة على هذا الجهاز ولا تغيّر حساب تسجيل الدخول.',
-            textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
-        ]);
-      }),
+  Future<void> _refreshChannels() async {
+    setState(() => busy = true);
+    try {
+      await SupabaseService.getChannels();
+      channelRefreshNotifier.value++;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث قائمة القنوات')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر تحديث القنوات: $e')));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  int _compareVersions(String current, String latest) {
+    List<int> parts(String value) => value.split('+').first
+        .split('.').map((part) => int.tryParse(part.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0).toList();
+    final a = parts(current), b = parts(latest);
+    final length = a.length > b.length ? a.length : b.length;
+    for (var i = 0; i < length; i++) {
+      final av = i < a.length ? a[i] : 0;
+      final bv = i < b.length ? b[i] : 0;
+      if (av != bv) return av.compareTo(bv);
+    }
+    return 0;
+  }
+
+  Future<void> _downloadAndInstallUpdate(String apkUrl) async {
+    setState(() => busy = true);
+    HttpClient? client;
+    try {
+      final uri = Uri.tryParse(apkUrl);
+      if (uri == null || !['https', 'http'].contains(uri.scheme)) {
+        throw Exception('رابط ملف التحديث غير صالح');
+      }
+      client = HttpClient();
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      if (response.statusCode != 200) throw Exception('فشل تنزيل التحديث (${response.statusCode})');
+      final directory = await getTemporaryDirectory();
+      final apkFile = File('${directory.path}/shamflix-update.apk');
+      if (await apkFile.exists()) await apkFile.delete();
+      await response.pipe(apkFile.openWrite());
+      final fileLength = await apkFile.length();
+      final header = await apkFile.openRead(0, 2).fold<List<int>>(<int>[], (all, chunk) => all..addAll(chunk));
+      if (fileLength < 1024 || header.length < 2 || header[0] != 0x50 || header[1] != 0x4B) {
+        await apkFile.delete();
+        throw Exception('الملف الذي تم تنزيله ليس ملف APK صالحاً');
+      }
+      await OpenFilex.open(
+        apkFile.path,
+        type: 'application/vnd.android.package-archive',
+      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تجهيز التحديث. أكمل التثبيت من نافذة أندرويد، وقد يطلب النظام السماح بالتثبيت من هذا المصدر.')),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تثبيت التحديث: $e')),
+      );
+    } finally {
+      client?.close(force: true);
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _checkForUpdate() async {
+    setState(() => busy = true);
+    try {
+      final row = await AuthService.client.from('app_settings')
+          .select('setting_value').eq('setting_key', 'app_update').maybeSingle();
+      final value = row?['setting_value'];
+      if (value is! Map || value['version'] == null || value['apk_url'] == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا يوجد تحديث منشور حالياً.')),
+        );
+        return;
+      }
+      final latest = value['version'].toString().trim();
+      final apkUrl = value['apk_url'].toString().trim();
+      final latestBuild = int.tryParse(value['build_number']?.toString() ?? '') ?? 0;
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
+      if (latestBuild <= currentBuild || _compareVersions(packageInfo.version, latest) > 0) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('أنت تستخدم أحدث إصدار (${packageInfo.version} / ${packageInfo.buildNumber}).')),
+        );
+        return;
+      }
+      if (!mounted) return;
+      var installAfterDialog = false;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('يتوفر تحديث جديد', style: TextStyle(color: gold)),
+          content: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('الإصدار الحالي: ${packageInfo.version}', style: const TextStyle(color: Colors.white70)),
+              Text('الإصدار الجديد: $latest', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              if ((value['release_notes']?.toString() ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('ما الجديد؟', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 5),
+                Text(value['release_notes'].toString(), style: const TextStyle(color: Colors.white70)),
+              ],
+            ],
+          )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('لاحقاً')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              onPressed: () {
+                installAfterDialog = true;
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('تنزيل وتثبيت'),
+            ),
+          ],
+        ),
+      );
+      if (installAfterDialog) await _downloadAndInstallUpdate(apkUrl);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر التحقق من التحديث: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Widget _tile(IconData icon, String title, String subtitle, VoidCallback onTap) => Card(
+    color: panel,
+    child: ListTile(
+      leading: Icon(icon, color: gold),
+      title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+      trailing: const Icon(Icons.chevron_left, color: gold),
+      onTap: busy ? null : onTap,
     ),
   );
-}
 
-class ShamFlixDownloadsPage extends StatefulWidget {
-  const ShamFlixDownloadsPage({super.key});
   @override
-  State<ShamFlixDownloadsPage> createState() => _ShamFlixDownloadsPageState();
-}
-class _ShamFlixDownloadsPageState extends State<ShamFlixDownloadsPage> {
-  late Future<List<Map<String, dynamic>>> downloads;
-  @override
-  void initState() { super.initState(); downloads = ShamFlixDownloadService.list(); }
-  void reload() => setState(() => downloads = ShamFlixDownloadService.list());
-
-  String _size(dynamic bytes) {
-    final value = (bytes as num?)?.toDouble() ?? 0;
-    if (value >= 1024 * 1024 * 1024) return '${(value / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    return '${(value / (1024 * 1024)).toStringAsFixed(1)} MB';
+  Widget build(BuildContext context) {
+    if (loading) return const Scaffold(backgroundColor: bg, body: Center(child: CircularProgressIndicator(color: gold)));
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(backgroundColor: bg, title: Text(appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'))),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          _tile(Icons.tune, appText('إعدادات ضبط المشغل', 'Player Settings', 'Oynatıcı Ayarları'), 'اختيار المشغل الداخلي أو VLC أو MX Player', () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage()));
+          }),
+          Card(
+            color: panel,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(children: [
+                const Icon(Icons.language, color: gold),
+                const SizedBox(width: 12),
+                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+                DropdownButton<String>(
+                  value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
+                  style: const TextStyle(color: Colors.white),
+                  items: const [
+                    DropdownMenuItem(value: 'ar', child: Text('العربية')),
+                    DropdownMenuItem(value: 'en', child: Text('English')),
+                    DropdownMenuItem(value: 'tr', child: Text('Türkçe')),
+                  ],
+                  onChanged: _setLanguage,
+                ),
+              ]),
+            ),
+          ),
+          Card(
+            color: panel,
+            child: SwitchListTile(
+              value: wifiOnly, activeColor: gold, secondary: const Icon(Icons.wifi, color: gold),
+              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: Colors.white)),
+              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: Colors.white54, fontSize: 12)),
+              onChanged: _setWifiOnly,
+            ),
+          ),
+          _tile(Icons.cleaning_services_outlined, appText('مسح التخزين المؤقت', 'Clear Cache', 'Önbelleği Temizle'), appText('مسح الملفات المؤقتة وذاكرة الصور فقط', 'Clear temporary files and image cache only', 'Yalnızca geçici dosyaları ve görsel önbelleğini temizle'), _clearStorage),
+          _tile(Icons.history, appText('مسح السجل بالكامل', 'Clear Watch History', 'İzleme Geçmişini Temizle'), appText('حذف سجل المشاهدة من الجهاز والحساب', 'Delete watch history from this device and account', 'İzleme geçmişini cihazdan ve hesaptan sil'), _clearHistory),
+          _tile(Icons.refresh, appText('تحديث قائمة القنوات', 'Refresh Channel List', 'Kanal Listesini Yenile'), appText('جلب أحدث القنوات المنشورة', 'Fetch the latest published channels', 'En yeni yayınlanan kanalları getir'), _refreshChannels),
+          _tile(Icons.system_update_alt, appText('البحث عن تحديث للتطبيق', 'Check for App Updates', 'Uygulama Güncellemelerini Kontrol Et'), appText('التحقق من وجود إصدار جديد', 'Check whether a new version is available', 'Yeni sürüm olup olmadığını kontrol et'), _checkForUpdate),
+          if (busy) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: gold))),
+        ]),
+      ),
+    );
   }
+}
 
+class PrivacyPage extends StatelessWidget {
+  const PrivacyPage({super.key});
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text('التنزيلات')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: downloads,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
-          final items = snapshot.data ?? [];
-          if (items.isEmpty) return const Center(child: Text('لا توجد ملفات محفوظة دون إنترنت', style: TextStyle(color: Colors.white54)));
-          return ListView.builder(
-            padding: const EdgeInsets.all(12), itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return Card(color: panel, child: ListTile(
-                leading: const Icon(Icons.movie, color: gold, size: 34),
-                title: Text(valueOf(item['title'], 'فيديو'), style: const TextStyle(color: Colors.white)),
-                subtitle: Text(_size(item['size']), style: const TextStyle(color: Colors.white54)),
-                trailing: PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white54),
-                  onSelected: (value) async {
-                    if (value == 'delete') { await ShamFlixDownloadService.remove(item); if (mounted) reload(); }
-                  },
-                  itemBuilder: (_) => const [PopupMenuItem(value: 'delete', child: Text('حذف التنزيل'))],
-                ),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(
-                  url: item['path'].toString(), title: valueOf(item['title'], 'فيديو'),
-                ))),
-              ));
-            },
-          );
-        },
-      ),
+      appBar: AppBar(backgroundColor: bg, title: Text(appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'))),
+      body: ListView(padding: const EdgeInsets.all(20), children: [
+        Text('SHAMFLIX', style: TextStyle(color: gold, fontSize: 25, fontWeight: FontWeight.bold)),
+        SizedBox(height: 14),
+        Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+        SizedBox(height: 8),
+        Text(appText('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', 'The ShamFlix name, design and interface are protected by their owners. Displayed content and streaming links remain subject to their respective rights holders.', 'ShamFlix adı, tasarımı ve arayüzü sahiplerine aittir. Gösterilen içerikler ve yayın bağlantıları ilgili hak sahiplerinin koşullarına tabidir.'), style: TextStyle(color: Colors.white70, height: 1.7)),
+        SizedBox(height: 20),
+        Text(appText('الخصوصية', 'Privacy', 'Gizlilik'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+        SizedBox(height: 8),
+        Text(appText('يستخدم التطبيق بيانات أساسية لتشغيل الحسابات وحفظ المفضلة وسجل المشاهدة وتحسين الخدمة.', 'The app uses basic data to operate accounts, save favorites and watch history, and improve the service.', 'Uygulama; hesapları çalıştırmak, favorileri ve izleme geçmişini kaydetmek ve hizmeti geliştirmek için temel verileri kullanır.'), style: TextStyle(color: Colors.white70, height: 1.7)),
+      ]),
     ),
   );
 }
@@ -1619,18 +1955,18 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text('إشعارات ShamFlix'),
+      appBar: AppBar(backgroundColor: bg, title: Text(appText('إشعارات ShamFlix', 'ShamFlix Notifications', 'ShamFlix Bildirimleri')),
         actions: [IconButton(onPressed: reload, icon: const Icon(Icons.refresh, color: gold))]),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: notifications,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
-          if (snapshot.hasError) return const Center(child: Text('تعذر تحميل الإشعارات. سجّل الدخول وحاول مجدداً.', style: TextStyle(color: Colors.white54)));
+          if (snapshot.hasError) return Center(child: Text(appText('تعذر تحميل الإشعارات. سجّل الدخول وحاول مجدداً.', 'Could not load notifications. Sign in and try again.', 'Bildirimler yüklenemedi. Giriş yapıp tekrar deneyin.'), style: TextStyle(color: Colors.white54)));
           final items = snapshot.data ?? [];
-          if (items.isEmpty) return const Center(child: Text('لا توجد إشعارات جديدة حالياً', style: TextStyle(color: Colors.white54)));
+          if (items.isEmpty) return Center(child: Text(appText('لا توجد إشعارات جديدة حالياً', 'No new notifications', 'Yeni bildirim yok'), style: TextStyle(color: Colors.white54)));
           return ListView.builder(
             padding: const EdgeInsets.all(12), itemCount: items.length,
             itemBuilder: (context, index) {
@@ -1638,7 +1974,7 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
               final read = item['is_read'] == true;
               return Card(color: panel, child: ListTile(
                 leading: Icon(item['content_type'] == 'episode' ? Icons.video_library : Icons.notifications_active, color: gold),
-                title: Text(valueOf(item['title'], 'محتوى جديد'), style: TextStyle(color: Colors.white, fontWeight: read ? FontWeight.normal : FontWeight.bold)),
+                title: Text(valueOf(item['title'], appText('محتوى جديد', 'New Content', 'Yeni İçerik')), style: TextStyle(color: Colors.white, fontWeight: read ? FontWeight.normal : FontWeight.bold)),
                 subtitle: Text(valueOf(item['body']), style: const TextStyle(color: Colors.white54)),
                 trailing: PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.white54),
@@ -1648,8 +1984,8 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
                     if (mounted) reload();
                   },
                   itemBuilder: (_) => [
-                    if (!read) const PopupMenuItem(value: 'read', child: Text('تحديد كمقروء')),
-                    const PopupMenuItem(value: 'delete', child: Text('حذف')),
+                    if (!read) PopupMenuItem(value: 'read', child: Text(appText('تحديد كمقروء', 'Mark as Read', 'Okundu Olarak İşaretle'))),
+                    PopupMenuItem(value: 'delete', child: Text(appText('حذف', 'Delete', 'Sil'))),
                   ],
                 ),
                 onTap: () async {
@@ -1680,16 +2016,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
-      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('المفضلة')),
+      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
-        if (items.isEmpty) return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.favorite_border, color: gold, size: 64), SizedBox(height: 12),
-          Text('قائمتك فارغة حالياً', style: TextStyle(color: Colors.white70)),
-          SizedBox(height: 5), Text('أضف الأفلام والمسلسلات من صفحة التفاصيل', style: TextStyle(color: Colors.white38)),
+        if (items.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.favorite_border, color: gold, size: 64), const SizedBox(height: 12),
+          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: const TextStyle(color: Colors.white70)),
+          const SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: const TextStyle(color: Colors.white38)),
         ]));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index];
@@ -1699,8 +2035,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
             leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? const Icon(Icons.movie, color: gold) :
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => const Icon(Icons.movie, color: gold)))),
-            title: Text(valueOf(record['title'], 'محتوى'), style: const TextStyle(color: Colors.white)),
-            subtitle: Text(record['isSeries'] == true ? 'مسلسل' : record['isChannel'] == true ? 'قناة' : 'فيلم',
+            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: const TextStyle(color: Colors.white)),
+            subtitle: Text(record['isSeries'] == true ? appText('مسلسل', 'Series', 'Dizi') : record['isChannel'] == true ? appText('قناة', 'Channel', 'Kanal') : appText('فيلم', 'Movie', 'Film'),
               style: const TextStyle(color: gold)),
             trailing: IconButton(icon: const Icon(Icons.favorite, color: gold), tooltip: 'إزالة من المفضلة',
               onPressed: () async => ShamFlixLocalStore.removeFavorite(record['contentType'].toString(), record['contentId'].toString())),
@@ -1728,24 +2064,24 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text('سجل المشاهدة'),
+      appBar: AppBar(backgroundColor: bg, title: Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
         actions: [IconButton(tooltip: 'مسح السجل', icon: const Icon(Icons.delete_sweep_outlined, color: gold),
           onPressed: () async => ShamFlixLocalStore.clearHistory())]),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
-        if (items.isEmpty) return const Center(child: Text('لا يوجد سجل مشاهدة بعد', style: TextStyle(color: Colors.white54)));
+        if (items.isEmpty) return Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: Colors.white54)));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index]; final poster = valueOf(record['poster_url']);
           return Card(color: panel, child: ListTile(
             leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? const Icon(Icons.play_circle, color: gold) :
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => const Icon(Icons.play_circle, color: gold)))),
-            title: Text(valueOf(record['title'], 'محتوى'), style: const TextStyle(color: Colors.white)),
-            subtitle: Text('آخر مشاهدة: ${formatWatchPosition(record['position'])}', style: const TextStyle(color: Colors.white54)),
+            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: const TextStyle(color: Colors.white)),
+            subtitle: Text('${appText('آخر مشاهدة:', 'Last watched:', 'Son izleme:')} ${formatWatchPosition(record['position'])}', style: const TextStyle(color: Colors.white54)),
             trailing: IconButton(icon: const Icon(Icons.close, color: Colors.white54),
               onPressed: () async => ShamFlixLocalStore.removeHistory(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => openWatchRecord(context, record),
@@ -1802,23 +2138,14 @@ class _DetailsPageState extends State<DetailsPage> {
     if (id.isEmpty) return;
     final saved = await ShamFlixLocalStore.toggleFavorite({
       'contentType': type, 'contentId': id,
-      'title': valueOf(widget.item['title'] ?? widget.item['name'], 'محتوى'),
+      'title': valueOf(widget.item['title'] ?? widget.item['name'], appText('محتوى', 'Content', 'İçerik')),
       'poster_url': valueOf(widget.item['poster_url'] ?? widget.item['logo_url']),
       'item': Map<String, dynamic>.from(widget.item),
       'isSeries': widget.isSeries, 'isChannel': widget.isChannel,
     });
     if (mounted) {
       setState(() => isFavorite = saved);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تمت الإضافة إلى المفضلة' : 'تمت الإزالة من المفضلة')));
-    }
-  }
-
-  Future<void> _downloadItem(String url, String title, String id) async {
-    try {
-      await ShamFlixDownloadService.download(url: url, title: title, contentId: id);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تنزيل المحتوى للمشاهدة دون إنترنت')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? appText('تمت الإضافة إلى المفضلة', 'Added to favorites', 'Favorilere eklendi') : appText('تمت الإزالة من المفضلة', 'Removed from favorites', 'Favorilerden kaldırıldı'))));
     }
   }
 
@@ -1867,7 +2194,7 @@ class _DetailsPageState extends State<DetailsPage> {
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('تقييمك للمحتوى', style: TextStyle(color: gold, fontSize: 17, fontWeight: FontWeight.bold)),
+          Text(appText('تقييمك للمحتوى', 'Your Rating', 'Puanınız'), style: TextStyle(color: gold, fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Row(children: [
             for (int i = 1; i <= 5; i++)
@@ -1877,15 +2204,15 @@ class _DetailsPageState extends State<DetailsPage> {
                 icon: Icon(i <= myRating ? Icons.star : Icons.star_border, color: gold),
               ),
             const Spacer(),
-            Text(average == 0 ? 'لا يوجد تقييم' : average.toStringAsFixed(1), style: const TextStyle(color: Colors.white)),
+            Text(average == 0 ? appText('لا يوجد تقييم', 'No rating yet', 'Henüz puan yok') : average.toStringAsFixed(1), style: const TextStyle(color: Colors.white)),
             const Icon(Icons.star, color: gold, size: 17),
             Text(' ($count)', style: const TextStyle(color: Colors.white54, fontSize: 12)),
           ]),
           Row(children: [
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'like'),
-              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? gold : Colors.white54), label: const Text('إعجاب')),
+              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? gold : Colors.white54), label: Text(appText('إعجاب', 'Like', 'Beğen'))),
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'dislike'),
-              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : Colors.white54), label: const Text('لا يعجبني')),
+              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : Colors.white54), label: Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
           ]),
         ]),
       ),
@@ -1910,7 +2237,7 @@ class _DetailsPageState extends State<DetailsPage> {
         if (items.isEmpty) return const SizedBox.shrink();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const SizedBox(height: 22),
-          const Text('قد يعجبك أيضاً', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           SizedBox(height: 195, child: ListView.builder(
             reverse: true, scrollDirection: Axis.horizontal, itemCount: items.length,
@@ -2033,7 +2360,7 @@ class _DetailsPageState extends State<DetailsPage> {
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
           child: SafeArea(
             child: Center(
               widthFactor: 1,
@@ -2050,7 +2377,7 @@ class _DetailsPageState extends State<DetailsPage> {
                     shrinkWrap: true,
                     padding: const EdgeInsets.all(12),
                     children: [
-                      const Text('اختر سيرفر التشغيل', textAlign: TextAlign.center,
+                      Text(appText('اختر سيرفر التشغيل', 'Choose a Server', 'Sunucu Seçin'), textAlign: TextAlign.center,
                         style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       ...servers.map((server) => ListTile(
@@ -2099,10 +2426,20 @@ class _DetailsPageState extends State<DetailsPage> {
     int initialServerIndex = 0,
     String progressKey = '',
   }) async {
+    final prefsForNetwork = await SharedPreferences.getInstance();
+    if (prefsForNetwork.getBool('shamflix_wifi_only') == true) {
+      final connections = await Connectivity().checkConnectivity();
+      if (!connections.contains(ConnectivityResult.wifi)) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط. غيّر إعداد الشبكة للمتابعة.')),
+        );
+        return;
+      }
+    }
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.hasScheme) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('رابط التشغيل غير صالح')),
+        SnackBar(content: Text(appText('رابط التشغيل غير صالح', 'Invalid playback link', 'Geçersiz oynatma bağlantısı'))),
       );
       return;
     }
@@ -2113,7 +2450,7 @@ class _DetailsPageState extends State<DetailsPage> {
         ));
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('نوع الرابط غير مدعوم داخل التطبيق')),
+          SnackBar(content: Text(appText('نوع الرابط غير مدعوم داخل التطبيق', 'This link type is not supported in the app', 'Bu bağlantı türü uygulamada desteklenmiyor'))),
         );
       }
       return;
@@ -2157,7 +2494,7 @@ class _DetailsPageState extends State<DetailsPage> {
               ? 'لم يتم العثور على VLC. تأكد من تثبيته.'
               : 'لم يتم العثور على MX Player. تأكد من تثبيته.'),
           action: SnackBarAction(
-            label: 'داخلي',
+            label: appText('داخلي', 'Built-in', 'Dahili'),
             onPressed: () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => ShamFlixPlayerPage(
                 url: url,
@@ -2214,12 +2551,7 @@ class _DetailsPageState extends State<DetailsPage> {
                     ),
               title: Text('$number - $episodeTitle', style: const TextStyle(color: Colors.white)),
               subtitle: const Text('تشغيل الحلقة', style: TextStyle(color: Colors.white54)),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (ShamFlixDownloadService.extensionFor(valueOf(episode['stream_url'])) != null)
-                  IconButton(tooltip: 'تنزيل الحلقة', icon: const Icon(Icons.download_outlined, color: gold),
-                    onPressed: () => _downloadItem(valueOf(episode['stream_url']), episodeTitle, episode['id'].toString())),
-                const Icon(Icons.play_circle_outline, color: gold),
-              ]),
+              trailing: const Icon(Icons.play_circle_outline, color: gold),
               onTap: () async {
                 final episodeRecord = Map<String, dynamic>.from(episode);
                 if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
@@ -2240,12 +2572,15 @@ class _DetailsPageState extends State<DetailsPage> {
     final item = widget.item;
     final isSeries = widget.isSeries;
     final isChannel = widget.isChannel;
-    final title = valueOf(item['title'] ?? item['name'], 'بدون عنوان');
+    final title = valueOf(item['title'] ?? item['name'], appText('بدون عنوان', 'Untitled', 'Başlıksız'));
     final poster = valueOf(item['poster_url'] ?? item['logo_url']);
-    final description = valueOf(item['description'], 'لا يوجد وصف لهذا المحتوى حالياً.');
+    final backdrop = valueOf(item['backdrop_url']);
+    final director = valueOf(item['director']);
+    final cast = valueOf(item['cast']);
+    final description = valueOf(item['description'], appText('لا يوجد وصف لهذا المحتوى حالياً.', 'No description is available for this title yet.', 'Bu içerik için henüz açıklama yok.'));
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: bg,
         appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
@@ -2256,14 +2591,42 @@ class _DetailsPageState extends State<DetailsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: double.infinity, height: 340, child: Stack(fit: StackFit.expand, children: [
-                poster.isEmpty ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)) :
-                  Image.network(poster, fit: isChannel ? BoxFit.contain : BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90))),
-                const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xEE090909)], stops: [0.35, 1.0]))),
-                Positioned(right: 20, left: 20, bottom: 22, child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 27, fontWeight: FontWeight.bold,
-                    shadows: [Shadow(color: Colors.black, blurRadius: 12)]))),
+              SizedBox(width: double.infinity, height: 350, child: Stack(fit: StackFit.expand, children: [
+                (backdrop.isNotEmpty || poster.isNotEmpty)
+                    ? Image.network(
+                        backdrop.isNotEmpty ? backdrop : poster,
+                        fit: isChannel ? BoxFit.contain : BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)),
+                      )
+                    : Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)),
+                const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x22000000), Color(0xF5090909)],
+                  stops: [0.05, 1.0],
+                ))),
+                Positioned(
+                  right: 18,
+                  left: 18,
+                  bottom: 18,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (!isChannel && poster.isNotEmpty)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(9),
+                          child: Image.network(poster, width: 92, height: 132, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(width: 92, height: 132, color: panel, child: const Icon(Icons.movie, color: gold))),
+                        ),
+                      if (!isChannel && poster.isNotEmpty) const SizedBox(width: 13),
+                      Expanded(
+                        child: Text(title, maxLines: 3, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
+                            shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
+                      ),
+                    ],
+                  ),
+                ),
               ])),
               Padding(
                 padding: const EdgeInsets.all(20),
@@ -2278,27 +2641,27 @@ class _DetailsPageState extends State<DetailsPage> {
                         if (valueOf(item['release_year']).isNotEmpty) _detailTag(Icons.calendar_today, valueOf(item['release_year'])),
                         if (valueOf(item['category']).isNotEmpty) _detailTag(Icons.category, valueOf(item['category'])),
                         if (valueOf(item['rating']).isNotEmpty) _detailTag(Icons.star, valueOf(item['rating'])),
-                        _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie, isChannel ? 'قناة' : isSeries ? 'مسلسل' : 'فيلم'),
+                        _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie, isChannel ? appText('قناة', 'Channel', 'Kanal') : isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film')),
                       ],
                     ),
                     const SizedBox(height: 25),
-                    const Text('القصة والوصف', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(appText('القصة والوصف', 'Story & Description', 'Hikâye ve Açıklama'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
+                    if (director.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    ],
+                    if (cast.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+                    ],
                     const SizedBox(height: 18),
                     _engagementPanel(),
                     _recommendationsSection(),
                     const SizedBox(height: 25),
-                    if (!isChannel && ShamFlixDownloadService.extensionFor(valueOf(item['stream_url'])) != null)
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _downloadItem(valueOf(item['stream_url']), title, item['id'].toString()),
-                          icon: const Icon(Icons.download, color: gold),
-                          label: const Text('تنزيل للمشاهدة دون إنترنت', style: TextStyle(color: gold)),
-                          style: OutlinedButton.styleFrom(side: const BorderSide(color: gold), padding: const EdgeInsets.all(14)),
-                        ),
-                      ),
                     if (!isSeries)
                       SizedBox(
                         width: double.infinity,
@@ -2311,7 +2674,7 @@ class _DetailsPageState extends State<DetailsPage> {
                             legacyUrl: item['stream_url']?.toString(),
                           ),
                           icon: const Icon(Icons.play_arrow),
-                          label: const Text('تشغيل الآن', style: TextStyle(fontWeight: FontWeight.bold)),
+                          label: Text(appText('تشغيل الآن', 'Play Now', 'Şimdi Oynat'), style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                     if (valueOf(item['stream_url']).isNotEmpty) ...[
@@ -2321,20 +2684,20 @@ class _DetailsPageState extends State<DetailsPage> {
                         child: TextButton.icon(
                           onPressed: () => copyStreamUrl(valueOf(item['stream_url'])),
                           icon: const Icon(Icons.copy, color: gold),
-                          label: const Text('نسخ رابط التشغيل', style: TextStyle(color: gold)),
+                          label: Text(appText('نسخ رابط التشغيل', 'Copy Playback Link', 'Oynatma Bağlantısını Kopyala'), style: TextStyle(color: gold)),
                         ),
                       ),
                     ],
                     if (isSeries) ...[
                       const SizedBox(height: 22),
-                      const Text('المواسم والحلقات', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
+                      Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'), style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       if (seasonsLoading)
                         const Center(child: CircularProgressIndicator(color: gold))
                       else if (seasonsError != null)
                         Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
                       else if (seasons.isEmpty)
-                        const Text('لا توجد مواسم منشورة حالياً', style: TextStyle(color: Colors.white54))
+                        Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'), style: TextStyle(color: Colors.white54))
                       else
                         ...seasons.map((season) => Card(
                               color: panel,
@@ -2407,16 +2770,16 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: const Text('إعدادات المشغل')),
+        appBar: AppBar(backgroundColor: bg, title: Text(appText('إعدادات المشغل', 'Player Settings', 'Oynatıcı Ayarları'))),
         body: loading
             ? const Center(child: CircularProgressIndicator(color: gold))
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  const Text('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', style: TextStyle(color: Colors.white70)),
+                  Text(appText('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', 'Choose the default player for movies, episodes and channels', 'Film, bölüm ve kanallar için varsayılan oynatıcıyı seçin'), style: TextStyle(color: Colors.white70)),
                   const SizedBox(height: 14),
                   _playerOption('internal', 'المشغل الداخلي', 'تشغيل داخل تطبيق ShamFlix', Icons.smart_display),
                   _playerOption('vlc', 'VLC', 'يتطلب تثبيت تطبيق VLC', Icons.play_circle),
@@ -2443,12 +2806,269 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
   }
 }
 
+class ChannelsPackagesPage extends StatefulWidget {
+  const ChannelsPackagesPage({super.key});
+
+  @override
+  State<ChannelsPackagesPage> createState() => _ChannelsPackagesPageState();
+}
+
+class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
+  bool loading = true;
+  String? error;
+  List<Map<String, dynamic>> packages = [];
+  List<Map<String, dynamic>> channels = [];
+  String? selectedPackageId;
+  Map<String, dynamic>? selectedChannel;
+  List<Map<String, dynamic>> selectedServers = [];
+  String selectedUrl = '';
+  bool starting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    channelRefreshNotifier.addListener(_onExternalRefresh);
+  }
+
+  void _onExternalRefresh() { _load(); }
+
+  @override
+  void dispose() {
+    channelRefreshNotifier.removeListener(_onExternalRefresh);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      final packageRows = await AuthService.client
+          .from('content_packages')
+          .select('id,name,sort_order')
+          .eq('content_type', 'channel')
+          .order('sort_order');
+      packages = packageRows.map((row) => Map<String, dynamic>.from(row)).toList();
+      selectedPackageId = packages.isEmpty ? null : packages.first['id'].toString();
+      await _loadChannels();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _loadChannels() async {
+    if (selectedPackageId == null) {
+      channels = await SupabaseService.getChannels();
+      return;
+    }
+    final links = await AuthService.client
+        .from('content_package_items')
+        .select('content_id')
+        .eq('content_type', 'channel')
+        .eq('package_id', selectedPackageId!);
+    final ids = links.map((row) => row['content_id'].toString()).toList();
+    if (ids.isEmpty) {
+      channels = [];
+      return;
+    }
+    final rows = await AuthService.client.from('channels')
+        .select().inFilter('id', ids)
+        .eq('is_published', true)
+        .order('name');
+    channels = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  Future<void> _selectPackage(String? id) async {
+    setState(() { selectedPackageId = id; loading = true; error = null; });
+    try {
+      await _loadChannels();
+      selectedChannel = null;
+      selectedServers = [];
+      selectedUrl = '';
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _playChannel(Map<String, dynamic> channel) async {
+    if (starting) return;
+    setState(() => starting = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('shamflix_wifi_only') == true) {
+        final connections = await Connectivity().checkConnectivity();
+        if (!connections.contains(ConnectivityResult.wifi)) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط.')),
+          );
+          return;
+        }
+      }
+      final id = channel['id']?.toString() ?? '';
+      final servers = id.isEmpty ? <Map<String, dynamic>>[] :
+          await SupabaseService.getPlaybackServers(contentType: 'channel', contentId: id);
+      final url = servers.isNotEmpty
+          ? valueOf(servers.first['stream_url'])
+          : valueOf(channel['stream_url']);
+      final uri = Uri.tryParse(url);
+      if (url.isEmpty || uri == null || !uri.hasScheme) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('رابط القناة غير متوفر حالياً')),
+        );
+        return;
+      }
+      await ShamFlixLocalStore.addHistory({
+        'contentType': 'channel',
+        'contentId': id,
+        'title': valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+        'poster_url': valueOf(channel['logo_url']),
+        'item': Map<String, dynamic>.from(channel),
+        'isChannel': true,
+        'progressKey': 'channel-$id',
+      });
+      if (!mounted) return;
+      setState(() {
+        selectedChannel = channel;
+        selectedServers = servers;
+        selectedUrl = url;
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تشغيل القناة: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => starting = false);
+    }
+  }
+
+  Widget _channelTile(Map<String, dynamic> channel) {
+    final active = selectedChannel?['id']?.toString() == channel['id']?.toString();
+    final logo = valueOf(channel['logo_url']);
+    return Card(
+      color: active ? const Color(0xFF302719) : panel,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: bg,
+          backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
+          child: logo.isEmpty ? const Icon(Icons.live_tv, color: gold) : null,
+        ),
+        title: Text(valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+            style: TextStyle(color: active ? gold : Colors.white, fontWeight: FontWeight.bold)),
+        subtitle: Text(valueOf(channel['category'], 'بث مباشر'),
+            style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        trailing: Icon(active ? Icons.graphic_eq : Icons.play_circle_outline, color: gold),
+        onTap: () => _playChannel(channel),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+            child: Row(children: [
+              Container(width: 4, height: 22, color: gold),
+              const SizedBox(width: 9),
+              Text(appText('البث المباشر', 'Live TV', 'Canlı TV'), style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(onPressed: _load, icon: const Icon(Icons.refresh, color: gold)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: selectedChannel == null || selectedUrl.isEmpty
+                    ? Container(
+                        color: Colors.black,
+                        child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.live_tv, color: gold, size: 48),
+                          const SizedBox(height: 8),
+                          Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'), style: TextStyle(color: Colors.white70)),
+                          if (starting) const Padding(padding: EdgeInsets.only(top: 8), child: CircularProgressIndicator(color: gold)),
+                        ])),
+                      )
+                    : ShamFlixPlayerPage(
+                        key: ValueKey('${selectedChannel!['id']}-$selectedUrl'),
+                        url: selectedUrl,
+                        title: valueOf(selectedChannel!['name'], appText('قناة', 'Channel', 'Kanal')),
+                        servers: selectedServers,
+                        progressKey: 'channel-${selectedChannel!['id']}',
+                        embedded: true,
+                        onClose: () => setState(() {
+                          selectedChannel = null;
+                          selectedServers = [];
+                          selectedUrl = '';
+                        }),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (packages.isNotEmpty)
+            SizedBox(
+              height: 42,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: packages.map((package) {
+                  final id = package['id'].toString();
+                  final active = id == selectedPackageId;
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 7),
+                    child: ChoiceChip(
+                      label: Text(package['name']?.toString() ?? 'باقة'),
+                      selected: active,
+                      selectedColor: const Color(0xFF493B25),
+                      backgroundColor: panel,
+                      labelStyle: TextStyle(color: active ? gold : Colors.white70, fontSize: 12),
+                      onSelected: (_) => _selectPackage(id),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator(color: gold))
+                : error != null
+                    ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
+                    : channels.isEmpty
+                        ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'), style: TextStyle(color: Colors.white54)))
+                        : RefreshIndicator(
+                            color: gold,
+                            onRefresh: _load,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                              itemCount: channels.length,
+                              itemBuilder: (context, index) => _channelTile(channels[index]),
+                            ),
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ShamFlix - آخر تحديث: 21-11-2026: صفحة القنوات بباقات ومشغّل مضمّن يحتفظ بميزات المشغل وسيرفراته.
+
 class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
   final String title;
   final List<Map<String, dynamic>> servers;
   final int initialServerIndex;
   final String progressKey;
+  final bool embedded;
+  final VoidCallback? onClose;
 
   const ShamFlixPlayerPage({
     super.key,
@@ -2457,6 +3077,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
     this.servers = const [],
     this.initialServerIndex = 0,
     this.progressKey = '',
+    this.embedded = false,
+    this.onClose,
   });
 
   @override
@@ -2494,8 +3116,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
     player = Player();
     controller = VideoController(player);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    _setLandscape(true);
+    landscape = !widget.embedded;
+    if (!widget.embedded) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      _setLandscape(true);
+    }
     player.stream.error.listen(_handlePlaybackError);
     _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
     _open();
@@ -2785,7 +3410,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                 child: ListView(
                   shrinkWrap: true,
                   children: [
-                    const ListTile(title: Text('مسار الصوت', textAlign: TextAlign.center,
+                    ListTile(title: Text(appText('مسار الصوت', 'Audio Track', 'Ses Parçası'), textAlign: TextAlign.center,
                       style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
                     for (int index = 0; index < tracks.length; index++)
                       ListTile(
@@ -2834,12 +3459,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                 child: ListView(
                   shrinkWrap: true,
                   children: [
-                    const ListTile(title: Text('الترجمة', textAlign: TextAlign.center,
+                    ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
                       style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
-                      title: const Text('إيقاف الترجمة', textAlign: TextAlign.center,
+                      title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
                     ),
@@ -3013,7 +3638,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: Colors.black,
         body: error != null
@@ -3031,8 +3656,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         const SizedBox(height: 18),
                         FilledButton(
                           style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('رجوع'),
+                          onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
+                          child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
                         ),
                       ],
                     ),
@@ -3081,7 +3706,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                   Icon(Icons.circle, size: 7,
                                     color: buffering ? gold : Colors.greenAccent),
                                   const SizedBox(width: 6),
-                                  Text(buffering ? 'جارٍ تحميل البث' : 'البث متصل',
+                                  Text(buffering ? appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor') : appText('البث متصل', 'Stream Connected', 'Yayın Bağlandı'),
                                     style: const TextStyle(color: Colors.white, fontSize: 10)),
                                 ],
                               ),
@@ -3103,7 +3728,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                               child: TextButton.icon(
                                 onPressed: _toggleControlsLock,
                                 icon: const Icon(Icons.lock_open_rounded, color: gold),
-                                label: const Text('فتح القفل',
+                                label: Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
                                     style: TextStyle(color: Colors.white)),
                               ),
                             ),
@@ -3139,9 +3764,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                     child: Row(
                                       children: [
                                         _controlButton(
-                                          icon: Icons.arrow_back_rounded,
+                                          icon: widget.embedded ? Icons.close_rounded : Icons.arrow_back_rounded,
                                           size: 22,
-                                          onTap: () => Navigator.pop(context),
+                                          onTap: widget.embedded ? (widget.onClose ?? () {}) : () => Navigator.pop(context),
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(
@@ -3295,12 +3920,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                     children: [
                                                       _toolButton(
                                                         icon: Icons.audiotrack_rounded,
-                                                        label: 'الصوت',
+                                                        label: appText('الصوت', 'Audio', 'Ses'),
                                                         onTap: _pickAudioTrack,
                                                       ),
                                                       _toolButton(
                                                         icon: Icons.subtitles_rounded,
-                                                        label: 'الترجمة',
+                                                        label: appText('الترجمة', 'Subtitles', 'Altyazılar'),
                                                         onTap: _pickSubtitleTrack,
                                                       ),
                                                       _toolButton(
@@ -3310,19 +3935,19 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                       ),
                                                       _toolButton(
                                                         icon: Icons.fit_screen_rounded,
-                                                        label: 'حجم الصورة',
+                                                        label: appText('حجم الصورة', 'Picture Size', 'Görüntü Boyutu'),
                                                         onTap: _cycleVideoFit,
                                                       ),
                                                       _toolButton(
                                                         icon: Icons.screen_rotation_alt_rounded,
-                                                        label: 'تدوير',
+                                                        label: appText('تدوير', 'Rotate', 'Döndür'),
                                                         onTap: _toggleFullscreen,
                                                       ),
                                                       _toolButton(
                                                         icon: controlsLocked
                                                             ? Icons.lock_open_rounded
                                                             : Icons.lock_outline_rounded,
-                                                        label: controlsLocked ? 'فتح القفل' : 'قفل اللمس',
+                                                        label: controlsLocked ? appText('فتح القفل', 'Unlock', 'Kilidi Aç') : appText('قفل اللمس', 'Lock Touch', 'Dokunmayı Kilitle'),
                                                         onTap: _toggleControlsLock,
                                                       ),
                                                     ],
@@ -3417,7 +4042,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -3485,7 +4110,7 @@ class ShamFlixSearch extends SearchDelegate {
     var selectedCategory = categoryFilter;
     await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setDialogState) => AlertDialog(
-        backgroundColor: panel, title: const Text('تصفية البحث', style: TextStyle(color: gold)),
+        backgroundColor: panel, title: Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: gold)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
             value: selectedCategory, dropdownColor: panel,
@@ -3498,10 +4123,10 @@ class ShamFlixSearch extends SearchDelegate {
             decoration: const InputDecoration(labelText: 'سنة الإصدار', hintText: 'مثال: 2026')),
         ]),
         actions: [
-          TextButton(onPressed: () { categoryFilter = 'الكل'; yearFilter = ''; Navigator.pop(dialogContext); }, child: const Text('مسح التصفية')),
+          TextButton(onPressed: () { categoryFilter = 'الكل'; yearFilter = ''; Navigator.pop(dialogContext); }, child: Text(appText('مسح التصفية', 'Clear Filters', 'Filtreleri Temizle'))),
           FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
             onPressed: () { categoryFilter = selectedCategory; yearFilter = yearController.text; Navigator.pop(dialogContext); },
-            child: const Text('تطبيق')),
+            child: Text(appText('تطبيق', 'Apply', 'Uygula'))),
         ],
       ),
     ));
@@ -3591,11 +4216,11 @@ class ShamFlixSearch extends SearchDelegate {
                 ),
               ),
               title: Text(
-                valueOf(item['title'], 'بدون عنوان'),
+                valueOf(item['title'], appText('بدون عنوان', 'Untitled', 'Başlıksız')),
                 style: const TextStyle(color: Colors.white),
               ),
               subtitle: Text(
-                isSeries ? 'مسلسل' : 'فيلم',
+                isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film'),
                 style: const TextStyle(color: gold),
               ),
               onTap: () {
@@ -3680,10 +4305,10 @@ class ShamFlixSearch extends SearchDelegate {
 // إضافة التبديل التلقائي بين السيرفرات وحفظ إعدادات المشغّل وموضع المشاهدة ومؤشر حالة الاتصال بتاريخ 21-11-2026.
 
 // ShamFlix - آخر تحديث: 21-11-2026
-// إضافة متابعة المشاهدة والمفضلة وسجل المشاهدة والبحث المتقدم والملفات الشخصية المتعددة.
+// إضافة متابعة المشاهدة والمفضلة وسجل المشاهدة والبحث المتقدم.
 // تطوير صفحة التفاصيل بتصميم سينمائي مع الحفاظ على منطق التشغيل والسيرفرات.
 
-// إصلاح فصل مفاتيح الملفات الشخصية وتنظيف بيانات الملف عند حذفه بتاريخ 21-11-2026.
+
 
 // تحسين استكمال الروابط غير المباشرة ودعم التصفية دون كتابة اسم، بتاريخ 21-11-2026.
 
@@ -3697,7 +4322,11 @@ class ShamFlixSearch extends SearchDelegate {
 // إضافة التنزيل المحلي للملفات المباشرة، تفضيل آخر سيرفر ناجح، وتحسين ذاكرة تخزين الصور.
 
 // ShamFlix - آخر تحديث: 21-11-2026
-// تحسينات المزامنة السحابية والتقييمات والتوصيات والتنزيلات والتنبيهات وتفضيل السيرفر.
+// تحديث 21-11-2026: إعادة تنظيم الرئيسية وإعدادات الزائر وإزالة واجهات التنزيل.
+// إضافة خيار Wi-Fi فقط والتحقق من التحديثات وتحديث القنوات وحقوق التطبيق.
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تقليل طلبات مزامنة تقدم المشاهدة السحابية إلى مرة كل 30 ثانية لكل محتوى.
+// ShamFlix - آخر تحديث: 21-11-2026: مشغل مضمن للقنوات مع الحفاظ على أدوات التحكم وسيرفرات البث.
+
+// ShamFlix - آخر تحديث: 21-11-2026: دمج المفضلة والسجل من الملفات القديمة في ملف واحد وإزالة تعدد الملفات.

@@ -1,10 +1,12 @@
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'admin_auth_service.dart';
+import 'admin_packages_page.dart';
 import 'supabase_service.dart';
 
 const Color adminBg = Color(0xFF090909);
@@ -26,6 +28,10 @@ class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> series = [];
   List<Map<String, dynamic>> channels = [];
   List<Map<String, dynamic>> users = [];
+  List<Map<String, dynamic>> activeSessions = [];
+  bool presenceLoading = false;
+  String? presenceError;
+  Timer? _presenceTimer;
 
   bool catalogLoading = false;
   String? catalogError;
@@ -38,6 +44,13 @@ class _AdminPageState extends State<AdminPage> {
   bool badgeSettingLoading = true;
   bool badgeSettingSaving = false;
   String? badgeSettingError;
+  final TextEditingController inviteLinkController = TextEditingController();
+  final TextEditingController updateVersionController = TextEditingController();
+  final TextEditingController updateBuildController = TextEditingController();
+  final TextEditingController updateApkController = TextEditingController();
+  final TextEditingController updateNotesController = TextEditingController();
+  bool appSettingsLoading = false;
+  bool appSettingsSaving = false;
 
   String currentSection = 'home';
   String userCategory = 'normal';
@@ -73,15 +86,26 @@ class _AdminPageState extends State<AdminPage> {
         '${SupabaseService.projectUrl}/rest/v1/app_settings',
       );
 
+  Uri get presenceUrl => Uri.parse(
+        '${SupabaseService.projectUrl}/rest/v1/app_presence',
+      );
+
   @override
   void initState() {
     super.initState();
     loadCategoryBadgeSetting();
+    loadAppLinksAndUpdateSettings();
   }
 
   @override
   void dispose() {
+    _presenceTimer?.cancel();
     searchController.dispose();
+    inviteLinkController.dispose();
+    updateVersionController.dispose();
+    updateBuildController.dispose();
+    updateApkController.dispose();
+    updateNotesController.dispose();
     super.dispose();
   }
 
@@ -187,6 +211,84 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> loadAppLinksAndUpdateSettings() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+    if (mounted) setState(() => appSettingsLoading = true);
+    try {
+      final rows = await AuthService.client
+          .from('app_settings')
+          .select('setting_key,setting_value')
+          .inFilter('setting_key', ['invite_link', 'app_update']);
+      for (final row in rows) {
+        final key = row['setting_key']?.toString();
+        final value = row['setting_value'];
+        if (key == 'invite_link') {
+          inviteLinkController.text = value is Map
+              ? value['url']?.toString() ?? ''
+              : value?.toString() ?? '';
+        } else if (key == 'app_update' && value is Map) {
+          updateVersionController.text = value['version']?.toString() ?? '';
+          updateBuildController.text = value['build_number']?.toString() ?? '';
+          updateApkController.text = value['apk_url']?.toString() ?? '';
+          updateNotesController.text = value['release_notes']?.toString() ?? '';
+        }
+      }
+    } catch (e) {
+      if (mounted) showMessage('تعذر تحميل إعدادات الدعوة والتحديث: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => appSettingsLoading = false);
+    }
+  }
+
+  Future<void> saveAppLinksAndUpdateSettings() async {
+    final inviteLink = inviteLinkController.text.trim();
+    final version = updateVersionController.text.trim();
+    final buildNumber = int.tryParse(updateBuildController.text.trim()) ?? 0;
+    final apkUrl = updateApkController.text.trim();
+    final notes = updateNotesController.text.trim();
+    if ((version.isEmpty) != (apkUrl.isEmpty) || (version.isNotEmpty && buildNumber < 1)) {
+      showMessage('أدخل رقم الإصدار ورقم البناء ورابط APK معاً', isError: true);
+      return;
+    }
+    if (inviteLink.isNotEmpty) {
+      final inviteUri = Uri.tryParse(inviteLink);
+      if (inviteUri == null || inviteUri.scheme != 'https') {
+        showMessage('يجب أن يكون رابط الدعوة آمناً ويبدأ بـ HTTPS', isError: true);
+        return;
+      }
+    }
+    if (apkUrl.isNotEmpty) {
+      final uri = Uri.tryParse(apkUrl);
+      if (uri == null || uri.scheme != 'https') {
+        showMessage('يجب أن يكون رابط APK آمناً ويبدأ بـ HTTPS', isError: true);
+        return;
+      }
+    }
+    setState(() => appSettingsSaving = true);
+    try {
+      await AuthService.client.from('app_settings').upsert([
+        {
+          'setting_key': 'invite_link',
+          'setting_value': inviteLink,
+        },
+        {
+          'setting_key': 'app_update',
+          'setting_value': {
+            'version': version,
+            'build_number': buildNumber,
+            'apk_url': apkUrl,
+            'release_notes': notes,
+          },
+        },
+      ], onConflict: 'setting_key');
+      showMessage('تم حفظ رابط الدعوة وإعدادات التحديث');
+    } catch (e) {
+      showMessage('تعذر حفظ الإعدادات: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => appSettingsSaving = false);
+    }
+  }
+
   Widget settingsSection() {
     if (badgeSettingLoading) {
       return const Center(
@@ -239,13 +341,167 @@ class _AdminPageState extends State<AdminPage> {
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ),
+        const SizedBox(height: 10),
+        Card(
+          color: adminPanel,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('رابط دعوة الأصدقاء', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: inviteLinkController,
+                  keyboardType: TextInputType.url,
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(hintText: 'https://...', hintStyle: TextStyle(color: Colors.white38)),
+                ),
+                const SizedBox(height: 18),
+                const Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                adminField(updateVersionController, 'رقم الإصدار الجديد', required: false),
+                adminField(updateBuildController, 'رقم البناء Android versionCode', required: false, keyboard: TextInputType.number),
+                adminField(updateApkController, 'رابط ملف APK الآمن HTTPS', required: false),
+                adminField(updateNotesController, 'ملاحظات التحديث', maxLines: 3, required: false),
+                const SizedBox(height: 8),
+                const Text('قبل رفع APK جديد، ارفع رقم versionCode في pubspec.yaml (مثلاً 1.0.1+2) ليكون أكبر من الإصدار المثبت. بعد حفظ الرابط والإصدار والبناء يستطيع الزائر تنزيل APK وتثبيته من داخل التطبيق.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5)),
+                FilledButton.icon(
+                  onPressed: appSettingsSaving ? null : saveAppLinksAndUpdateSettings,
+                  style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                  icon: appSettingsSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Icon(Icons.save),
+                  label: const Text('حفظ الإعدادات'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (appSettingsLoading)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(child: CircularProgressIndicator(color: adminGold)),
+          ),
       ],
     );
   }
 
   // =========================
+  Future<void> loadPresence() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin || presenceLoading) return;
+    setState(() {
+      presenceLoading = true;
+      presenceError = null;
+    });
+    try {
+      final cleanupBefore = DateTime.now().toUtc()
+          .subtract(const Duration(days: 1)).toIso8601String();
+      await http.delete(
+        presenceUrl.replace(queryParameters: {'last_seen': 'lt.$cleanupBefore'}),
+        headers: headers,
+      );
+
+      final cutoff = DateTime.now().toUtc()
+          .subtract(const Duration(minutes: 2)).toIso8601String();
+      final response = await http.get(
+        presenceUrl.replace(queryParameters: {
+          'select': 'session_id,user_id,display_name,last_seen',
+          'last_seen': 'gte.$cutoff',
+          'order': 'last_seen.desc',
+          'limit': '500',
+        }),
+        headers: headers,
+      );
+      if (response.statusCode != 200) throw Exception(_readError(response));
+      final rows = (jsonDecode(response.body) as List)
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final latestBySession = <String, Map<String, dynamic>>{};
+      for (final row in rows) {
+        final id = row['session_id']?.toString() ?? '';
+        if (id.isNotEmpty && !latestBySession.containsKey(id)) {
+          latestBySession[id] = row;
+        }
+      }
+      activeSessions = latestBySession.values.toList();
+    } catch (e) {
+      presenceError = e.toString();
+    }
+    if (mounted) setState(() => presenceLoading = false);
+  }
+
+  Widget presenceSection() {
+    if (presenceLoading) {
+      return const Center(child: CircularProgressIndicator(color: adminGold));
+    }
+    if (presenceError != null) return errorView(presenceError!, loadPresence);
+    if (activeSessions.isEmpty) {
+      return RefreshIndicator(
+        color: adminGold,
+        onRefresh: loadPresence,
+        child: ListView(children: const [
+          SizedBox(height: 120),
+          Center(child: Icon(Icons.wifi_off, color: Colors.white38, size: 48)),
+          SizedBox(height: 12),
+          Center(child: Text('لا يوجد زوار أو مستخدمون متصلون حالياً', style: TextStyle(color: Colors.white54))),
+        ]),
+      );
+    }
+    return RefreshIndicator(
+      color: adminGold,
+      onRefresh: loadPresence,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
+        children: [
+          Card(
+            color: adminPanel,
+            child: ListTile(
+              leading: const Icon(Icons.people_alt_outlined, color: adminGold, size: 32),
+              title: const Text('المتصلون خلال آخر دقيقتين', style: TextStyle(color: Colors.white)),
+              trailing: Text('${activeSessions.length}', style: const TextStyle(color: adminGold, fontSize: 24, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          ...activeSessions.map((session) {
+            final isGuest = session['user_id'] == null;
+            final date = DateTime.tryParse(session['last_seen']?.toString() ?? '')?.toLocal();
+            final time = date == null
+                ? 'الآن'
+                : '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+            return Card(
+              color: adminPanel,
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: adminGold.withOpacity(0.14),
+                  child: Icon(isGuest ? Icons.person_outline : Icons.account_circle, color: adminGold),
+                ),
+                title: Text(
+                  isGuest ? 'زائر بدون حساب' : (session['display_name']?.toString().isNotEmpty == true ? session['display_name'].toString() : 'مستخدم مسجل'),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(isGuest ? 'دخل التطبيق دون تسجيل حساب' : 'حساب مسجل',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                trailing: Text(time, style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   // التنقل بين الأقسام
   // =========================
+
+  Future<void> openPackageManager(String section) async {
+    final contentType = section == 'movies' ? 'movie' : section == 'series' ? 'series' : 'channel';
+    final title = section == 'movies' ? 'الأفلام' : section == 'series' ? 'المسلسلات' : 'القنوات';
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => AdminPackagesPage(contentType: contentType, title: title),
+    ));
+  }
 
   void navigateTo(String section) {
     setState(() {
@@ -260,6 +516,11 @@ class _AdminPageState extends State<AdminPage> {
       loadCatalog(section);
     } else if (section == 'users') {
       loadUsers();
+    } else if (section == 'presence') {
+      loadPresence();
+      _presenceTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted && currentSection == 'presence') loadPresence();
+      });
     } else if (section == 'settings') {
       loadCategoryBadgeSetting();
     }
@@ -279,6 +540,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   void goBack() {
+    _presenceTimer?.cancel();
     if (currentSection == 'userList') {
       setState(() {
         currentSection = 'users';
@@ -292,6 +554,7 @@ class _AdminPageState extends State<AdminPage> {
         currentSection == 'series' ||
         currentSection == 'channels' ||
         currentSection == 'users' ||
+        currentSection == 'presence' ||
         currentSection == 'settings') {
       setState(() {
         currentSection = 'home';
@@ -311,6 +574,8 @@ class _AdminPageState extends State<AdminPage> {
         return 'إدارة القنوات';
       case 'users':
         return 'إدارة المستخدمين';
+      case 'presence':
+        return 'المتصلون الآن';
       case 'settings':
         return 'إعدادات التطبيق';
       case 'userList':
@@ -376,7 +641,17 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> saveMovie(
+  String? _returnedRowId(String body) {
+    if (body.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is List && decoded.isNotEmpty) return decoded.first['id']?.toString();
+      if (decoded is Map) return decoded['id']?.toString();
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String?> saveMovie(
     Map<String, dynamic> movie, {
     String? id,
   }) async {
@@ -406,7 +681,9 @@ class _AdminPageState extends State<AdminPage> {
       throw Exception(_readError(response));
     }
 
+    final savedId = id ?? _returnedRowId(response.body);
     await loadMovies();
+    return savedId;
   }
 
   Future<void> deleteMovie(String id) async {
@@ -501,7 +778,7 @@ class _AdminPageState extends State<AdminPage> {
     if (mounted) setState(() => catalogLoading = false);
   }
 
-  Future<void> saveCatalogItem(
+  Future<String?> saveCatalogItem(
     String section,
     Map<String, dynamic> item, {
     String? id,
@@ -518,7 +795,9 @@ class _AdminPageState extends State<AdminPage> {
         response.statusCode != 204) {
       throw Exception(_readError(response));
     }
+    final savedId = id ?? _returnedRowId(response.body);
     await loadCatalog(section);
+    return savedId;
   }
 
     Future<void> deleteCatalogItem(String section, String id) async {
@@ -603,6 +882,16 @@ class _AdminPageState extends State<AdminPage> {
     bool isLive = existing?['is_live'] != false;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
+    final packageType = isSeries ? 'series' : 'channel';
+    final packageOptions = await _extraLoad('content_packages', {
+      'content_type': 'eq.$packageType',
+    }, order: 'sort_order.asc,created_at.asc');
+    final selectedPackageIds = existing == null
+        ? <String>[]
+        : await _loadAssignedPackageIds(packageType, existing['id'].toString());
+    final serverDrafts = isSeries
+        ? <Map<String, dynamic>>[]
+        : await _loadServerDrafts('channel', existing: existing, legacyUrl: existing?['stream_url']?.toString());
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -611,6 +900,7 @@ class _AdminPageState extends State<AdminPage> {
         builder: (context, setDialogState) => Directionality(
           textDirection: TextDirection.rtl,
           child: AlertDialog(
+            insetPadding: const EdgeInsets.all(8),
             backgroundColor: adminPanel,
             title: Text(
               '${existing == null ? 'إضافة' : 'تعديل'} ${isSeries ? 'مسلسل' : 'قناة'}',
@@ -618,6 +908,7 @@ class _AdminPageState extends State<AdminPage> {
             ),
             content: SizedBox(
               width: 500,
+              height: MediaQuery.of(context).size.height * 0.72,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -649,7 +940,13 @@ class _AdminPageState extends State<AdminPage> {
                                       final fetchedTitle = data['title']?.toString() ?? '';
                                       if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                       posterController.text = data['poster_url']?.toString() ?? '';
+                                      backdropController.text = data['backdrop_url']?.toString() ?? '';
                                       descriptionController.text = data['description']?.toString() ?? '';
+                                      directorController.text = data['director']?.toString() ?? '';
+                                      final castData = data['cast'];
+                                      castController.text = castData is List
+                                          ? castData.map((person) => person is Map ? person['name']?.toString() ?? '' : person.toString()).where((name) => name.isNotEmpty).join('، ')
+                                          : castData?.toString() ?? '';
                                       categoryController.text = data['category']?.toString() ?? '';
                                       yearController.text = data['release_year']?.toString() ?? '';
                                       final rating = data['rating'];
@@ -724,7 +1021,7 @@ class _AdminPageState extends State<AdminPage> {
                       adminField(ratingController, 'التقييم', keyboard: const TextInputType.numberWithOptions(decimal: true)),
                     ] else ...[
                       adminField(posterController, 'رابط شعار القناة'),
-                      adminField(streamController, 'رابط البث', required: true),
+                      _serverDraftsEditor(drafts: serverDrafts, setDialogState: setDialogState),
                       adminField(categoryController, 'تصنيف القناة'),
                       SwitchListTile(
                         value: isLive,
@@ -733,6 +1030,35 @@ class _AdminPageState extends State<AdminPage> {
                         onChanged: (value) => setDialogState(() => isLive = value),
                       ),
                     ],
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text('الباقات التي يظهر فيها هذا المحتوى',
+                          style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+                      subtitle: Text('تم اختيار ${selectedPackageIds.length} باقة',
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      children: packageOptions.isEmpty
+                          ? [const Padding(padding: EdgeInsets.all(12),
+                              child: Text('لا توجد باقات لهذا القسم. أنشئ باقة أولاً من صفحة إدارة الباقات.',
+                                  style: TextStyle(color: Colors.white54)))]
+                          : packageOptions.map((package) {
+                              final packageId = package['id'].toString();
+                              return CheckboxListTile(
+                                dense: true,
+                                value: selectedPackageIds.contains(packageId),
+                                activeColor: adminGold,
+                                checkColor: Colors.black,
+                                title: Text(package['name']?.toString() ?? 'باقة',
+                                    style: const TextStyle(color: Colors.white)),
+                                onChanged: (checked) => setDialogState(() {
+                                  if (checked == true) {
+                                    if (!selectedPackageIds.contains(packageId)) selectedPackageIds.add(packageId);
+                                  } else {
+                                    selectedPackageIds.remove(packageId);
+                                  }
+                                }),
+                              );
+                            }).toList(),
+                    ),
                     SwitchListTile(
                       value: published,
                       activeColor: adminGold,
@@ -752,7 +1078,7 @@ class _AdminPageState extends State<AdminPage> {
                 style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
                 onPressed: () {
                   if (titleController.text.trim().isEmpty ||
-                      (!isSeries && streamController.text.trim().isEmpty)) {
+                      (!isSeries && _firstServerUrl(serverDrafts).isEmpty)) {
                     showMessage(isSeries ? 'أدخل اسم المسلسل' : 'أدخل اسم القناة ورابط البث', isError: true);
                     return;
                   }
@@ -766,12 +1092,14 @@ class _AdminPageState extends State<AdminPage> {
                     data.addAll({
                       'tmdb_id': int.tryParse(tmdbController.text.trim()),
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                      'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                      'cast': castController.text.trim().isEmpty ? null : castController.text.trim(),
                       'release_year': int.tryParse(yearController.text.trim()),
                       'rating': double.tryParse(ratingController.text.trim()),
                     });
                   } else {
                     data.addAll({
-                      'stream_url': streamController.text.trim(),
+                      'stream_url': _firstServerUrl(serverDrafts),
                       'is_live': isLive,
                     });
                   }
@@ -787,18 +1115,30 @@ class _AdminPageState extends State<AdminPage> {
 
     titleController.dispose();
     posterController.dispose();
+    backdropController.dispose();
     descriptionController.dispose();
+    directorController.dispose();
+    castController.dispose();
     categoryController.dispose();
     yearController.dispose();
     ratingController.dispose();
     streamController.dispose();
     tmdbController.dispose();
-    if (result == null) return;
+    if (result == null) {
+      _disposeServerDrafts(serverDrafts);
+      return;
+    }
     try {
-      await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      final savedId = await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      if (savedId != null) {
+        if (!isSeries) await _saveServerDrafts('channel', savedId, serverDrafts);
+        await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
+      }
       showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
     } catch (e) {
       showMessage(e.toString(), isError: true);
+    } finally {
+      _disposeServerDrafts(serverDrafts);
     }
   }
 
@@ -901,6 +1241,15 @@ class _AdminPageState extends State<AdminPage> {
     final isSeries = section == 'series';
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          child: SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            onPressed: () => openPackageManager(section),
+            icon: const Icon(Icons.folder_open),
+            label: Text(isSeries ? 'إدارة باقات المسلسلات' : 'إدارة باقات القنوات'),
+            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+          )),
+        ),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
           child: list.isEmpty
@@ -932,6 +1281,40 @@ class _AdminPageState extends State<AdminPage> {
 
   Uri _extraTableUrl(String table) =>
       Uri.parse(SupabaseService.projectUrl + '/rest/v1/' + table);
+
+  Future<List<String>> _loadAssignedPackageIds(String contentType, String contentId) async {
+    final rows = await _extraLoad('content_package_items', {
+      'content_type': 'eq.$contentType',
+      'content_id': 'eq.$contentId',
+    });
+    return rows.map((row) => row['package_id'].toString()).toList();
+  }
+
+  Future<void> _saveContentPackageAssignments(
+    String contentType,
+    String contentId,
+    List<String> packageIds,
+  ) async {
+    final uri = _extraTableUrl('content_package_items').replace(queryParameters: {
+      'content_type': 'eq.$contentType',
+      'content_id': 'eq.$contentId',
+    });
+    final removed = await http.delete(uri, headers: headers);
+    if (removed.statusCode != 200 && removed.statusCode != 204) throw Exception(_readError(removed));
+    if (packageIds.isEmpty) return;
+    final response = await http.post(
+      _extraTableUrl('content_package_items'),
+      headers: headers,
+      body: jsonEncode(packageIds.map((packageId) => {
+        'package_id': packageId,
+        'content_type': contentType,
+        'content_id': contentId,
+      }).toList()),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201 && response.statusCode != 204) {
+      throw Exception(_readError(response));
+    }
+  }
 
   Future<List<Map<String, dynamic>>> _extraLoad(
     String table,
@@ -984,6 +1367,161 @@ class _AdminPageState extends State<AdminPage> {
     );
     if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception(_readError(response));
+    }
+  }
+
+  Map<String, dynamic> _newServerDraft({
+    String name = '',
+    String url = '',
+    bool active = true,
+  }) => {
+    'name': TextEditingController(text: name),
+    'url': TextEditingController(text: url),
+    'active': active,
+  };
+
+  Future<List<Map<String, dynamic>>> _loadServerDrafts(
+    String type, {
+    Map<String, dynamic>? existing,
+    String? legacyUrl,
+  }) async {
+    String foreignKey = type == 'movie' ? 'movie_id' : type == 'channel' ? 'channel_id' : 'episode_id';
+    final rows = existing == null
+        ? <Map<String, dynamic>>[]
+        : await _extraLoad('playback_servers', {
+            foreignKey: 'eq.${existing['id']}',
+          }, order: 'sort_order.asc,created_at.asc');
+    if (rows.isNotEmpty) {
+      return rows.map((row) => _newServerDraft(
+        name: row['server_name']?.toString() ?? '',
+        url: row['stream_url']?.toString() ?? '',
+        active: row['is_active'] != false,
+      )).toList();
+    }
+    return [
+      _newServerDraft(
+        name: 'السيرفر الأساسي',
+        url: legacyUrl?.trim() ?? '',
+      ),
+    ];
+  }
+
+  void _disposeServerDrafts(List<Map<String, dynamic>> drafts) {
+    for (final draft in drafts) {
+      (draft['name'] as TextEditingController).dispose();
+      (draft['url'] as TextEditingController).dispose();
+    }
+  }
+
+  Widget _serverDraftsEditor({
+    required List<Map<String, dynamic>> drafts,
+    required StateSetter setDialogState,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 12, bottom: 6),
+          child: Text('سيرفرات التشغيل', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+        ),
+        ...drafts.asMap().entries.map((entry) {
+          final index = entry.key;
+          final draft = entry.value;
+          final name = draft['name'] as TextEditingController;
+          final url = draft['url'] as TextEditingController;
+          return Card(
+            color: adminBg,
+            margin: const EdgeInsets.only(bottom: 9),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: Text('السيرفر ${index + 1}', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                      Switch(
+                        value: draft['active'] == true,
+                        activeColor: adminGold,
+                        onChanged: (value) => setDialogState(() => draft['active'] = value),
+                      ),
+                      IconButton(
+                        tooltip: 'حذف السيرفر',
+                        onPressed: () => setDialogState(() {
+                          final removed = drafts.removeAt(index);
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            (removed['name'] as TextEditingController).dispose();
+                            (removed['url'] as TextEditingController).dispose();
+                          });
+                        }),
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      ),
+                    ],
+                  ),
+                  adminField(name, 'اسم السيرفر'),
+                  adminField(url, 'رابط التشغيل', required: false),
+                ],
+              ),
+            ),
+          );
+        }),
+        OutlinedButton.icon(
+          onPressed: () => setDialogState(() => drafts.add(
+            _newServerDraft(name: 'السيرفر ${drafts.length + 1}'),
+          )),
+          icon: const Icon(Icons.add),
+          label: const Text('إضافة سيرفر آخر'),
+          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+        ),
+      ],
+    );
+  }
+
+  String _firstServerUrl(List<Map<String, dynamic>> drafts) {
+    for (final draft in drafts) {
+      final url = (draft['url'] as TextEditingController).text.trim();
+      if (draft['active'] == true && url.isNotEmpty) return url;
+    }
+    return '';
+  }
+
+  Future<void> _saveServerDrafts(
+    String type,
+    String contentId,
+    List<Map<String, dynamic>> drafts,
+  ) async {
+    final foreignKey = type == 'movie' ? 'movie_id' : type == 'channel' ? 'channel_id' : 'episode_id';
+    final deleted = await http.delete(
+      _extraTableUrl('playback_servers').replace(queryParameters: {
+        foreignKey: 'eq.$contentId',
+      }),
+      headers: headers,
+    );
+    if (deleted.statusCode != 200 && deleted.statusCode != 204) {
+      throw Exception(_readError(deleted));
+    }
+
+    final rows = <Map<String, dynamic>>[];
+    for (var index = 0; index < drafts.length; index++) {
+      final draft = drafts[index];
+      final url = (draft['url'] as TextEditingController).text.trim();
+      if (url.isEmpty) continue;
+      final name = (draft['name'] as TextEditingController).text.trim();
+      rows.add({
+        foreignKey: contentId,
+        'server_name': name.isEmpty ? 'السيرفر ${index + 1}' : name,
+        'stream_url': url,
+        'sort_order': index,
+        'is_active': draft['active'] == true,
+      });
+    }
+    if (rows.isEmpty) return;
+    final saved = await http.post(
+      _extraTableUrl('playback_servers'),
+      headers: headers,
+      body: jsonEncode(rows),
+    );
+    if (saved.statusCode != 200 && saved.statusCode != 201 && saved.statusCode != 204) {
+      throw Exception(_readError(saved));
     }
   }
 
@@ -1456,6 +1994,11 @@ class _AdminPageState extends State<AdminPage> {
     final description = TextEditingController(text: existing?['description']?.toString() ?? '');
     final poster = TextEditingController(text: existing?['poster_url']?.toString() ?? '');
     final stream = TextEditingController(text: existing?['stream_url']?.toString() ?? '');
+    final serverDrafts = await _loadServerDrafts(
+      'episode',
+      existing: existing,
+      legacyUrl: existing?['stream_url']?.toString(),
+    );
     bool published = existing?['is_published'] == true;
 
     final data = await showDialog<Map<String, dynamic>>(
@@ -1476,7 +2019,7 @@ class _AdminPageState extends State<AdminPage> {
                     adminField(title, 'عنوان الحلقة', required: true),
                     adminField(description, 'وصف الحلقة', maxLines: 3),
                     adminField(poster, 'رابط صورة الحلقة'),
-                    adminField(stream, 'رابط التشغيل القديم (اختياري)'),
+                    _serverDraftsEditor(drafts: serverDrafts, setDialogState: setFormState),
                     SwitchListTile(
                       value: published,
                       activeColor: adminGold,
@@ -1497,13 +2040,17 @@ class _AdminPageState extends State<AdminPage> {
                     showMessage('أدخل رقم الحلقة وعنوانها', isError: true);
                     return;
                   }
+                  if (_firstServerUrl(serverDrafts).isEmpty) {
+                    showMessage('أضف رابط سيرفر واحد على الأقل للحلقة', isError: true);
+                    return;
+                  }
                   Navigator.pop(ctx, {
                     'season_id': seasonId,
                     'episode_number': n,
                     'title': title.text.trim(),
                     'description': description.text.trim().isEmpty ? null : description.text.trim(),
                     'poster_url': poster.text.trim().isEmpty ? null : poster.text.trim(),
-                    'stream_url': stream.text.trim().isEmpty ? null : stream.text.trim(),
+                    'stream_url': _firstServerUrl(serverDrafts),
                     'is_published': published,
                   });
                 },
@@ -1520,15 +2067,18 @@ class _AdminPageState extends State<AdminPage> {
     description.dispose();
     poster.dispose();
     stream.dispose();
-    if (data == null) return;
-    final id = await _extraSave('episodes', data, id: existing?['id']?.toString());
-    onSaved();
-    if (id != null && existing == null && mounted) {
-      await _managePlaybackServers(
-        type: 'episode',
-        contentId: id,
-        legacyUrl: data['stream_url']?.toString(),
-      );
+    if (data == null) {
+      _disposeServerDrafts(serverDrafts);
+      return;
+    }
+    try {
+      final id = await _extraSave('episodes', data, id: existing?['id']?.toString());
+      if (id != null) {
+        await _saveServerDrafts('episode', id, serverDrafts);
+      }
+      onSaved();
+    } finally {
+      _disposeServerDrafts(serverDrafts);
     }
   }
 
@@ -1605,8 +2155,8 @@ class _AdminPageState extends State<AdminPage> {
 
       // ترتيب المدراء أولاً، ثم الأحدث تسجيلاً.
       users.sort((a, b) {
-        final aAdmin = a['role'] == 'admin';
-        final bAdmin = b['role'] == 'admin';
+        final aAdmin = ['admin', 'manager'].contains(a['role']);
+        final bAdmin = ['admin', 'manager'].contains(b['role']);
 
         if (aAdmin != bAdmin) {
           return aAdmin ? -1 : 1;
@@ -1646,7 +2196,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   bool isUserAdmin(Map<String, dynamic> user) {
-    return user['role'] == 'admin';
+    return ['admin', 'manager'].contains(user['role']);
   }
 
   // =========================
@@ -2446,6 +2996,12 @@ class _AdminPageState extends State<AdminPage> {
     final descriptionController = TextEditingController(
       text: existing?['description']?.toString() ?? '',
     );
+    final directorController = TextEditingController(
+      text: existing?['director']?.toString() ?? '',
+    );
+    final castController = TextEditingController(
+      text: existing?['cast']?.toString() ?? '',
+    );
 
     final categoryController = TextEditingController(
       text: existing?['category']?.toString() ?? '',
@@ -2467,6 +3023,18 @@ class _AdminPageState extends State<AdminPage> {
         existing?['is_published'] == true;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
+    const packageType = 'movie';
+    final packageOptions = await _extraLoad('content_packages', {
+      'content_type': 'eq.movie',
+    }, order: 'sort_order.asc,created_at.asc');
+    final selectedPackageIds = existing == null
+        ? <String>[]
+        : await _loadAssignedPackageIds(packageType, existing['id'].toString());
+    final serverDrafts = await _loadServerDrafts(
+      'movie',
+      existing: existing,
+      legacyUrl: existing?['stream_url']?.toString(),
+    );
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -2477,6 +3045,7 @@ class _AdminPageState extends State<AdminPage> {
             return Directionality(
               textDirection: TextDirection.rtl,
               child: AlertDialog(
+                insetPadding: const EdgeInsets.all(8),
                 backgroundColor: adminPanel,
                 title: Text(
                   existing == null
@@ -2488,6 +3057,7 @@ class _AdminPageState extends State<AdminPage> {
                 ),
                 content: SizedBox(
                   width: 500,
+                  height: MediaQuery.of(context).size.height * 0.72,
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -2524,6 +3094,11 @@ class _AdminPageState extends State<AdminPage> {
                                         if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                         posterController.text = data['poster_url']?.toString() ?? '';
                                         descriptionController.text = data['description']?.toString() ?? '';
+                                        directorController.text = data['director']?.toString() ?? '';
+                                        final castData = data['cast'];
+                                        castController.text = castData is List
+                                            ? castData.map((person) => person is Map ? person['name']?.toString() ?? '' : person.toString()).where((name) => name.isNotEmpty).join('، ')
+                                            : castData?.toString() ?? '';
                                         categoryController.text = data['category']?.toString() ?? '';
                                         yearController.text = data['release_year']?.toString() ?? '';
                                         final rating = data['rating'];
@@ -2617,6 +3192,8 @@ class _AdminPageState extends State<AdminPage> {
                           'وصف الفيلم',
                           maxLines: 4,
                         ),
+                        adminField(directorController, 'المخرج', required: false),
+                        adminField(castController, 'الممثلون', maxLines: 3, required: false),
                         adminField(
                           categoryController,
                           'التصنيف',
@@ -2634,11 +3211,37 @@ class _AdminPageState extends State<AdminPage> {
                             decimal: true,
                           ),
                         ),
-                        adminField(
-                          streamController,
-                          'رابط التشغيل',
-                        ),
+                        _serverDraftsEditor(drafts: serverDrafts, setDialogState: setDialogState),
                         const SizedBox(height: 10),
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('الباقات التي يظهر فيها الفيلم',
+                              style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+                          subtitle: Text('تم اختيار ${selectedPackageIds.length} باقة',
+                              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          children: packageOptions.isEmpty
+                              ? [const Padding(padding: EdgeInsets.all(12),
+                                  child: Text('لا توجد باقات للأفلام. أنشئ باقة أولاً من إدارة الباقات.',
+                                      style: TextStyle(color: Colors.white54)))]
+                              : packageOptions.map((package) {
+                                  final packageId = package['id'].toString();
+                                  return CheckboxListTile(
+                                    dense: true,
+                                    value: selectedPackageIds.contains(packageId),
+                                    activeColor: adminGold,
+                                    checkColor: Colors.black,
+                                    title: Text(package['name']?.toString() ?? 'باقة',
+                                        style: const TextStyle(color: Colors.white)),
+                                    onChanged: (checked) => setDialogState(() {
+                                      if (checked == true) {
+                                        if (!selectedPackageIds.contains(packageId)) selectedPackageIds.add(packageId);
+                                      } else {
+                                        selectedPackageIds.remove(packageId);
+                                      }
+                                    }),
+                                  );
+                                }).toList(),
+                        ),
                         CheckboxListTile(
                           value: published,
                           activeColor: adminGold,
@@ -2691,6 +3294,10 @@ class _AdminPageState extends State<AdminPage> {
                         );
                         return;
                       }
+                      if (_firstServerUrl(serverDrafts).isEmpty) {
+                        showMessage('أضف رابط سيرفر واحد على الأقل', isError: true);
+                        return;
+                      }
 
                       final tmdbId = _extractTmdbId(
                         tmdbController.text,
@@ -2703,6 +3310,8 @@ class _AdminPageState extends State<AdminPage> {
                             posterController.text.trim(),
                         'description':
                             descriptionController.text.trim(),
+                        'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                        'cast': castController.text.trim().isEmpty ? null : castController.text.trim(),
                         'category':
                             categoryController.text.trim(),
                         'release_year': int.tryParse(
@@ -2712,7 +3321,7 @@ class _AdminPageState extends State<AdminPage> {
                           ratingController.text.trim(),
                         ),
                         'stream_url':
-                            streamController.text.trim(),
+                            _firstServerUrl(serverDrafts),
                         'is_published': published,
                       });
                     },
@@ -2730,18 +3339,27 @@ class _AdminPageState extends State<AdminPage> {
     tmdbController.dispose();
     posterController.dispose();
     descriptionController.dispose();
+    directorController.dispose();
+    castController.dispose();
     categoryController.dispose();
     yearController.dispose();
     ratingController.dispose();
     streamController.dispose();
 
-    if (result == null) return;
+    if (result == null) {
+      _disposeServerDrafts(serverDrafts);
+      return;
+    }
 
     try {
       final rawId = existing?['id'];
       final String? id = rawId?.toString();
 
-      await saveMovie(result, id: id);
+      final savedId = await saveMovie(result, id: id);
+      if (savedId != null) {
+        await _saveServerDrafts('movie', savedId, serverDrafts);
+        await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
+      }
 
       showMessage(
         existing == null
@@ -2750,6 +3368,8 @@ class _AdminPageState extends State<AdminPage> {
       );
     } catch (e) {
       showMessage(e.toString(), isError: true);
+    } finally {
+      _disposeServerDrafts(serverDrafts);
     }
   }
 
@@ -3023,6 +3643,12 @@ class _AdminPageState extends State<AdminPage> {
           onTap: () => navigateTo('channels'),
         ),
         _homeCard(
+          title: 'المتصلون الآن',
+          subtitle: 'عرض الزوار والمستخدمين حتى دون حساب',
+          icon: Icons.wifi_tethering,
+          onTap: () => navigateTo('presence'),
+        ),
+        _homeCard(
           title: 'المستخدمون',
           subtitle: 'إدارة المستخدمين والمدراء والمحظورين',
           icon: Icons.people_outline,
@@ -3152,6 +3778,7 @@ class _AdminPageState extends State<AdminPage> {
     final isChannels = currentSection == 'channels';
     final isCatalog = isSeries || isChannels;
     final isUsers = currentSection == 'users';
+    final isPresence = currentSection == 'presence';
     final isUserList = currentSection == 'userList';
     final isSettings = currentSection == 'settings';
 
@@ -3186,10 +3813,12 @@ class _AdminPageState extends State<AdminPage> {
             if (isUsers || isUserList)
               IconButton(
                 onPressed: loadUsers,
-                icon: const Icon(
-                  Icons.refresh,
-                  color: adminGold,
-                ),
+                icon: const Icon(Icons.refresh, color: adminGold),
+              ),
+            if (isPresence)
+              IconButton(
+                onPressed: loadPresence,
+                icon: const Icon(Icons.refresh, color: adminGold),
               ),
           ],
         ),
@@ -3224,7 +3853,9 @@ class _AdminPageState extends State<AdminPage> {
                     Icon(
                       isMovies
                           ? Icons.movie_creation_outlined
-                          : isSeries
+                          : isPresence
+                              ? Icons.wifi_tethering
+                              : isSeries
                               ? Icons.live_tv_outlined
                               : isChannels
                                   ? Icons.tv
@@ -3246,7 +3877,9 @@ class _AdminPageState extends State<AdminPage> {
                     Text(
                       isMovies
                           ? '${movies.length} فيلم'
-                          : isSeries
+                          : isPresence
+                              ? '${activeSessions.length} متصل'
+                              : isSeries
                               ? '${series.length} مسلسل'
                               : isChannels
                                   ? '${channels.length} قناة'
@@ -3268,6 +3901,8 @@ class _AdminPageState extends State<AdminPage> {
                       ? moviesSection()
                       : isCatalog
                           ? catalogSection(currentSection)
+                          : isPresence
+                          ? presenceSection()
                           : isUsers
                           ? usersLoading
                               ? const Center(
@@ -3314,6 +3949,15 @@ class _AdminPageState extends State<AdminPage> {
 
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          child: SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            onPressed: () => openPackageManager('movies'),
+            icon: const Icon(Icons.folder_open),
+            label: const Text('إدارة باقات الأفلام'),
+            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+          )),
+        ),
         searchBox(
           hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
         ),
@@ -3402,3 +4046,12 @@ class _AdminPageState extends State<AdminPage> {
 // تم استعادة إدارة المواسم والحلقات والسيرفرات
 // مع الحفاظ على نسخة saveCatalogItem الحالية.
 // ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026: ربط إدارة المحتوى بالباقات مع دعم إسناد العنصر لأكثر من باقة.
+
+// ShamFlix - آخر تحديث: 21-11-2026: لوحة المتصلين تعرض الزوار والمستخدمين المسجلين.
+
+// ShamFlix - آخر تحديث: 21-11-2026: إضافة وإدارة سيرفرات الحلقة من نموذج الحلقة نفسه.
+
+// ShamFlix - آخر تحديث: 21-11-2026: إعداد رابط دعوة الأصدقاء وإدارة ملف APK للتحديث الداخلي.
+
+// ShamFlix - آخر تحديث: 21-11-2026: حفظ وعرض المخرج والممثلين في تفاصيل الأفلام والمسلسلات.

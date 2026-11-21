@@ -4,6 +4,8 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {
+  static const String ownerUserId = 'dda16adb-3b6e-4244-a028-83df88b7801d';
+
   static const String _projectUrl =
       'https://qjagbdxuytnuzwcfbcse.supabase.co';
 
@@ -61,7 +63,8 @@ class AuthService {
     userId = user.id;
     userEmail = user.email;
 
-    isAdmin = user.appMetadata['role'] == 'admin';
+    isAdmin = user.id == ownerUserId ||
+        const ['admin', 'manager'].contains(user.appMetadata['role']);
   }
 
   // استعادة الجلسة التي يحفظها Supabase SDK تلقائياً.
@@ -160,8 +163,10 @@ class AuthService {
   }
 
   // إغلاق مستمع المصادقة عند الحاجة.
+  static bool get isOwner => userId == ownerUserId;
   static Future<void> dispose() async {
     await _authSubscription?.cancel();
     _authSubscription = null;
   }
 }
+// ShamFlix - آخر تحديث: 21-11-2026: توحيد وصول المدير والأدمن مع إبقاء مالك التطبيق بصلاحياته العليا.
