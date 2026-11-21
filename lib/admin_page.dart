@@ -10,9 +10,9 @@ import 'app_theme.dart';
 import 'admin_packages_page.dart';
 import 'supabase_service.dart';
 
-const Color adminBg = Color(0xFF090909);
-const Color adminGold = Color(0xFFE50914);
-const Color adminPanel = Color(0xFF191919);
+Color get adminBg => AppTheme.background;
+Color get adminGold => AppTheme.primary;
+Color get adminPanel => AppTheme.panel;
 
 const String ownerUserId =
     'dda16adb-3b6e-4244-a028-83df88b7801d';
@@ -416,7 +416,7 @@ class _AdminPageState extends State<AdminPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('تخصيص ألوان التطبيق', style: TextStyle(color: adminGold, fontSize: 17, fontWeight: FontWeight.bold)),
+            Text('تخصيص ألوان التطبيق', style: TextStyle(color: adminGold, fontSize: 17, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             const Text('غيّر الألوان باستخدام HEX مع معاينة فورية قبل الحفظ. الإعداد موحّد لجميع المستخدمين.', style: TextStyle(color: Colors.white60, fontSize: 12)),
             const SizedBox(height: 12),
@@ -460,7 +460,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget settingsSection() {
     if (badgeSettingLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(color: adminGold),
       );
     }
@@ -494,11 +494,11 @@ class _AdminPageState extends State<AdminPage> {
                   : 'الليبل مخفي عن جميع المستخدمين',
               style: const TextStyle(color: Colors.white60),
             ),
-            secondary: const Icon(Icons.local_offer_outlined, color: adminGold),
+            secondary: Icon(Icons.local_offer_outlined, color: adminGold),
           ),
         ),
         if (badgeSettingSaving)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(12),
             child: Center(
               child: CircularProgressIndicator(color: adminGold),
@@ -511,7 +511,7 @@ class _AdminPageState extends State<AdminPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Row(
+                Row(
                   children: [
                     Icon(Icons.grid_view_rounded, color: adminGold),
                     SizedBox(width: 9),
@@ -533,13 +533,13 @@ class _AdminPageState extends State<AdminPage> {
                 ),
                 const SizedBox(height: 12),
                 if (catalogGridColumnsLoading)
-                  const Center(child: CircularProgressIndicator(color: adminGold))
+                  Center(child: CircularProgressIndicator(color: adminGold))
                 else
                   DropdownButtonFormField<int>(
                     value: catalogGridColumns,
                     dropdownColor: adminPanel,
                     style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'اختر عدد الأعمدة',
                       labelStyle: TextStyle(color: Colors.white60),
                       enabledBorder: OutlineInputBorder(
@@ -560,7 +560,7 @@ class _AdminPageState extends State<AdminPage> {
                         : saveCatalogGridColumnsSetting,
                   ),
                 if (catalogGridColumnsSaving)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 10),
                     child: LinearProgressIndicator(color: adminGold),
                   ),
@@ -583,7 +583,7 @@ class _AdminPageState extends State<AdminPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('رابط دعوة الأصدقاء', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
+                Text('رابط دعوة الأصدقاء', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: inviteLinkController,
@@ -593,7 +593,7 @@ class _AdminPageState extends State<AdminPage> {
                   decoration: const InputDecoration(hintText: 'https://...', hintStyle: TextStyle(color: Colors.white38)),
                 ),
                 const SizedBox(height: 18),
-                const Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
+                Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
                 adminField(updateVersionController, 'رقم الإصدار الجديد', required: false),
                 adminField(updateBuildController, 'رقم البناء Android versionCode', required: false, keyboard: TextInputType.number),
@@ -615,7 +615,7 @@ class _AdminPageState extends State<AdminPage> {
           ),
         ),
         if (appSettingsLoading)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(12),
             child: Center(child: CircularProgressIndicator(color: adminGold)),
           ),
@@ -669,7 +669,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget presenceSection() {
     if (presenceLoading) {
-      return const Center(child: CircularProgressIndicator(color: adminGold));
+      return Center(child: CircularProgressIndicator(color: adminGold));
     }
     if (presenceError != null) return errorView(presenceError!, loadPresence);
     if (activeSessions.isEmpty) {
@@ -693,9 +693,9 @@ class _AdminPageState extends State<AdminPage> {
           Card(
             color: adminPanel,
             child: ListTile(
-              leading: const Icon(Icons.people_alt_outlined, color: adminGold, size: 32),
+              leading: Icon(Icons.people_alt_outlined, color: adminGold, size: 32),
               title: const Text('المتصلون خلال آخر دقيقتين', style: TextStyle(color: Colors.white)),
-              trailing: Text('${activeSessions.length}', style: const TextStyle(color: adminGold, fontSize: 24, fontWeight: FontWeight.bold)),
+              trailing: Text('${activeSessions.length}', style: TextStyle(color: adminGold, fontSize: 24, fontWeight: FontWeight.bold)),
             ),
           ),
           ...activeSessions.map((session) {
@@ -717,7 +717,7 @@ class _AdminPageState extends State<AdminPage> {
                 ),
                 subtitle: Text(isGuest ? 'دخل التطبيق دون تسجيل حساب' : 'حساب مسجل',
                     style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                trailing: Text(time, style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+                trailing: Text(time, style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
               ),
             );
           }),
@@ -1147,7 +1147,7 @@ class _AdminPageState extends State<AdminPage> {
             backgroundColor: adminPanel,
             title: Text(
               '${existing == null ? 'إضافة' : 'تعديل'} ${isSeries ? 'مسلسل' : 'قناة'}',
-              style: const TextStyle(color: adminGold),
+              style: TextStyle(color: adminGold),
             ),
             content: SizedBox(
               width: 500,
@@ -1206,12 +1206,12 @@ class _AdminPageState extends State<AdminPage> {
                                   }
                                 },
                           icon: tmdbLoading
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: adminGold))
+                              ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: adminGold))
                               : const Icon(Icons.cloud_download_outlined),
                           label: Text(tmdbLoading ? 'جارٍ جلب بيانات المسلسل...' : 'جلب بيانات المسلسل من TMDB'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: adminGold,
-                            side: const BorderSide(color: adminGold),
+                            side: BorderSide(color: adminGold),
                             padding: const EdgeInsets.symmetric(vertical: 13),
                           ),
                         ),
@@ -1237,7 +1237,7 @@ class _AdminPageState extends State<AdminPage> {
                                     width: 62,
                                     height: 90,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const SizedBox(width: 62, height: 90, child: Icon(Icons.live_tv, color: adminGold)),
+                                    errorBuilder: (_, __, ___) => SizedBox(width: 62, height: 90, child: Icon(Icons.live_tv, color: adminGold)),
                                   ),
                                 ),
                               const SizedBox(width: 10),
@@ -1245,7 +1245,7 @@ class _AdminPageState extends State<AdminPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(tmdbPreview!['title']?.toString() ?? '', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+                                    Text(tmdbPreview!['title']?.toString() ?? '', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 5),
                                     Text('تم جلب بيانات المسلسل بنجاح', style: const TextStyle(color: Colors.green, fontSize: 12)),
                                     if ((tmdbPreview!['director']?.toString() ?? '').isNotEmpty)
@@ -1277,7 +1277,7 @@ class _AdminPageState extends State<AdminPage> {
                     ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       title: Text('الباقات التي يظهر فيها هذا المحتوى',
-                          style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+                          style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
                       subtitle: Text('تم اختيار ${selectedPackageIds.length} باقة',
                           style: const TextStyle(color: Colors.white54, fontSize: 12)),
                       children: packageOptions.isEmpty
@@ -1397,7 +1397,7 @@ class _AdminPageState extends State<AdminPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: adminPanel,
-        title: Text('حذف ${isSeries ? 'المسلسل' : 'القناة'}', style: const TextStyle(color: adminGold)),
+        title: Text('حذف ${isSeries ? 'المسلسل' : 'القناة'}', style: TextStyle(color: adminGold)),
         content: Text('هل تريد حذف "$label" نهائياً؟', style: const TextStyle(color: Colors.white)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء', style: TextStyle(color: Colors.white70))),
@@ -1432,8 +1432,8 @@ class _AdminPageState extends State<AdminPage> {
                 width: 72,
                 height: 92,
                 child: imageUrl.isEmpty
-                    ? const ColoredBox(color: adminBg, child: Icon(Icons.live_tv, color: adminGold, size: 32))
-                    : Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const ColoredBox(color: adminBg, child: Icon(Icons.live_tv, color: adminGold))),
+                    ? ColoredBox(color: adminBg, child: Icon(Icons.live_tv, color: adminGold, size: 32))
+                    : Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: adminBg, child: Icon(Icons.live_tv, color: adminGold))),
               ),
             ),
             const SizedBox(width: 12),
@@ -1453,7 +1453,7 @@ class _AdminPageState extends State<AdminPage> {
                         IconButton(
                           tooltip: 'إدارة المواسم والحلقات',
                           onPressed: () => _openSeriesSeasons(item),
-                          icon: const Icon(Icons.video_library_outlined, color: adminGold),
+                          icon: Icon(Icons.video_library_outlined, color: adminGold),
                         )
                       else
                         IconButton(
@@ -1465,7 +1465,7 @@ class _AdminPageState extends State<AdminPage> {
                           ),
                           icon: const Icon(Icons.dns_outlined, color: Colors.lightBlueAccent),
                         ),
-                      IconButton(tooltip: 'تعديل', onPressed: () => openCatalogForm(section, existing: item), icon: const Icon(Icons.edit, color: adminGold)),
+                      IconButton(tooltip: 'تعديل', onPressed: () => openCatalogForm(section, existing: item), icon: Icon(Icons.edit, color: adminGold)),
                       IconButton(tooltip: published ? 'إلغاء النشر' : 'نشر', onPressed: () => toggleCatalogPublish(section, item), icon: Icon(published ? Icons.visibility_off : Icons.visibility, color: Colors.lightBlueAccent)),
                       IconButton(tooltip: 'حذف', onPressed: () => confirmDeleteCatalog(section, item), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
                     ],
@@ -1480,7 +1480,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Widget catalogSection(String section) {
-    if (catalogLoading) return const Center(child: CircularProgressIndicator(color: adminGold));
+    if (catalogLoading) return Center(child: CircularProgressIndicator(color: adminGold));
     if (catalogError != null) return errorView(catalogError!, () => loadCatalog(section));
     final list = filteredCatalogItems;
     final isSeries = section == 'series';
@@ -1492,7 +1492,7 @@ class _AdminPageState extends State<AdminPage> {
             onPressed: () => openPackageManager(section),
             icon: const Icon(Icons.folder_open),
             label: Text(isSeries ? 'إدارة باقات المسلسلات' : 'إدارة باقات القنوات'),
-            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: BorderSide(color: adminGold)),
           )),
         ),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
@@ -1665,7 +1665,7 @@ class _AdminPageState extends State<AdminPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 12, bottom: 6),
           child: Text('سيرفرات التشغيل', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
         ),
@@ -1683,7 +1683,7 @@ class _AdminPageState extends State<AdminPage> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text('السيرفر ${index + 1}', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                      Expanded(child: Text('السيرفر ${index + 1}', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
                       Switch(
                         value: draft['active'] == true,
                         activeColor: adminGold,
@@ -1715,7 +1715,7 @@ class _AdminPageState extends State<AdminPage> {
           )),
           icon: const Icon(Icons.add),
           label: const Text('إضافة سيرفر آخر'),
-          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: BorderSide(color: adminGold)),
         ),
       ],
     );
@@ -1795,7 +1795,7 @@ class _AdminPageState extends State<AdminPage> {
             backgroundColor: adminPanel,
             title: Text(
               existing == null ? 'إضافة سيرفر' : 'تعديل السيرفر',
-              style: const TextStyle(color: adminGold),
+              style: TextStyle(color: adminGold),
             ),
             content: SingleChildScrollView(
               child: Column(
@@ -1876,7 +1876,7 @@ class _AdminPageState extends State<AdminPage> {
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             backgroundColor: adminPanel,
-            title: const Text('سيرفرات التشغيل', style: TextStyle(color: adminGold)),
+            title: Text('سيرفرات التشغيل', style: TextStyle(color: adminGold)),
             content: SizedBox(
               width: 540,
               child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -1887,7 +1887,7 @@ class _AdminPageState extends State<AdminPage> {
                 ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SizedBox(
+                    return SizedBox(
                       height: 100,
                       child: Center(child: CircularProgressIndicator(color: adminGold)),
                     );
@@ -1938,7 +1938,7 @@ class _AdminPageState extends State<AdminPage> {
                                         );
                                         setDialogState(() {});
                                       },
-                                      icon: const Icon(Icons.edit, color: adminGold),
+                                      icon: Icon(Icons.edit, color: adminGold),
                                     ),
                                     IconButton(
                                       onPressed: () async {
@@ -1946,7 +1946,7 @@ class _AdminPageState extends State<AdminPage> {
                                           context: dialogContext,
                                           builder: (ctx) => AlertDialog(
                                             backgroundColor: adminPanel,
-                                            title: const Text('حذف السيرفر', style: TextStyle(color: adminGold)),
+                                            title: Text('حذف السيرفر', style: TextStyle(color: adminGold)),
                                             content: const Text('هل تريد حذف هذا السيرفر؟', style: TextStyle(color: Colors.white)),
                                             actions: [
                                               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
@@ -2003,14 +2003,14 @@ class _AdminPageState extends State<AdminPage> {
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             backgroundColor: adminPanel,
-            title: Text('مواسم ' + (seriesItem['title']?.toString() ?? 'المسلسل'), style: const TextStyle(color: adminGold)),
+            title: Text('مواسم ' + (seriesItem['title']?.toString() ?? 'المسلسل'), style: TextStyle(color: adminGold)),
             content: SizedBox(
               width: 540,
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: _extraLoad('seasons', {'series_id': 'eq.' + seriesId}, order: 'season_number.asc'),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
+                    return SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
                   }
                   if (snapshot.hasError) {
                     return Text(snapshot.error.toString(), style: const TextStyle(color: Colors.redAccent));
@@ -2036,7 +2036,7 @@ class _AdminPageState extends State<AdminPage> {
                                     IconButton(
                                       tooltip: 'الحلقات',
                                       onPressed: () => _openSeasonEpisodes(season),
-                                      icon: const Icon(Icons.video_library_outlined, color: adminGold),
+                                      icon: Icon(Icons.video_library_outlined, color: adminGold),
                                     ),
                                     IconButton(
                                       tooltip: 'تعديل',
@@ -2050,7 +2050,7 @@ class _AdminPageState extends State<AdminPage> {
                                           context: dialogContext,
                                           builder: (ctx) => AlertDialog(
                                             backgroundColor: adminPanel,
-                                            title: const Text('حذف الموسم', style: TextStyle(color: adminGold)),
+                                            title: Text('حذف الموسم', style: TextStyle(color: adminGold)),
                                             content: const Text('سيتم حذف حلقات الموسم أيضاً. هل تريد المتابعة؟', style: TextStyle(color: Colors.white)),
                                             actions: [
                                               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
@@ -2107,7 +2107,7 @@ class _AdminPageState extends State<AdminPage> {
         textDirection: TextDirection.rtl,
         child: AlertDialog(
           backgroundColor: adminPanel,
-          title: Text(existing == null ? 'إضافة موسم' : 'تعديل الموسم', style: const TextStyle(color: adminGold)),
+          title: Text(existing == null ? 'إضافة موسم' : 'تعديل الموسم', style: TextStyle(color: adminGold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2153,14 +2153,14 @@ class _AdminPageState extends State<AdminPage> {
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             backgroundColor: adminPanel,
-            title: Text('حلقات ' + (season['name']?.toString() ?? 'الموسم'), style: const TextStyle(color: adminGold)),
+            title: Text('حلقات ' + (season['name']?.toString() ?? 'الموسم'), style: TextStyle(color: adminGold)),
             content: SizedBox(
               width: 560,
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: _extraLoad('episodes', {'season_id': 'eq.' + seasonId}, order: 'episode_number.asc'),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
+                    return SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
                   }
                   if (snapshot.hasError) {
                     return Text(snapshot.error.toString(), style: const TextStyle(color: Colors.redAccent));
@@ -2189,7 +2189,7 @@ class _AdminPageState extends State<AdminPage> {
                                         contentId: episode['id'].toString(),
                                         legacyUrl: episode['stream_url']?.toString(),
                                       ),
-                                      icon: const Icon(Icons.dns_outlined, color: adminGold),
+                                      icon: Icon(Icons.dns_outlined, color: adminGold),
                                     ),
                                     IconButton(
                                       tooltip: 'تعديل',
@@ -2253,7 +2253,7 @@ class _AdminPageState extends State<AdminPage> {
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             backgroundColor: adminPanel,
-            title: Text(existing == null ? 'إضافة حلقة' : 'تعديل الحلقة', style: const TextStyle(color: adminGold)),
+            title: Text(existing == null ? 'إضافة حلقة' : 'تعديل الحلقة', style: TextStyle(color: adminGold)),
             content: SizedBox(
               width: 500,
               child: SingleChildScrollView(
@@ -2465,7 +2465,7 @@ class _AdminPageState extends State<AdminPage> {
           backgroundColor: adminPanel,
           title: Text(
             ban ? 'حظر المستخدم' : 'فك حظر المستخدم',
-            style: const TextStyle(color: adminGold),
+            style: TextStyle(color: adminGold),
           ),
           content: Text(
             ban
@@ -2545,7 +2545,7 @@ class _AdminPageState extends State<AdminPage> {
             makeAdmin
                 ? 'ترقية إلى مدير'
                 : 'إزالة صلاحية المدير',
-            style: const TextStyle(color: adminGold),
+            style: TextStyle(color: adminGold),
           ),
           content: Text(
             makeAdmin
@@ -2795,7 +2795,7 @@ class _AdminPageState extends State<AdminPage> {
                     ),
                     label: Text(
                       isAdmin ? 'إزالة المدير' : 'ترقية لمدير',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: adminGold,
                       ),
                     ),
@@ -2866,7 +2866,7 @@ class _AdminPageState extends State<AdminPage> {
           hintStyle: const TextStyle(
             color: Colors.white54,
           ),
-          prefixIcon: const Icon(
+          prefixIcon: Icon(
             Icons.search,
             color: adminGold,
           ),
@@ -2898,7 +2898,7 @@ class _AdminPageState extends State<AdminPage> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
+            borderSide: BorderSide(
               color: adminGold,
             ),
           ),
@@ -2942,16 +2942,16 @@ class _AdminPageState extends State<AdminPage> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: loadUsers,
-              icon: const Icon(
+              icon: Icon(
                 Icons.refresh,
                 color: adminGold,
               ),
-              label: const Text(
+              label: Text(
                 'تحديث بيانات المستخدمين',
                 style: TextStyle(color: adminGold),
               ),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: adminGold),
+                side: BorderSide(color: adminGold),
                 padding: const EdgeInsets.symmetric(
                   vertical: 13,
                 ),
@@ -3025,7 +3025,7 @@ class _AdminPageState extends State<AdminPage> {
                 children: [
                   Text(
                     '$count',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: adminGold,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -3046,7 +3046,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget userListSection() {
     if (usersLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
           color: adminGold,
         ),
@@ -3299,7 +3299,7 @@ class _AdminPageState extends State<AdminPage> {
                   existing == null
                       ? 'إضافة فيلم جديد'
                       : 'تعديل الفيلم',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: adminGold,
                   ),
                 ),
@@ -3364,7 +3364,7 @@ class _AdminPageState extends State<AdminPage> {
                                     }
                                   },
                             icon: tmdbLoading
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 18,
                                     height: 18,
                                     child: CircularProgressIndicator(
@@ -3376,7 +3376,7 @@ class _AdminPageState extends State<AdminPage> {
                             label: Text(tmdbLoading ? 'جارٍ جلب البيانات...' : 'جلب بيانات الفيلم من TMDB'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: adminGold,
-                              side: const BorderSide(color: adminGold),
+                              side: BorderSide(color: adminGold),
                               padding: const EdgeInsets.symmetric(vertical: 13),
                             ),
                           ),
@@ -3402,7 +3402,7 @@ class _AdminPageState extends State<AdminPage> {
                                       width: 72,
                                       height: 105,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const SizedBox(
+                                      errorBuilder: (_, __, ___) => SizedBox(
                                         width: 72,
                                         height: 105,
                                         child: Icon(Icons.movie, color: adminGold),
@@ -3465,7 +3465,7 @@ class _AdminPageState extends State<AdminPage> {
                         const SizedBox(height: 10),
                         ExpansionTile(
                           tilePadding: EdgeInsets.zero,
-                          title: const Text('الباقات التي يظهر فيها الفيلم',
+                          title: Text('الباقات التي يظهر فيها الفيلم',
                               style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
                           subtitle: Text('تم اختيار ${selectedPackageIds.length} باقة',
                               style: const TextStyle(color: Colors.white54, fontSize: 12)),
@@ -3660,7 +3660,7 @@ class _AdminPageState extends State<AdminPage> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(
+            borderSide: BorderSide(
               color: adminGold,
             ),
           ),
@@ -3677,7 +3677,7 @@ class _AdminPageState extends State<AdminPage> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: adminPanel,
-          title: const Text(
+          title: Text(
             'حذف الفيلم',
             style: TextStyle(color: adminGold),
           ),
@@ -3749,7 +3749,7 @@ class _AdminPageState extends State<AdminPage> {
                 width: 75,
                 height: 105,
                 child: poster.isEmpty
-                    ? const ColoredBox(
+                    ? ColoredBox(
                         color: adminBg,
                         child: Icon(
                           Icons.movie,
@@ -3761,7 +3761,7 @@ class _AdminPageState extends State<AdminPage> {
                         poster,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) {
-                          return const ColoredBox(
+                          return ColoredBox(
                             color: adminBg,
                             child: Icon(
                               Icons.movie,
@@ -3828,7 +3828,7 @@ class _AdminPageState extends State<AdminPage> {
                         onPressed: () {
                           openMovieForm(existing: movie);
                         },
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.edit,
                           color: adminGold,
                         ),
@@ -3973,7 +3973,7 @@ class _AdminPageState extends State<AdminPage> {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_left,
                 color: adminGold,
                 size: 28,
@@ -3994,7 +3994,7 @@ class _AdminPageState extends State<AdminPage> {
 
     return IconButton(
       onPressed: goBack,
-      icon: const Icon(
+      icon: Icon(
         Icons.arrow_back,
         color: adminGold,
       ),
@@ -4043,7 +4043,7 @@ class _AdminPageState extends State<AdminPage> {
           leading: buildBackButton(),
           title: Text(
             pageTitle,
-            style: const TextStyle(
+            style: TextStyle(
               color: adminGold,
               fontWeight: FontWeight.bold,
             ),
@@ -4052,7 +4052,7 @@ class _AdminPageState extends State<AdminPage> {
             if (isMovies)
               IconButton(
                 onPressed: loadMovies,
-                icon: const Icon(
+                icon: Icon(
                   Icons.refresh,
                   color: adminGold,
                 ),
@@ -4060,17 +4060,17 @@ class _AdminPageState extends State<AdminPage> {
             if (isCatalog)
               IconButton(
                 onPressed: () => loadCatalog(currentSection),
-                icon: const Icon(Icons.refresh, color: adminGold),
+                icon: Icon(Icons.refresh, color: adminGold),
               ),
             if (isUsers || isUserList)
               IconButton(
                 onPressed: loadUsers,
-                icon: const Icon(Icons.refresh, color: adminGold),
+                icon: Icon(Icons.refresh, color: adminGold),
               ),
             if (isPresence)
               IconButton(
                 onPressed: loadPresence,
-                icon: const Icon(Icons.refresh, color: adminGold),
+                icon: Icon(Icons.refresh, color: adminGold),
               ),
           ],
         ),
@@ -4138,7 +4138,7 @@ class _AdminPageState extends State<AdminPage> {
                                   : isUsers
                                       ? '${users.length} مستخدم'
                                       : '${filteredUsers.length} نتيجة',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: adminGold,
                         fontWeight: FontWeight.bold,
                       ),
@@ -4157,7 +4157,7 @@ class _AdminPageState extends State<AdminPage> {
                           ? presenceSection()
                           : isUsers
                           ? usersLoading
-                              ? const Center(
+                              ? Center(
                                   child: CircularProgressIndicator(
                                     color: adminGold,
                                   ),
@@ -4186,7 +4186,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget moviesSection() {
     if (loading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
           color: adminGold,
         ),
@@ -4207,7 +4207,7 @@ class _AdminPageState extends State<AdminPage> {
             onPressed: () => openPackageManager('movies'),
             icon: const Icon(Icons.folder_open),
             label: const Text('إدارة باقات الأفلام'),
-            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: BorderSide(color: adminGold)),
           )),
         ),
         searchBox(
@@ -4295,4 +4295,4 @@ class _AdminPageState extends State<AdminPage> {
 
 // ==========================================
 
-// آخر تعديل: إضافة نظام تخصيص ألوان التطبيق ومعاينتها وحفظها من لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 21:30:00 بتوقيت تركيا
+// آخر تعديل: ربط ألوان الواجهات الفعلية بإعدادات لوحة الإدارة لتطبيق التغييرات فوراً | التاريخ: 2026-11-21 | الوقت: 22:00:00 بتوقيت تركيا
