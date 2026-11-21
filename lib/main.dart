@@ -3060,7 +3060,7 @@ class _DetailsPageState extends State<DetailsPage> {
     const posterWidth = 104.0;
     const posterHeight = 148.0;
     final heroHeight = isLandscape ? 230.0 : 310.0;
-    final heroImage = backdrop;
+    final heroImage = backdrop.isNotEmpty ? backdrop : (isChannel ? poster : '');
     return SizedBox(
       width: double.infinity, height: heroHeight,
       child: Stack(fit: StackFit.expand, children: [
