@@ -51,6 +51,9 @@ class _AdminPageState extends State<AdminPage> {
   final TextEditingController updateNotesController = TextEditingController();
   bool appSettingsLoading = false;
   bool appSettingsSaving = false;
+  int catalogGridColumns = 5;
+  bool catalogGridColumnsLoading = true;
+  bool catalogGridColumnsSaving = false;
 
   String currentSection = 'home';
   String userCategory = 'normal';
@@ -94,6 +97,7 @@ class _AdminPageState extends State<AdminPage> {
   void initState() {
     super.initState();
     loadCategoryBadgeSetting();
+    loadCatalogGridColumnsSetting();
     loadAppLinksAndUpdateSettings();
   }
 
@@ -208,6 +212,48 @@ class _AdminPageState extends State<AdminPage> {
       if (mounted) {
         setState(() => badgeSettingSaving = false);
       }
+    }
+  }
+
+  Future<void> loadCatalogGridColumnsSetting() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+    if (mounted) setState(() => catalogGridColumnsLoading = true);
+    try {
+      final row = await AuthService.client
+          .from('app_settings')
+          .select('setting_value')
+          .eq('setting_key', 'catalog_grid_columns')
+          .maybeSingle();
+      final saved = int.tryParse(row?['setting_value']?.toString() ?? '');
+      if (mounted) {
+        setState(() => catalogGridColumns = (saved ?? 5).clamp(2, 6));
+      }
+    } catch (e) {
+      if (mounted) showMessage('تعذر تحميل عدد البوسترات في الصف: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => catalogGridColumnsLoading = false);
+    }
+  }
+
+  Future<void> saveCatalogGridColumnsSetting(int? value) async {
+    if (value == null || catalogGridColumnsSaving) return;
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
+      showMessage('ليس لديك صلاحية تعديل هذا الإعداد', isError: true);
+      return;
+    }
+    setState(() => catalogGridColumnsSaving = true);
+    try {
+      await AuthService.client.from('app_settings').upsert({
+        'setting_key': 'catalog_grid_columns',
+        'setting_value': value,
+      }, onConflict: 'setting_key');
+      if (!mounted) return;
+      setState(() => catalogGridColumns = value);
+      showMessage('تم حفظ عدد البوسترات وتطبيقه على قسمي الأفلام والمسلسلات');
+    } catch (e) {
+      showMessage('تعذر حفظ عدد البوسترات: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => catalogGridColumnsSaving = false);
     }
   }
 
@@ -334,6 +380,70 @@ class _AdminPageState extends State<AdminPage> {
               child: CircularProgressIndicator(color: adminGold),
             ),
           ),
+        Card(
+          color: adminPanel,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.grid_view_rounded, color: adminGold),
+                    SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        'عدد البوسترات في كل صف',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'إعداد موحّد يطبّق على جميع باقات الأفلام والمسلسلات. كلما زاد العدد صغر حجم البوستر الظاهر مع الحفاظ على نسبته.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                if (catalogGridColumnsLoading)
+                  const Center(child: CircularProgressIndicator(color: adminGold))
+                else
+                  DropdownButtonFormField<int>(
+                    value: catalogGridColumns,
+                    dropdownColor: adminPanel,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'اختر عدد الأعمدة',
+                      labelStyle: TextStyle(color: Colors.white60),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white24),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: adminGold),
+                      ),
+                    ),
+                    items: [2, 3, 4, 5, 6]
+                        .map((count) => DropdownMenuItem<int>(
+                              value: count,
+                              child: Text('$count بوسترات في كل صف'),
+                            ))
+                        .toList(),
+                    onChanged: catalogGridColumnsSaving
+                        ? null
+                        : saveCatalogGridColumnsSetting,
+                  ),
+                if (catalogGridColumnsSaving)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: LinearProgressIndicator(color: adminGold),
+                  ),
+              ],
+            ),
+          ),
+        ),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Text(
@@ -3665,7 +3775,7 @@ class _AdminPageState extends State<AdminPage> {
         ),
         _homeCard(
           title: 'إعدادات التطبيق',
-          subtitle: 'التحكم بإظهار أو إخفاء ليبل التصنيف',
+          subtitle: 'التحكم بليبل التصنيف وعدد البوسترات في الصف',
           icon: Icons.settings_outlined,
           onTap: () => navigateTo('settings'),
         ),
@@ -4066,3 +4176,5 @@ class _AdminPageState extends State<AdminPage> {
 // ShamFlix - آخر تحديث: 21-11-2026: حفظ وعرض المخرج والممثلين في تفاصيل الأفلام والمسلسلات.
 
 // ShamFlix - آخر تحديث: 21-11-2026: إصلاح تعريف وحدات التحكم backdropController وdirectorController وcastController في نموذج المسلسلات.
+
+// آخر تعديل: إضافة إعداد موحّد لعدد أعمدة بوسترات الباقات للأفلام والمسلسلات | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
