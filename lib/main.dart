@@ -1255,15 +1255,20 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
       });
     }
     try {
-      final gridSetting = await AuthService.client
-          .from('app_settings')
-          .select('setting_value')
-          .eq('setting_key', 'catalog_grid_columns')
-          .maybeSingle();
-      final savedColumns = int.tryParse(
-        gridSetting?['setting_value']?.toString() ?? '',
-      );
-      gridColumns = (savedColumns ?? 5).clamp(2, 6);
+      try {
+        final gridSetting = await AuthService.client
+            .from('app_settings')
+            .select('setting_value')
+            .eq('setting_key', 'catalog_grid_columns')
+            .maybeSingle();
+        final savedColumns = int.tryParse(
+          gridSetting?['setting_value']?.toString() ?? '',
+        );
+        gridColumns = (savedColumns ?? 5).clamp(2, 6).toInt();
+      } catch (_) {
+        // إذا تعذر تحميل الإعداد، يبقى التخطيط الافتراضي خمسة أعمدة.
+        gridColumns = 5;
+      }
 
       final rows = await AuthService.client
           .from('content_packages')
