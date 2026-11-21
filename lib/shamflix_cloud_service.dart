@@ -178,16 +178,18 @@ class ShamFlixCloudService {
     required String contentType,
     required String contentId,
   }) async {
-    final rows = await _client.from('user_ratings').select('rating,reaction')
-        .eq('content_type', contentType)
-        .eq('content_id', contentId);
+    final result = await _client.rpc('get_content_rating_summary', params: {
+      'p_content_type': contentType,
+      'p_content_id': contentId,
+    });
+    final rows = result is List ? result : <dynamic>[];
     if (rows.isEmpty) return {'average': 0.0, 'count': 0, 'likes': 0, 'dislikes': 0};
-    final ratings = rows.map((r) => (r['rating'] as num).toDouble()).toList();
+    final row = Map<String, dynamic>.from(rows.first as Map);
     return {
-      'average': ratings.reduce((a, b) => a + b) / ratings.length,
-      'count': ratings.length,
-      'likes': rows.where((r) => r['reaction'] == 'like').length,
-      'dislikes': rows.where((r) => r['reaction'] == 'dislike').length,
+      'average': (row['average'] as num?)?.toDouble() ?? 0.0,
+      'count': row['rating_count'] ?? 0,
+      'likes': row['likes'] ?? 0,
+      'dislikes': row['dislikes'] ?? 0,
     };
   }
 
