@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -1536,18 +1538,115 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
     }
   }
 
+  int _compareVersions(String current, String latest) {
+    List<int> parts(String value) => value.split('+').first
+        .split('.').map((part) => int.tryParse(part.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0).toList();
+    final a = parts(current), b = parts(latest);
+    final length = a.length > b.length ? a.length : b.length;
+    for (var i = 0; i < length; i++) {
+      final av = i < a.length ? a[i] : 0;
+      final bv = i < b.length ? b[i] : 0;
+      if (av != bv) return av.compareTo(bv);
+    }
+    return 0;
+  }
+
+  Future<void> _downloadAndInstallUpdate(String apkUrl) async {
+    setState(() => busy = true);
+    HttpClient? client;
+    try {
+      final uri = Uri.tryParse(apkUrl);
+      if (uri == null || !['https', 'http'].contains(uri.scheme)) {
+        throw Exception('رابط ملف التحديث غير صالح');
+      }
+      client = HttpClient();
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      if (response.statusCode != 200) throw Exception('فشل تنزيل التحديث (${response.statusCode})');
+      final bytes = await response.fold<List<int>>(<int>[], (all, chunk) => all..addAll(chunk));
+      if (bytes.length < 1024 || bytes[0] != 0x50 || bytes[1] != 0x4B) {
+        throw Exception('الملف الذي تم تنزيله ليس ملف APK صالحاً');
+      }
+      final directory = await getTemporaryDirectory();
+      final apkFile = File('${directory.path}/shamflix-update.apk');
+      if (await apkFile.exists()) await apkFile.delete();
+      await apkFile.writeAsBytes(bytes, flush: true);
+      await OpenFilex.open(
+        apkFile.path,
+        type: 'application/vnd.android.package-archive',
+      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تجهيز التحديث. أكمل التثبيت من نافذة أندرويد، وقد يطلب النظام السماح بالتثبيت من هذا المصدر.')),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تثبيت التحديث: $e')),
+      );
+    } finally {
+      client?.close(force: true);
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> _checkForUpdate() async {
     setState(() => busy = true);
     try {
       final row = await AuthService.client.from('app_settings')
           .select('setting_value').eq('setting_key', 'app_update').maybeSingle();
       final value = row?['setting_value'];
-      final message = value is Map && value['version'] != null
-          ? 'الإصدار المتاح: ${value['version']} - يلزم ربط ملف APK من لوحة الإدارة لتثبيته داخلياً.'
-          : 'لا يوجد تحديث منشور حالياً.';
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      if (value is! Map || value['version'] == null || value['apk_url'] == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا يوجد تحديث منشور حالياً.')),
+        );
+        return;
+      }
+      final latest = value['version'].toString().trim();
+      final apkUrl = value['apk_url'].toString().trim();
+      final packageInfo = await PackageInfo.fromPlatform();
+      final comparison = _compareVersions(packageInfo.version, latest);
+      if (comparison >= 0) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('أنت تستخدم أحدث إصدار (${packageInfo.version}).')),
+        );
+        return;
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('يتوفر تحديث جديد', style: TextStyle(color: gold)),
+          content: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('الإصدار الحالي: ${packageInfo.version}', style: const TextStyle(color: Colors.white70)),
+              Text('الإصدار الجديد: $latest', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              if ((value['release_notes']?.toString() ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('ما الجديد؟', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 5),
+                Text(value['release_notes'].toString(), style: const TextStyle(color: Colors.white70)),
+              ],
+            ],
+          )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('لاحقاً')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                unawaited(_downloadAndInstallUpdate(apkUrl));
+              },
+              child: const Text('تنزيل وتثبيت'),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر التحقق من التحديث: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر التحقق من التحديث: $e')),
+      );
     } finally {
       if (mounted) setState(() => busy = false);
     }
