@@ -747,12 +747,15 @@ class _AdminPageState extends State<AdminPage> {
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             backgroundColor: adminPanel,
+
+insetPadding: const EdgeInsets.all(8),
             title: Text(
               '${existing == null ? 'إضافة' : 'تعديل'} ${isSeries ? 'مسلسل' : 'قناة'}',
               style: const TextStyle(color: adminGold),
             ),
             content: SizedBox(
-              width: 500,
+              width: MediaQuery.of(context).size.width > 800 ? 760 : MediaQuery.of(context).size.width * 0.94,
+              height: MediaQuery.of(context).size.height * 0.78,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -3759,3 +3762,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إرسال حقول الخلفية والمخرج والممثلين للمسلسلات فقط وعدم إرسال أعمدة غير موجودة إلى جدول القنوات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تحويل نماذج إضافة وتعديل الأفلام والمسلسلات والقنوات والحلقات إلى نوافذ شبه كاملة الشاشة تشبه صفحات الإدارة.
