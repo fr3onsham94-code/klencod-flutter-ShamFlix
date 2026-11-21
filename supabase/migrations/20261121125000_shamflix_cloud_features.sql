@@ -187,3 +187,5 @@ drop trigger if exists notify_published_channel on public.channels;
 create trigger notify_published_channel after update of is_published on public.channels
 for each row when (new.is_published = true and old.is_published is distinct from new.is_published)
 execute function public.notify_users_new_content('channel');
+
+-- ShamFlix - آخر تحديث: 21-11-2026: جداول مزامنة المستخدمين والتقييمات والإشعارات وملخصات التقييم.
