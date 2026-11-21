@@ -69,11 +69,11 @@ class ShamFlixLocalStore {
     await prefs.setString(_activeProfileKey, activeProfileId);
   }
 
-  static String _key(String suffix) => 'shamflix_profile_\${activeProfileId}_$suffix';
+  static String _key(String suffix) => 'shamflix_profile_${activeProfileId}_$suffix';
 
   static String playerPrefix(String progressKey, String title) {
     final base = progressKey.isEmpty ? title.hashCode : progressKey;
-    return activeProfileId == 'main' ? 'shamflix_player_$base' : 'shamflix_player_\${activeProfileId}_$base';
+    return activeProfileId == 'main' ? 'shamflix_player_$base' : 'shamflix_player_${activeProfileId}_$base';
   }
 
   static Future<List<Map<String, dynamic>>> getProfiles() async {
@@ -113,6 +113,12 @@ class ShamFlixLocalStore {
     profiles.removeWhere((p) => p['id'] == id);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_profilesKey, jsonEncode(profiles));
+    for (final key in prefs.getKeys()) {
+      if (key.startsWith('shamflix_profile_${id}_') ||
+          key.startsWith('shamflix_player_${id}_')) {
+        await prefs.remove(key);
+      }
+    }
     if (activeProfileId == id) {
       activeProfileId = 'main';
       await prefs.setString(_activeProfileKey, 'main');
@@ -229,7 +235,8 @@ Future<void> openWatchRecord(BuildContext context, Map<String, dynamic> record) 
   final progressKey = record['progressKey']?.toString() ?? '$type-$id';
   try {
     final servers = id.isEmpty ? <Map<String, dynamic>>[] : await SupabaseService.getPlaybackServers(contentType: type, contentId: id);
-    final url = servers.isNotEmpty ? valueOf(servers.first['stream_url']) : valueOf(item['stream_url']);
+    final serverUrl = servers.isNotEmpty ? valueOf(servers.first['stream_url']) : '';
+    final url = serverUrl.isNotEmpty ? serverUrl : valueOf(item['stream_url']);
     final uri = Uri.tryParse(url);
     if (url.isEmpty || uri == null || !uri.hasScheme) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('رابط استكمال المشاهدة غير متوفر حالياً')));
@@ -649,7 +656,7 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 7),
                     Text(valueOf(record['title'], 'محتوى'), maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    Text('متابعة من \${formatWatchPosition(record['position'])}', style: const TextStyle(color: gold, fontSize: 11)),
+                    Text('متابعة من ${formatWatchPosition(record['position'])}', style: const TextStyle(color: gold, fontSize: 11)),
                   ]),
                 ),
               );
@@ -1398,7 +1405,7 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
     if (id == 'main') return;
     final confirm = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
       backgroundColor: panel, title: const Text('حذف الملف الشخصي؟', style: TextStyle(color: Colors.white)),
-      content: Text('سيتم حذف ملف "\${profile['name']}" وبياناته المحلية من هذا الجهاز.', style: const TextStyle(color: Colors.white70)),
+      content: Text('سيتم حذف ملف "${profile['name']}" وبياناته المحلية من هذا الجهاز.', style: const TextStyle(color: Colors.white70)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
         TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف', style: TextStyle(color: Colors.redAccent))),
@@ -1525,7 +1532,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => const Icon(Icons.play_circle, color: gold)))),
             title: Text(valueOf(record['title'], 'محتوى'), style: const TextStyle(color: Colors.white)),
-            subtitle: Text('آخر مشاهدة: \${formatWatchPosition(record['position'])}', style: const TextStyle(color: Colors.white54)),
+            subtitle: Text('آخر مشاهدة: ${formatWatchPosition(record['position'])}', style: const TextStyle(color: Colors.white54)),
             trailing: IconButton(icon: const Icon(Icons.close, color: Colors.white54),
               onPressed: () async => ShamFlixLocalStore.removeHistory(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => openWatchRecord(context, record),
@@ -3298,3 +3305,5 @@ class ShamFlixSearch extends SearchDelegate {
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة متابعة المشاهدة والمفضلة وسجل المشاهدة والبحث المتقدم والملفات الشخصية المتعددة.
 // تطوير صفحة التفاصيل بتصميم سينمائي مع الحفاظ على منطق التشغيل والسيرفرات.
+
+// إصلاح فصل مفاتيح الملفات الشخصية وتنظيف بيانات الملف عند حذفه بتاريخ 21-11-2026.
