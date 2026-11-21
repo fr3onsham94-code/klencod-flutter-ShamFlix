@@ -12,6 +12,20 @@ if (localPropertiesFile.exists()) {
     }
 }
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystorePropertiesFile.withInputStream { stream ->
+        keystoreProperties.load(stream)
+    }
+    ["keyAlias", "keyPassword", "storeFile", "storePassword"].each { key ->
+        if (!keystoreProperties.getProperty(key)) {
+            throw new GradleException("Missing '${key}' in android/key.properties")
+        }
+    }
+}
+
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
 if (flutterVersionCode == null) {
     flutterVersionCode = "1"
@@ -44,9 +58,24 @@ android {
         versionName = flutterVersionName
     }
 
+    signingConfigs {
+        release {
+            if (hasReleaseKeystore) {
+                keyAlias = keystoreProperties["keyAlias"]
+                keyPassword = keystoreProperties["keyPassword"]
+                storeFile = rootProject.file(keystoreProperties["storeFile"])
+                storePassword = keystoreProperties["storePassword"]
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.debug
+            // Without a private keystore, Gradle produces an unsigned release APK.
+            // Never ship a release artifact signed with the public debug key.
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.release
+            }
         }
     }
 }
@@ -54,3 +83,5 @@ android {
 flutter {
     source = "../.."
 }
+
+// ShamFlix - آخر تعديل: منع استخدام Debug keystore لتوقيع Release ودعم مفتاح إصدار خاص محلياً | التاريخ والوقت: 22/11/2026، 00:55 بتوقيت تركيا.
