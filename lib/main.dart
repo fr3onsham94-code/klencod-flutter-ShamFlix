@@ -3343,9 +3343,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   List<Map<String, dynamic>> packages = [];
   List<Map<String, dynamic>> channels = [];
   String? selectedPackageId;
-  Map<String, dynamic>? selectedChannel;
-  List<Map<String, dynamic>> selectedServers = [];
-  String selectedUrl = '';
+  int gridColumns = 5;
   bool starting = false;
 
   @override
@@ -3366,6 +3364,19 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   Future<void> _load() async {
     setState(() { loading = true; error = null; });
     try {
+      try {
+        final gridSetting = await AuthService.client
+            .from('app_settings')
+            .select('setting_value')
+            .eq('setting_key', 'catalog_grid_columns')
+            .maybeSingle();
+        final savedColumns = int.tryParse(
+          gridSetting?['setting_value']?.toString() ?? '',
+        );
+        gridColumns = (savedColumns ?? 5).clamp(2, 6).toInt();
+      } catch (_) {
+        gridColumns = 5;
+      }
       final packageRows = await AuthService.client
           .from('content_packages')
           .select('id,name,sort_order')
@@ -3406,9 +3417,6 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     setState(() { selectedPackageId = id; loading = true; error = null; });
     try {
       await _loadChannels();
-      selectedChannel = null;
-      selectedServers = [];
-      selectedUrl = '';
     } catch (e) {
       error = e.toString();
     }
@@ -3452,11 +3460,18 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         'progressKey': 'channel-$id',
       });
       if (!mounted) return;
-      setState(() {
-        selectedChannel = channel;
-        selectedServers = servers;
-        selectedUrl = url;
-      });
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShamFlixPlayerPage(
+            url: url,
+            title: valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+            servers: servers,
+            progressKey: 'channel-$id',
+            embedded: false,
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('تعذر تشغيل القناة: $e')),
@@ -3467,7 +3482,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   }
 
   Widget _channelTile(Map<String, dynamic> channel) {
-    final active = selectedChannel?['id']?.toString() == channel['id']?.toString();
+    final active = false;
     final logo = valueOf(channel['logo_url']);
     return InkWell(
       borderRadius: BorderRadius.circular(10),
@@ -3586,41 +3601,11 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
               IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: gold)),
             ]),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: selectedChannel == null || selectedUrl.isEmpty
-                    ? Container(
-                        color: Colors.black,
-                        child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.live_tv, color: gold, size: 48),
-                          const SizedBox(height: 8),
-                          Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'),
-                            style: TextStyle(color: AppTheme.secondaryText)),
-                          if (starting) Padding(padding: const EdgeInsets.only(top: 8),
-                            child: CircularProgressIndicator(color: gold)),
-                        ])),
-                      )
-                    : ShamFlixPlayerPage(
-                        key: ValueKey('${selectedChannel!['id']}-$selectedUrl'),
-                        url: selectedUrl,
-                        title: valueOf(selectedChannel!['name'], appText('قناة', 'Channel', 'Kanal')),
-                        servers: selectedServers,
-                        progressKey: 'channel-${selectedChannel!['id']}',
-                        embedded: true,
-                        onClose: () => setState(() {
-                          selectedChannel = null;
-                          selectedServers = [];
-                          selectedUrl = '';
-                        }),
-                      ),
-              ),
+          if (starting)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: LinearProgressIndicator(color: gold, backgroundColor: panel),
             ),
-          ),
-          const SizedBox(height: 8),
           Expanded(
             child: Row(
               textDirection: TextDirection.ltr,
@@ -3655,11 +3640,11 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                         onRefresh: _load,
                                         child: GridView.builder(
                                           padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
-                                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                            crossAxisCount: 5,
-                                            crossAxisSpacing: 7,
-                                            mainAxisSpacing: 7,
-                                            childAspectRatio: 0.88,
+                                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: gridColumns,
+                                            crossAxisSpacing: 9,
+                                            mainAxisSpacing: 9,
+                                            childAspectRatio: 1.0,
                                           ),
                                           itemCount: channels.length,
                                           itemBuilder: (context, index) => _channelTile(channels[index]),
@@ -3678,7 +3663,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   }
 }
 
-// ShamFlix - آخر تحديث: 21-11-2026: صفحة القنوات بباقات ومشغّل مضمّن يحتفظ بميزات المشغل وسيرفراته.
+
 
 class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
@@ -4877,4 +4862,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: تحويل صفحة القنوات إلى Sidebar يسار وشبكة من 5 قنوات مع شارة LIVE | التاريخ: 2026-11-21 | الوقت: 22:12:00 بتوقيت تركيا
+// آخر تعديل: إزالة المشغّل المضمّن وفتح القناة بملء الشاشة مع بطاقات مربعة وربط الأعمدة بإعداد الكتالوج المشترك | التاريخ: 2026-11-21 | الوقت: 23:18:00 بتوقيت تركيا
