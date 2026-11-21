@@ -2230,10 +2230,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 Row(
                                                   children: [
                                                     Text(_time(position),
-                                                        style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                                        style: const TextStyle(color: Colors.white70, fontSize: 9)),
                                                     const Spacer(),
                                                     Text(_time(duration),
-                                                        style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                                        style: const TextStyle(color: Colors.white70, fontSize: 9)),
                                                   ],
                                                 ),
                                                 const SizedBox(height: 8),
@@ -2587,3 +2587,5 @@ class ShamFlixSearch extends SearchDelegate {
 
 // تم تعديل واجهة المشغل والسيرفرات وتسميات الصوت والترجمة والسرعة بتاريخ 21-11-2026.
 // إصلاح تنسيق الوقت أسفل شريط التقدم لمنع ظهور تعبيرات Dart كنص بتاريخ 21-11-2026.
+
+// تصغير خط الوقت الحالي والمدة أسفل شريط التقدم إلى 9px بتاريخ 21-11-2026.
