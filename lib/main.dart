@@ -252,15 +252,6 @@ Future<void> openWatchRecord(BuildContext context, Map<String, dynamic> record) 
       }
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
-    final selectedPlayer = prefs.getString('shamflix_player_preference') ?? 'internal';
-    if (selectedPlayer != 'internal') {
-      final packages = selectedPlayer == 'vlc' ? <String>['org.videolan.vlc'] : <String>['com.mxtech.videoplayer.ad', 'com.mxtech.videoplayer.pro'];
-      for (final packageName in packages) {
-        final intent = AndroidIntent(action: 'action_view', data: url, type: 'video/*', package: packageName);
-        if (await intent.canResolveActivity() == true) { await intent.launch(); return; }
-      }
-    }
     if (!context.mounted) return;
     await Navigator.push(context, MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(url: url, title: title, servers: servers, progressKey: progressKey)));
   } catch (e) {
@@ -3092,8 +3083,8 @@ class ShamFlixSearch extends SearchDelegate {
     final seriesResults = await SupabaseService.getSeries();
 
     final allResults = [
-      ...movieResults,
-      ...seriesResults,
+      ...movieResults.map((item) => {...item, '_isSeries': false}),
+      ...seriesResults.map((item) => {...item, '_isSeries': true}),
     ];
 
     final searchText = query.trim().toLowerCase();
@@ -3202,7 +3193,7 @@ class ShamFlixSearch extends SearchDelegate {
             final item = items[index];
             final poster = valueOf(item['poster_url']);
 
-            final isSeries = item['stream_url'] == null;
+            final isSeries = item['_isSeries'] == true;
 
             return ListTile(
               leading: SizedBox(
@@ -3319,3 +3310,5 @@ class ShamFlixSearch extends SearchDelegate {
 // إصلاح فصل مفاتيح الملفات الشخصية وتنظيف بيانات الملف عند حذفه بتاريخ 21-11-2026.
 
 // تحسين استكمال الروابط غير المباشرة ودعم التصفية دون كتابة اسم، بتاريخ 21-11-2026.
+
+// ضمان استكمال موضع المشاهدة من المشغل الداخلي وتصحيح تمييز نتائج المسلسلات في البحث بتاريخ 21-11-2026.
