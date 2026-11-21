@@ -1708,7 +1708,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _open([String? url]) async {
     try {
-      await player.open(Media(url ?? widget.url));
+      await player.open(Media(url ?? widget.url)).timeout(const Duration(seconds: 20));
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       final savedRate = prefs.getDouble('${_settingsPrefix}_rate') ?? 1.0;
@@ -1807,7 +1807,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
         }
         try {
-          await player.open(Media(nextUrl));
+          await player.open(Media(nextUrl)).timeout(const Duration(seconds: 20));
           if (!mounted) return;
           _failedServers.clear();
           setState(() => opening = false);
