@@ -258,7 +258,8 @@ class _AdminPageState extends State<AdminPage> {
       }, onConflict: 'setting_key');
       if (!mounted) return;
       setState(() => catalogGridColumns = value);
-      showMessage('تم حفظ عدد البوسترات وتطبيقه على قسمي الأفلام والمسلسلات');
+      appSettingsRefreshNotifier.value++;
+      showMessage('تم حفظ عدد الأعمدة وتطبيقه على الأفلام والمسلسلات والبث المباشر');
     } catch (e) {
       showMessage('تعذر حفظ عدد البوسترات: $e', isError: true);
     } finally {
@@ -4343,4 +4344,4 @@ class _AdminPageState extends State<AdminPage> {
 
 // ==========================================
 
-// آخر تعديل: توحيد إعداد عدد أعمدة الأفلام والمسلسلات والقنوات في خيار واحد بلوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 23:27:00 بتوقيت تركيا
+// آخر تعديل: تحديث الأقسام فور حفظ إعداد عدد الأعمدة المشترك للأفلام والمسلسلات والقنوات | التاريخ: 2026-11-21 | الوقت: 23:33:00 بتوقيت تركيا
