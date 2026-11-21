@@ -860,6 +860,15 @@ class _AdminPageState extends State<AdminPage> {
     final posterController = TextEditingController(
       text: existing?[isSeries ? 'poster_url' : 'logo_url']?.toString() ?? '',
     );
+    final backdropController = TextEditingController(
+      text: existing?['backdrop_url']?.toString() ?? '',
+    );
+    final directorController = TextEditingController(
+      text: existing?['director']?.toString() ?? '',
+    );
+    final castController = TextEditingController(
+      text: existing?['cast']?.toString() ?? '',
+    );
     final descriptionController = TextEditingController(
       text: existing?['description']?.toString() ?? '',
     );
@@ -4055,3 +4064,5 @@ class _AdminPageState extends State<AdminPage> {
 // ShamFlix - آخر تحديث: 21-11-2026: إعداد رابط دعوة الأصدقاء وإدارة ملف APK للتحديث الداخلي.
 
 // ShamFlix - آخر تحديث: 21-11-2026: حفظ وعرض المخرج والممثلين في تفاصيل الأفلام والمسلسلات.
+
+// ShamFlix - آخر تحديث: 21-11-2026: إصلاح تعريف وحدات التحكم backdropController وdirectorController وcastController في نموذج المسلسلات.
