@@ -78,10 +78,58 @@ class ShamFlixLocalStore {
     if (profiles.isEmpty) {
       await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
     }
-    final saved = prefs.getString(_activeProfileKey) ?? 'main';
     final available = await getProfiles();
-    activeProfileId = available.any((p) => p['id'] == saved) ? saved : 'main';
-    await prefs.setString(_activeProfileKey, activeProfileId);
+    await consolidateLocalProfiles(available);
+    activeProfileId = 'main';
+    await prefs.setString(_activeProfileKey, 'main');
+  }
+
+  static Future<void> consolidateLocalProfiles(
+    List<Map<String, dynamic>> profiles,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = profiles.map((profile) => profile['id']?.toString() ?? 'main').toSet();
+    ids.add('main');
+    for (final collection in ['favorites', 'history']) {
+      final combined = <Map<String, dynamic>>[];
+      for (final id in ids) {
+        combined.addAll(await getListForProfile(id, collection));
+      }
+      await setListForProfile('main', collection, mergeRecords(combined));
+    }
+    await setProfiles([{'id': 'main', 'name': 'ملفي الرئيسي'}]);
+    activeProfileId = 'main';
+    await prefs.setString(_activeProfileKey, 'main');
+    for (final id in ids.where((id) => id != 'main')) {
+      for (final key in prefs.getKeys().toList()) {
+        if (key.startsWith('shamflix_profile_${id}_') ||
+            key.startsWith('shamflix_player_${id}_')) {
+          await prefs.remove(key);
+        }
+      }
+    }
+  }
+
+  static List<Map<String, dynamic>> mergeRecords(
+    List<Map<String, dynamic>> records,
+  ) {
+    final byContent = <String, Map<String, dynamic>>{};
+    for (final record in records) {
+      final type = record['contentType']?.toString() ?? '';
+      final id = record['contentId']?.toString() ?? '';
+      if (type.isEmpty || id.isEmpty) continue;
+      final key = '$type:$id';
+      final old = byContent[key];
+      final nextTime = int.tryParse(record['updatedAt']?.toString() ?? '') ?? 0;
+      final oldTime = int.tryParse(old?['updatedAt']?.toString() ?? '') ?? -1;
+      if (old == null || nextTime >= oldTime) {
+        byContent[key] = Map<String, dynamic>.from(record);
+      }
+    }
+    final merged = byContent.values.toList()
+      ..sort((a, b) => (int.tryParse(b['updatedAt']?.toString() ?? '') ?? 0)
+          .compareTo(int.tryParse(a['updatedAt']?.toString() ?? '') ?? 0));
+    return merged.take(50).toList();
   }
 
   static String _key(String suffix) => 'shamflix_profile_${activeProfileId}_$suffix';
@@ -269,16 +317,38 @@ Future<void> syncShamFlixCloudData() async {
       await ShamFlixLocalStore.setListForProfile('main', 'history', []);
     }
     profiles = await ShamFlixCloudService.syncProfiles(profiles);
-    if (!profiles.any((p) => p['id'] == 'main')) profiles.insert(0, {'id': 'main', 'name': 'ملفي الرئيسي'});
-    await ShamFlixLocalStore.setProfiles(profiles);
+    if (!profiles.any((p) => p['id'] == 'main')) {
+      profiles.insert(0, {'id': 'main', 'name': 'ملفي الرئيسي'});
+    }
+    for (final collection in ['favorites', 'history']) {
+      final combined = <Map<String, dynamic>>[];
+      for (final profile in profiles) {
+        final id = profile['id'].toString();
+        final local = await ShamFlixLocalStore.getListForProfile(id, collection);
+        final merged = await ShamFlixCloudService.syncCollection(
+          profileId: id,
+          collection: collection,
+          localRecords: local,
+        );
+        combined.addAll(merged);
+      }
+      final consolidated = ShamFlixLocalStore.mergeRecords(combined);
+      final mainRecords = await ShamFlixCloudService.syncCollection(
+        profileId: 'main',
+        collection: collection,
+        localRecords: consolidated,
+      );
+      await ShamFlixLocalStore.setListForProfile('main', collection, mainRecords);
+    }
     for (final profile in profiles) {
       final id = profile['id'].toString();
-      for (final collection in ['favorites', 'history']) {
-        final local = await ShamFlixLocalStore.getListForProfile(id, collection);
-        final merged = await ShamFlixCloudService.syncCollection(profileId: id, collection: collection, localRecords: local);
-        await ShamFlixLocalStore.setListForProfile(id, collection, merged);
+      if (id != 'main') {
+        await ShamFlixCloudService.removeProfile(id);
       }
     }
+    await ShamFlixLocalStore.setProfiles([{'id': 'main', 'name': 'ملفي الرئيسي'}]);
+    ShamFlixLocalStore.activeProfileId = 'main';
+    await prefs.setString('shamflix_active_profile', 'main');
     await prefs.setString('shamflix_cloud_owner_id', userId);
     localProfileRefreshNotifier.value++;
   } catch (_) {
@@ -4217,3 +4287,5 @@ class ShamFlixSearch extends SearchDelegate {
 // ShamFlix - آخر تحديث: 21-11-2026
 // تقليل طلبات مزامنة تقدم المشاهدة السحابية إلى مرة كل 30 ثانية لكل محتوى.
 // ShamFlix - آخر تحديث: 21-11-2026: مشغل مضمن للقنوات مع الحفاظ على أدوات التحكم وسيرفرات البث.
+
+// ShamFlix - آخر تحديث: 21-11-2026: دمج المفضلة والسجل من الملفات القديمة في ملف واحد وإزالة تعدد الملفات.
