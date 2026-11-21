@@ -1096,8 +1096,9 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
             if (filteredSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
             final items = filteredSnapshot.data ?? [];
             if (selectedChannel == null && items.isNotEmpty) {
-              selectedChannel = items.first;
-              selectedServersFuture = SupabaseService.getPlaybackServers(contentType: 'channel', contentId: selectedChannel!['id'].toString());
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && selectedChannel == null) _selectChannel(items.first);
+              });
             }
             return Row(children: [
               SizedBox(width: 112, child: Container(color: panel, child: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
@@ -2478,7 +2479,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     }
     player.stream.error.listen(_handlePlaybackError);
     _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
-    _open();
+    if (widget.embedded) { _openEmbedded(); } else { _open(); }
+  }
+
+  Future<void> _openEmbedded() async {
+    if (!await ShamFlixAppPreferences.canPlayOverCurrentNetwork()) {
+      if (mounted) setState(() { opening = false; error = 'التشغيل متاح عبر Wi-Fi فقط. غيّر إعداد الشبكة للسماح ببيانات الهاتف.'; });
+      return;
+    }
+    await _open();
   }
 
   Future<void> _setLandscape(bool value) async {
@@ -3795,3 +3804,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // وضع مشغل الفيديو الحقيقي أعلى صفحة القنوات مع تبديل السيرفرات وأزرار المشغل والانتقال لملء الشاشة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تطبيق شرط Wi-Fi قبل تشغيل المشغل المضمن واختيار أول قناة تلقائياً بعد تحميل الباقة.
