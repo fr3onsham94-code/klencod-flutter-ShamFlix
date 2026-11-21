@@ -13,3 +13,5 @@ as $$
 $$;
 
 grant execute on function public.is_app_admin() to authenticated;
+
+-- ShamFlix - آخر تحديث: 21-11-2026: الحفاظ على صلاحيات المالك الأساسي.
