@@ -57,6 +57,7 @@ class ShamFlixLocalStore {
   static const String _profilesKey = 'shamflix_local_profiles';
   static const String _activeProfileKey = 'shamflix_active_profile';
   static String activeProfileId = 'main';
+  static final Map<String, int> _lastCloudProgressSync = <String, int>{};
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
@@ -221,10 +222,15 @@ class ShamFlixLocalStore {
     final items = await getHistory();
     final index = items.indexWhere((item) => item['progressKey'] == progressKey);
     if (index < 0) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
     items[index]['position'] = position;
-    items[index]['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+    items[index]['updatedAt'] = now;
     await _writeList('history', items);
-    unawaited(ShamFlixCloudService.saveRecord(profileId: activeProfileId, collection: 'history', record: items[index]).catchError((_) {}));
+    final lastCloudSync = _lastCloudProgressSync[progressKey] ?? 0;
+    if (now - lastCloudSync >= 30000) {
+      _lastCloudProgressSync[progressKey] = now;
+      unawaited(ShamFlixCloudService.saveRecord(profileId: activeProfileId, collection: 'history', record: items[index]).catchError((_) {}));
+    }
   }
 
   static Future<void> removeHistory(String type, String id) async {
@@ -3692,3 +3698,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تحسينات المزامنة السحابية والتقييمات والتوصيات والتنزيلات والتنبيهات وتفضيل السيرفر.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تقليل طلبات مزامنة تقدم المشاهدة السحابية إلى مرة كل 30 ثانية لكل محتوى.
