@@ -20,6 +20,7 @@ import 'admin_auth_service.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
+import 'shamflix_presence_service.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -359,17 +360,22 @@ class ShamFlixApp extends StatefulWidget {
   State<ShamFlixApp> createState() => _ShamFlixAppState();
 }
 
-class _ShamFlixAppState extends State<ShamFlixApp> {
+class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
   StreamSubscription<AuthState>? authSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(ShamFlixPresenceService.start());
 
     authSubscription =
         AuthService.client.auth.onAuthStateChange.listen(
       (data) {
         authRefreshNotifier.value++;
+        if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.signedOut || data.event == AuthChangeEvent.initialSession) {
+          unawaited(ShamFlixPresenceService.sendHeartbeat());
+        }
         if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.initialSession) {
           unawaited(syncShamFlixCloudData());
         }
@@ -398,7 +404,18 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ShamFlixPresenceService.start());
+    } else {
+      unawaited(ShamFlixPresenceService.stop());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(ShamFlixPresenceService.stop());
     authSubscription?.cancel();
     super.dispose();
   }
