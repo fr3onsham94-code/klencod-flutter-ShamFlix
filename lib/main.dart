@@ -1425,9 +1425,10 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               : GridView.builder(
                   padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
+                    // خمس بوسترات في كل صف، وتستمر الصفوف عمودياً حسب عدد عناصر الباقة.
+                    crossAxisCount: 5,
                     childAspectRatio: 0.54,
-                    crossAxisSpacing: 10,
+                    crossAxisSpacing: 7,
                     mainAxisSpacing: 12,
                   ),
                   itemCount: contents.length,
