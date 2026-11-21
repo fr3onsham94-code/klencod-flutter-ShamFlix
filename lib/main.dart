@@ -1194,9 +1194,9 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                               padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
                               children: [
                                 if (packages.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Text(appText('كل المحتوى', 'All Content', 'Tüm İçerik'), textAlign: TextAlign.center, style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                                  Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Text(appText('كل المحتوى', 'All Content', 'Tüm İçerik'), textAlign: TextAlign.center, style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
                                   ),
                                 ...packages.map((package) {
                                   final id = package['id'].toString();
@@ -1492,7 +1492,7 @@ class _AccountPageState extends State<AccountPage> {
           size: 85,
         ),
         const SizedBox(height: 12),
-        const Center(
+        Center(
           child: Text(
             appText('حسابي', 'My Account', 'Hesabım'),
             style: TextStyle(
@@ -2020,10 +2020,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
-        if (items.isEmpty) return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.favorite_border, color: gold, size: 64), SizedBox(height: 12),
-          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: TextStyle(color: Colors.white70)),
-          SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: TextStyle(color: Colors.white38)),
+        if (items.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.favorite_border, color: gold, size: 64), const SizedBox(height: 12),
+          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: const TextStyle(color: Colors.white70)),
+          const SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: const TextStyle(color: Colors.white38)),
         ]));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index];
