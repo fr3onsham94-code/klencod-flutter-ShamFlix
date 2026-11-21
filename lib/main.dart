@@ -3560,8 +3560,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     try {
       try {
         final gridSetting = await AuthService.client.from('app_settings')
-            .select('setting_value').eq('setting_key', 'channel_grid_columns').maybeSingle();
-        gridColumns = (int.tryParse(gridSetting?['setting_value']?.toString() ?? '') ?? 5).clamp(2, 8).toInt();
+            .select('setting_value').eq('setting_key', 'catalog_grid_columns').maybeSingle();
+        gridColumns = (int.tryParse(gridSetting?['setting_value']?.toString() ?? '') ?? 5).clamp(2, 6).toInt();
       } catch (_) { gridColumns = 5; }
       final packageRows = await AuthService.client
           .from('content_packages')
@@ -5085,4 +5085,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: ربط ألوان الحدود والشارات والتنقل بلوحات تخصيص كل قسم | التاريخ: 2026-11-21 | الوقت: 23:12:00 بتوقيت تركيا
+// آخر تعديل: ربط عدد أعمدة القنوات بنفس إعداد عدد بوسترات الأفلام والمسلسلات | التاريخ: 2026-11-21 | الوقت: 23:25:00 بتوقيت تركيا
