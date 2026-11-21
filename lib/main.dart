@@ -3060,7 +3060,7 @@ class _DetailsPageState extends State<DetailsPage> {
     const posterWidth = 104.0;
     const posterHeight = 148.0;
     final heroHeight = isLandscape ? 230.0 : 310.0;
-    final heroImage = backdrop.isNotEmpty ? backdrop : poster;
+    final heroImage = backdrop;
     return SizedBox(
       width: double.infinity, height: heroHeight,
       child: Stack(fit: StackFit.expand, children: [
@@ -3154,7 +3154,7 @@ class _DetailsPageState extends State<DetailsPage> {
   }
 
   Widget _seriesEpisodesSection() {
-    final selectedSeason = seasons.isNotEmpty ? seasons[selectedSeasonIndex.clamp(0, seasons.length - 1)] : null;
+    final selectedSeason = seasons.isNotEmpty ? seasons[selectedSeasonIndex.clamp(0, seasons.length - 1).toInt()] : null;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Container(width: 4, height: 22, decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4))),
@@ -3205,8 +3205,6 @@ class _DetailsPageState extends State<DetailsPage> {
     final director = valueOf(item['director']);
     final cast = valueOf(item['cast']);
     final description = valueOf(item['description'], appText('لا يوجد وصف لهذا المحتوى حالياً.', 'No description is available for this title yet.', 'Bu içerik için henüz açıklama yok.'));
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-
     Widget information = _detailsInformation(item, isSeries: isSeries, isChannel: isChannel,
       description: description, director: director, cast: cast);
 
