@@ -186,16 +186,6 @@ class ShamFlixLocalStore {
     return [{'id': 'main', 'name': 'ملفي الرئيسي'}];
   }
 
-  static Future<bool> addProfile(String name) async => false;
-
-  static Future<void> setActiveProfile(String id) async {
-    activeProfileId = 'main';
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_activeProfileKey, 'main');
-  }
-
-  static Future<void> removeProfile(String id) async {}
-
   static Future<List<Map<String, dynamic>>> _readList(String key) async {
     final prefs = await SharedPreferences.getInstance();
     try {
@@ -3735,3 +3725,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // التحقق من رموز اللغة المحفوظة وقصر التشغيل عند تفعيل الخيار على شبكة Wi-Fi فقط.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إزالة آخر واجهات برمجية لإضافة وتبديل وحذف الملفات الشخصية.
