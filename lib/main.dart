@@ -1593,6 +1593,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   bool seeking = false;
   double seekValue = 0;
   bool landscape = true;
+  bool controlsLocked = false;
   int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
 
   @override
@@ -1649,7 +1650,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     controlsTimer?.cancel();
     if (!mounted) return;
     setState(() => controlsVisible = true);
-    if (player.state.playing && !opening && error == null) {
+    if (player.state.playing && !opening && error == null && !controlsLocked) {
       controlsTimer = Timer(const Duration(seconds: 4), () {
         if (mounted && player.state.playing && !seeking) {
           setState(() => controlsVisible = false);
@@ -1659,6 +1660,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   void _toggleControls() {
+    if (controlsLocked) {
+      setState(() => controlsVisible = true);
+      return;
+    }
     if (controlsVisible) {
       controlsTimer?.cancel();
       setState(() => controlsVisible = false);
@@ -1777,7 +1782,39 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _toggleFullscreen() async {
     await _setLandscape(!landscape);
+    if (mounted) setState(() {});
     _showControls();
+  }
+
+  void _toggleControlsLock() {
+    controlsTimer?.cancel();
+    setState(() {
+      controlsLocked = !controlsLocked;
+      controlsVisible = true;
+    });
+    if (!controlsLocked) _showControls();
+  }
+
+  Widget _toolButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 21),
+            const SizedBox(height: 4),
+            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
   }
 
   void _cycleVideoFit() {
@@ -1873,199 +1910,251 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                             ? const Center(child: CircularProgressIndicator(color: gold))
                             : const SizedBox.shrink(),
                       ),
-                    AnimatedOpacity(
-                      opacity: controlsVisible ? 1 : 0,
-                      duration: const Duration(milliseconds: 250),
-                      child: IgnorePointer(
-                        ignoring: !controlsVisible,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Color(0xCC000000),
-                                Colors.transparent,
-                                Colors.transparent,
-                                Color(0xDD000000),
-                              ],
-                              stops: [0, 0.28, 0.58, 1],
+                    if (controlsLocked)
+                      Positioned(
+                        top: 18,
+                        right: 18,
+                        child: SafeArea(
+                          child: Material(
+                            color: Colors.black.withOpacity(0.62),
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              tooltip: 'فتح قفل الشاشة',
+                              onPressed: _toggleControlsLock,
+                              icon: const Icon(Icons.lock_open_rounded, color: gold, size: 25),
                             ),
                           ),
-                          child: SafeArea(
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        widget.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: _videoFitTooltip,
-                                      onPressed: _cycleVideoFit,
-                                      icon: const Icon(Icons.aspect_ratio, color: Colors.white),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'تبديل اتجاه الشاشة',
-                                      onPressed: _toggleFullscreen,
-                                      icon: Icon(
-                                        landscape ? Icons.fullscreen_exit : Icons.fullscreen,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Spacer(),
-                                StreamBuilder<bool>(
-                                  stream: player.stream.playing,
-                                  builder: (context, snapshot) {
-                                    final playing = snapshot.data ?? false;
-                                    return Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                        ),
+                      )
+                    else
+                      AnimatedOpacity(
+                        opacity: controlsVisible ? 1 : 0,
+                        duration: const Duration(milliseconds: 250),
+                        child: IgnorePointer(
+                          ignoring: !controlsVisible,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Color(0xE6000000),
+                                  Color(0x22000000),
+                                  Colors.transparent,
+                                  Color(0x33000000),
+                                  Color(0xF0000000),
+                                ],
+                                stops: [0, 0.18, 0.48, 0.72, 1],
+                              ),
+                            ),
+                            child: SafeArea(
+                              child: Column(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                    child: Row(
                                       children: [
                                         _controlButton(
-                                          icon: Icons.replay_10_rounded,
-                                          size: 42,
-                                          onTap: () {
-                                            final next = player.state.position - const Duration(seconds: 10);
-                                            player.seek(next.isNegative ? Duration.zero : next);
-                                            _showControls();
-                                          },
+                                          icon: Icons.arrow_back_rounded,
+                                          size: 22,
+                                          onTap: () => Navigator.pop(context),
                                         ),
-                                        const SizedBox(width: 34),
-                                        _controlButton(
-                                          icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                          size: 68,
-                                          onTap: () async {
-                                            await player.playOrPause();
-                                            _showControls();
-                                          },
-                                          filled: true,
-                                        ),
-                                        const SizedBox(width: 34),
-                                        _controlButton(
-                                          icon: Icons.forward_10_rounded,
-                                          size: 42,
-                                          onTap: () {
-                                            player.seek(player.state.position + const Duration(seconds: 10));
-                                            _showControls();
-                                          },
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                                const Spacer(),
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                                  child: StreamBuilder<Duration>(
-                                    stream: player.stream.position,
-                                    builder: (context, positionSnapshot) {
-                                      final position = positionSnapshot.data ?? Duration.zero;
-                                      return StreamBuilder<Duration>(
-                                        stream: player.stream.duration,
-                                        builder: (context, durationSnapshot) {
-                                          final duration = durationSnapshot.data ?? Duration.zero;
-                                          final max = duration.inMilliseconds > 0
-                                              ? duration.inMilliseconds.toDouble()
-                                              : 1.0;
-                                          final current = seeking
-                                              ? seekValue
-                                              : position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
-                                          return Column(
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              SliderTheme(
-                                                data: SliderTheme.of(context).copyWith(
-                                                  trackHeight: 3,
-                                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
-                                                ),
-                                                child: Slider(
-                                                  value: current.clamp(0.0, max).toDouble(),
-                                                  max: max,
-                                                  activeColor: gold,
-                                                  inactiveColor: Colors.white30,
-                                                  onChangeStart: duration == Duration.zero
-                                                      ? null
-                                                      : (value) {
-                                                          setState(() {
-                                                            seeking = true;
-                                                            seekValue = value;
-                                                          });
-                                                          controlsTimer?.cancel();
-                                                        },
-                                                  onChanged: duration == Duration.zero
-                                                      ? null
-                                                      : (value) => setState(() => seekValue = value),
-                                                  onChangeEnd: duration == Duration.zero
-                                                      ? null
-                                                      : (value) {
-                                                          player.seek(Duration(milliseconds: value.round()));
-                                                          setState(() => seeking = false);
-                                                          _showControls();
-                                                        },
+                                              Text(
+                                                widget.title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
                                                 ),
                                               ),
-                                              Row(
-                                                children: [
-                                                  Text(_time(position),
-                                                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                                                  const Spacer(),
-                                                  IconButton(
-                                                    visualDensity: VisualDensity.compact,
-                                                    onPressed: _pickAudioTrack,
-                                                    tooltip: 'الصوت',
-                                                    icon: const Icon(Icons.audiotrack, color: Colors.white, size: 21),
-                                                  ),
-                                                  IconButton(
-                                                    visualDensity: VisualDensity.compact,
-                                                    onPressed: _pickSubtitleTrack,
-                                                    tooltip: 'الترجمة',
-                                                    icon: const Icon(Icons.subtitles_outlined, color: Colors.white, size: 21),
-                                                  ),
-                                                  Text(_time(duration),
-                                                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                                                ],
-                                              ),
-                                              Row(
-                                                children: [
-                                                  const Spacer(),
-                                                  TextButton.icon(
-                                                    onPressed: _pickSpeed,
-                                                    icon: const Icon(Icons.speed, color: Colors.white, size: 18),
-                                                    label: Text(
-                                                      '\${player.state.rate}x',
-                                                      style: const TextStyle(color: Colors.white),
-                                                    ),
-                                                  ),
-                                                ],
+                                              const Text(
+                                                'SHAMFLIX PLAYER',
+                                                style: TextStyle(
+                                                  color: gold,
+                                                  fontSize: 9,
+                                                  letterSpacing: 2,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
                                               ),
                                             ],
-                                          );
-                                        },
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'قفل اللمس',
+                                          onPressed: _toggleControlsLock,
+                                          icon: const Icon(Icons.lock_outline_rounded, color: Colors.white),
+                                        ),
+                                        IconButton(
+                                          tooltip: _videoFitTooltip,
+                                          onPressed: _cycleVideoFit,
+                                          icon: const Icon(Icons.aspect_ratio_rounded, color: Colors.white),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'تبديل اتجاه الشاشة',
+                                          onPressed: _toggleFullscreen,
+                                          icon: Icon(
+                                            landscape ? Icons.screen_lock_landscape_rounded : Icons.screen_lock_portrait_rounded,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  StreamBuilder<bool>(
+                                    stream: player.stream.playing,
+                                    builder: (context, snapshot) {
+                                      final playing = snapshot.data ?? false;
+                                      return Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          _controlButton(
+                                            icon: Icons.replay_10_rounded,
+                                            size: 38,
+                                            onTap: () {
+                                              final next = player.state.position - const Duration(seconds: 10);
+                                              player.seek(next.isNegative ? Duration.zero : next);
+                                              _showControls();
+                                            },
+                                          ),
+                                          const SizedBox(width: 30),
+                                          _controlButton(
+                                            icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                            size: 66,
+                                            onTap: () async {
+                                              await player.playOrPause();
+                                              _showControls();
+                                            },
+                                            filled: true,
+                                          ),
+                                          const SizedBox(width: 30),
+                                          _controlButton(
+                                            icon: Icons.forward_10_rounded,
+                                            size: 38,
+                                            onTap: () {
+                                              player.seek(player.state.position + const Duration(seconds: 10));
+                                              _showControls();
+                                            },
+                                          ),
+                                        ],
                                       );
                                     },
                                   ),
-                                ),
-                              ],
+                                  const Spacer(),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
+                                    child: StreamBuilder<Duration>(
+                                      stream: player.stream.position,
+                                      builder: (context, positionSnapshot) {
+                                        final position = positionSnapshot.data ?? Duration.zero;
+                                        return StreamBuilder<Duration>(
+                                          stream: player.stream.duration,
+                                          builder: (context, durationSnapshot) {
+                                            final duration = durationSnapshot.data ?? Duration.zero;
+                                            final max = duration.inMilliseconds > 0
+                                                ? duration.inMilliseconds.toDouble()
+                                                : 1.0;
+                                            final current = seeking
+                                                ? seekValue
+                                                : position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
+                                            return Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                SliderTheme(
+                                                  data: SliderTheme.of(context).copyWith(
+                                                    trackHeight: 3.5,
+                                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                                  ),
+                                                  child: Slider(
+                                                    value: current.clamp(0.0, max).toDouble(),
+                                                    max: max,
+                                                    activeColor: gold,
+                                                    inactiveColor: Colors.white24,
+                                                    onChangeStart: duration == Duration.zero
+                                                        ? null
+                                                        : (value) {
+                                                            setState(() {
+                                                              seeking = true;
+                                                              seekValue = value;
+                                                            });
+                                                            controlsTimer?.cancel();
+                                                          },
+                                                    onChanged: duration == Duration.zero
+                                                        ? null
+                                                        : (value) => setState(() => seekValue = value),
+                                                    onChangeEnd: duration == Duration.zero
+                                                        ? null
+                                                        : (value) {
+                                                            player.seek(Duration(milliseconds: value.round()));
+                                                            setState(() => seeking = false);
+                                                            _showControls();
+                                                          },
+                                                  ),
+                                                ),
+                                                Row(
+                                                  children: [
+                                                    Text(_time(position),
+                                                        style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                                    const Spacer(),
+                                                    Text(_time(duration),
+                                                        style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white.withOpacity(0.07),
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    border: Border.all(color: Colors.white12),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                                    children: [
+                                                      _toolButton(
+                                                        icon: Icons.audiotrack_rounded,
+                                                        label: 'الصوت',
+                                                        onTap: _pickAudioTrack,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.subtitles_rounded,
+                                                        label: 'الترجمة',
+                                                        onTap: _pickSubtitleTrack,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.speed_rounded,
+                                                        label: '${player.state.rate}x',
+                                                        onTap: _pickSpeed,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.fit_screen_rounded,
+                                                        label: 'حجم الصورة',
+                                                        onTap: _cycleVideoFit,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -2348,4 +2437,10 @@ class ShamFlixSearch extends SearchDelegate {
 // ==========================================
 // ShamFlix - آخر تحديث: 21-11-2026
 // تمت إضافة تبديل نسبة عرض الفيديو بين الاحتواء والملء والتمديد من داخل المشغّل.
+// ==========================================
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// تمت إعادة تنظيم واجهة المشغّل بطابع سينمائي مع شريط أدوات سفلي واضح.
+// أضيف قفل اللمس مع زر فتح مستقل، مع الحفاظ على التشغيل والسيرفرات ومسارات الصوت والترجمة.
 // ==========================================
