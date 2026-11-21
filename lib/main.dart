@@ -1593,6 +1593,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   bool seeking = false;
   double seekValue = 0;
   bool landscape = true;
+  int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
 
   @override
   void initState() {
@@ -1779,6 +1780,35 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     _showControls();
   }
 
+  void _cycleVideoFit() {
+    setState(() => videoFitMode = (videoFitMode + 1) % 3);
+    final labels = ['احتواء كامل بدون قص', 'ملء الشاشة مع قص الأطراف', 'تمديد الصورة لملء الشاشة'];
+    _message('طريقة عرض الصورة: ${labels[videoFitMode]}');
+    _showControls();
+  }
+
+  BoxFit get _currentVideoFit {
+    switch (videoFitMode) {
+      case 1:
+        return BoxFit.cover;
+      case 2:
+        return BoxFit.fill;
+      default:
+        return BoxFit.contain;
+    }
+  }
+
+  String get _videoFitTooltip {
+    switch (videoFitMode) {
+      case 1:
+        return 'ملء الشاشة مع قص';
+      case 2:
+        return 'تمديد الصورة';
+      default:
+        return 'احتواء كامل';
+    }
+  }
+
   @override
   void dispose() {
     controlsTimer?.cancel();
@@ -1831,7 +1861,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                     if (!opening)
                       Video(
                         controller: controller,
-                        fit: BoxFit.contain,
+                        fit: _currentVideoFit,
                         controls: NoVideoControls,
                       ),
                     if (opening)
@@ -1884,7 +1914,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                       ),
                                     ),
                                     IconButton(
-                                      tooltip: 'ملء الشاشة',
+                                      tooltip: _videoFitTooltip,
+                                      onPressed: _cycleVideoFit,
+                                      icon: const Icon(Icons.aspect_ratio, color: Colors.white),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'تبديل اتجاه الشاشة',
                                       onPressed: _toggleFullscreen,
                                       icon: Icon(
                                         landscape ? Icons.fullscreen_exit : Icons.fullscreen,
@@ -2308,4 +2343,9 @@ class ShamFlixSearch extends SearchDelegate {
 // تم تطوير واجهة المشغّل الداخلي بتصميم سينمائي مستوحى من Netflix.
 // أضيف الإخفاء التلقائي لعناصر التحكم، والملء للشاشة، والتقديم والترجيع، والسرعة ومسارات الصوت والترجمة.
 // تم الإبقاء على media_kit ونظام اختيار السيرفرات الحالي دون تغيير.
+// أضيفت ثلاثة أوضاع لعرض الفيديو: احتواء، ملء مع قص، وتمديد.
+// ==========================================
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// تمت إضافة تبديل نسبة عرض الفيديو بين الاحتواء والملء والتمديد من داخل المشغّل.
 // ==========================================
