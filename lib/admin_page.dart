@@ -42,6 +42,12 @@ class _AdminPageState extends State<AdminPage> {
   bool badgeSettingLoading = true;
   bool badgeSettingSaving = false;
   String? badgeSettingError;
+  final TextEditingController inviteLinkController = TextEditingController();
+  final TextEditingController updateVersionController = TextEditingController();
+  final TextEditingController updateApkController = TextEditingController();
+  final TextEditingController updateNotesController = TextEditingController();
+  bool appSettingsLoading = false;
+  bool appSettingsSaving = false;
 
   String currentSection = 'home';
   String userCategory = 'normal';
@@ -85,11 +91,16 @@ class _AdminPageState extends State<AdminPage> {
   void initState() {
     super.initState();
     loadCategoryBadgeSetting();
+    loadAppLinksAndUpdateSettings();
   }
 
   @override
   void dispose() {
     searchController.dispose();
+    inviteLinkController.dispose();
+    updateVersionController.dispose();
+    updateApkController.dispose();
+    updateNotesController.dispose();
     super.dispose();
   }
 
@@ -195,6 +206,74 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> loadAppLinksAndUpdateSettings() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+    if (mounted) setState(() => appSettingsLoading = true);
+    try {
+      final rows = await AuthService.client
+          .from('app_settings')
+          .select('setting_key,setting_value')
+          .inFilter('setting_key', ['invite_link', 'app_update']);
+      for (final row in rows) {
+        final key = row['setting_key']?.toString();
+        final value = row['setting_value'];
+        if (key == 'invite_link') {
+          inviteLinkController.text = value is Map
+              ? value['url']?.toString() ?? ''
+              : value?.toString() ?? '';
+        } else if (key == 'app_update' && value is Map) {
+          updateVersionController.text = value['version']?.toString() ?? '';
+          updateApkController.text = value['apk_url']?.toString() ?? '';
+          updateNotesController.text = value['release_notes']?.toString() ?? '';
+        }
+      }
+    } catch (e) {
+      if (mounted) showMessage('تعذر تحميل إعدادات الدعوة والتحديث: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => appSettingsLoading = false);
+    }
+  }
+
+  Future<void> saveAppLinksAndUpdateSettings() async {
+    final inviteLink = inviteLinkController.text.trim();
+    final version = updateVersionController.text.trim();
+    final apkUrl = updateApkController.text.trim();
+    final notes = updateNotesController.text.trim();
+    if ((version.isEmpty) != (apkUrl.isEmpty)) {
+      showMessage('أدخل رقم الإصدار ورابط APK معاً', isError: true);
+      return;
+    }
+    if (apkUrl.isNotEmpty) {
+      final uri = Uri.tryParse(apkUrl);
+      if (uri == null || uri.scheme != 'https') {
+        showMessage('يجب أن يكون رابط APK آمناً ويبدأ بـ HTTPS', isError: true);
+        return;
+      }
+    }
+    setState(() => appSettingsSaving = true);
+    try {
+      await AuthService.client.from('app_settings').upsert([
+        {
+          'setting_key': 'invite_link',
+          'setting_value': inviteLink,
+        },
+        {
+          'setting_key': 'app_update',
+          'setting_value': {
+            'version': version,
+            'apk_url': apkUrl,
+            'release_notes': notes,
+          },
+        },
+      ], onConflict: 'setting_key');
+      showMessage('تم حفظ رابط الدعوة وإعدادات التحديث');
+    } catch (e) {
+      showMessage('تعذر حفظ الإعدادات: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => appSettingsSaving = false);
+    }
+  }
+
   Widget settingsSection() {
     if (badgeSettingLoading) {
       return const Center(
@@ -247,6 +326,49 @@ class _AdminPageState extends State<AdminPage> {
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ),
+        const SizedBox(height: 10),
+        Card(
+          color: adminPanel,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('رابط دعوة الأصدقاء', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: inviteLinkController,
+                  keyboardType: TextInputType.url,
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(hintText: 'https://...', hintStyle: TextStyle(color: Colors.white38)),
+                ),
+                const SizedBox(height: 18),
+                const Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                adminField(updateVersionController, 'رقم الإصدار الجديد', required: false),
+                adminField(updateApkController, 'رابط ملف APK الآمن HTTPS', required: false),
+                adminField(updateNotesController, 'ملاحظات التحديث', maxLines: 3, required: false),
+                const SizedBox(height: 8),
+                const Text('بعد حفظ الرابط والإصدار، يستطيع الزائر البحث عن التحديث وتنزيل ملف APK وتثبيته من داخل التطبيق.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5)),
+                FilledButton.icon(
+                  onPressed: appSettingsSaving ? null : saveAppLinksAndUpdateSettings,
+                  style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                  icon: appSettingsSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Icon(Icons.save),
+                  label: const Text('حفظ الإعدادات'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (appSettingsLoading)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(child: CircularProgressIndicator(color: adminGold)),
+          ),
       ],
     );
   }
@@ -3875,3 +3997,5 @@ class _AdminPageState extends State<AdminPage> {
 // ShamFlix - آخر تحديث: 21-11-2026: لوحة المتصلين تعرض الزوار والمستخدمين المسجلين.
 
 // ShamFlix - آخر تحديث: 21-11-2026: إضافة وإدارة سيرفرات الحلقة من نموذج الحلقة نفسه.
+
+// ShamFlix - آخر تحديث: 21-11-2026: إعداد رابط دعوة الأصدقاء وإدارة ملف APK للتحديث الداخلي.
