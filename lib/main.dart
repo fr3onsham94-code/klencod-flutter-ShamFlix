@@ -1262,7 +1262,18 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   @override
   void initState() {
     super.initState();
+    AppTheme.revision.addListener(_onThemeChanged);
     _loadPackages();
+  }
+
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AppTheme.revision.removeListener(_onThemeChanged);
+    super.dispose();
   }
 
   Future<void> _loadPackages() async {
@@ -1400,6 +1411,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 style: TextStyle(color: sectionSecondaryText, fontSize: 10),
               ),
               TextButton(
+                style: TextButton.styleFrom(foregroundColor: sectionButton),
                 onPressed: () => _openPackage(id),
                 child: Text(
                   appText('عرض الكل', 'See all', 'Tümünü gör'),
@@ -1530,7 +1542,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: active ? sectionPrimary : Colors.white24,
+                            color: active ? sectionPrimary : sectionBorder,
                             width: active ? 1.2 : 0.7,
                           ),
                         ),
@@ -1741,7 +1753,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                               _sidebar(),
                               const VerticalDivider(
                                 width: 1,
-                                color: Color(0xFF333333),
+                                color: sectionBorder,
                               ),
                               Expanded(
                                 child: _packageDetails(),
@@ -4874,4 +4886,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: ربط ألوان صفحات باقات الأفلام والمسلسلات بلوحة ألوان كل قسم بشكل مستقل | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
+// آخر تعديل: تفعيل تحديث معاينة ألوان الأقسام فورياً وربط الفواصل والأزرار بألوان القسم | التاريخ: 2026-11-21 | الوقت: 20:05:00 بتوقيت تركيا
