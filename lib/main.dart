@@ -2963,7 +2963,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: widget.embedded ? 3 : 8, vertical: widget.embedded ? 2 : 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -3151,15 +3151,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                               child: Column(
                                 children: [
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                    padding: EdgeInsets.symmetric(horizontal: widget.embedded ? 6 : 12, vertical: widget.embedded ? 2 : 5),
                                     child: Row(
                                       children: [
-                                        _controlButton(
+                                        if (!widget.embedded) _controlButton(
                                           icon: Icons.arrow_back_rounded,
                                           size: 22,
                                           onTap: () => Navigator.pop(context),
                                         ),
-                                        const SizedBox(width: 10),
+                                        SizedBox(width: widget.embedded ? 4 : 10),
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3170,7 +3170,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 16,
+                                                  fontSize: widget.embedded ? 12 : 16,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -3178,7 +3178,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 'SHAMFLIX PLAYER',
                                                 style: TextStyle(
                                                   color: gold,
-                                                  fontSize: 9,
+                                                  fontSize: widget.embedded ? 7 : 9,
                                                   letterSpacing: 2,
                                                   fontWeight: FontWeight.w700,
                                                 ),
@@ -3207,27 +3207,27 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                         children: [
                                           _controlButton(
                                             icon: Icons.replay_10_rounded,
-                                            size: 38,
+                                            size: widget.embedded ? 22 : 38,
                                             onTap: () {
                                               final next = player.state.position - const Duration(seconds: 10);
                                               player.seek(next.isNegative ? Duration.zero : next);
                                               _showControls();
                                             },
                                           ),
-                                          const SizedBox(width: 30),
+                                          SizedBox(width: widget.embedded ? 12 : 30),
                                           _controlButton(
                                             icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                            size: 66,
+                                            size: widget.embedded ? 42 : 66,
                                             onTap: () async {
                                               await player.playOrPause();
                                               _showControls();
                                             },
                                             filled: true,
                                           ),
-                                          const SizedBox(width: 30),
+                                          SizedBox(width: widget.embedded ? 12 : 30),
                                           _controlButton(
                                             icon: Icons.forward_10_rounded,
-                                            size: 38,
+                                            size: widget.embedded ? 22 : 38,
                                             onTap: () {
                                               player.seek(player.state.position + const Duration(seconds: 10));
                                               _showControls();
@@ -3239,7 +3239,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                   ),
                                   const Spacer(),
                                   Padding(
-                                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
+                                    padding: EdgeInsets.fromLTRB(widget.embedded ? 8 : 22, 0, widget.embedded ? 8 : 22, widget.embedded ? 4 : 12),
                                     child: StreamBuilder<Duration>(
                                       stream: player.stream.position,
                                       builder: (context, positionSnapshot) {
@@ -3259,9 +3259,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                               children: [
                                                 SliderTheme(
                                                   data: SliderTheme.of(context).copyWith(
-                                                    trackHeight: 3.5,
-                                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                                    trackHeight: widget.embedded ? 2 : 3.5,
+                                                    thumbShape: RoundSliderThumbShape(enabledThumbRadius: widget.embedded ? 4 : 6),
+                                                    overlayShape: RoundSliderOverlayShape(overlayRadius: widget.embedded ? 8 : 14),
                                                   ),
                                                   child: Slider(
                                                     value: current.clamp(0.0, max).toDouble(),
@@ -3298,9 +3298,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                         style: const TextStyle(color: Colors.white70, fontSize: 9)),
                                                   ],
                                                 ),
-                                                const SizedBox(height: 8),
+                                                SizedBox(height: widget.embedded ? 3 : 8),
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  padding: EdgeInsets.symmetric(horizontal: widget.embedded ? 3 : 8, vertical: widget.embedded ? 2 : 4),
                                                   decoration: BoxDecoration(
                                                     color: Colors.white.withOpacity(0.07),
                                                     borderRadius: BorderRadius.circular(16),
@@ -3845,3 +3845,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // توضيح زر ملء الشاشة في المشغل المضمن أعلى قائمة القنوات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تصغير عناصر التحكم للمشغل المضمن كي تظهر أزرار الصوت والترجمة والسرعة والسيرفرات دون تجاوز مساحة المشغل العلوية.
