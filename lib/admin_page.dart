@@ -41,6 +41,11 @@ class _AdminPageState extends State<AdminPage> {
   bool badgeSettingLoading = true;
   bool badgeSettingSaving = false;
   String? badgeSettingError;
+  final TextEditingController inviteLinkController = TextEditingController();
+  final TextEditingController updateVersionController = TextEditingController(text: '1.0.0');
+  final TextEditingController apkUrlController = TextEditingController();
+  bool appConfigLoading = true;
+  bool appConfigSaving = false;
 
   String currentSection = 'home';
   String userCategory = 'normal';
@@ -80,11 +85,15 @@ class _AdminPageState extends State<AdminPage> {
   void initState() {
     super.initState();
     loadCategoryBadgeSetting();
+    loadAppConfig();
   }
 
   @override
   void dispose() {
     searchController.dispose();
+    inviteLinkController.dispose();
+    updateVersionController.dispose();
+    apkUrlController.dispose();
     final channel = onlineChannel;
     if (channel != null) AuthService.client.removeChannel(channel);
     super.dispose();
@@ -147,6 +156,42 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> loadAppConfig() async {
+    try {
+      final response = await http.get(appSettingsUrl.replace(queryParameters: {
+        'select': 'setting_key,setting_value',
+        'setting_key': 'in.(app_invite_link,app_update)',
+      }), headers: headers);
+      if (response.statusCode != 200) throw Exception(_readError(response));
+      final rows = jsonDecode(response.body) as List;
+      for (final row in rows) {
+        if (row['setting_key'] == 'app_invite_link') inviteLinkController.text = row['setting_value']?.toString() ?? '';
+        if (row['setting_key'] == 'app_update' && row['setting_value'] is Map) {
+          final value = row['setting_value'] as Map;
+          updateVersionController.text = value['version']?.toString() ?? '1.0.0';
+          apkUrlController.text = value['apk_url']?.toString() ?? '';
+        }
+      }
+    } catch (e) {
+      if (mounted) showMessage('تعذر تحميل إعدادات الدعوة والتحديث: $e', isError: true);
+    } finally { if (mounted) setState(() => appConfigLoading = false); }
+  }
+
+  Future<void> saveAppConfig() async {
+    if (appConfigSaving) return;
+    setState(() => appConfigSaving = true);
+    try {
+      final response = await http.post(appSettingsUrl.replace(queryParameters: {'on_conflict': 'setting_key'}),
+        headers: {...headers, 'Prefer': 'resolution=merge-duplicates,return=minimal'},
+        body: jsonEncode([
+          {'setting_key': 'app_invite_link', 'setting_value': inviteLinkController.text.trim()},
+          {'setting_key': 'app_update', 'setting_value': {'version': updateVersionController.text.trim(), 'apk_url': apkUrlController.text.trim()}},
+        ]));
+      if (response.statusCode != 200 && response.statusCode != 201 && response.statusCode != 204) throw Exception(_readError(response));
+      showMessage('تم حفظ رابط الدعوة وبيانات التحديث');
+    } catch (e) { showMessage(e.toString(), isError: true); }
+    finally { if (mounted) setState(() => appConfigSaving = false); }
+  }
   Future<void> saveCategoryBadgeSetting(bool enabled) async {
     if (badgeSettingSaving) return;
 
@@ -193,7 +238,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Widget settingsSection() {
-    if (badgeSettingLoading) {
+    if (badgeSettingLoading || appConfigLoading) {
       return const Center(
         child: CircularProgressIndicator(color: adminGold),
       );
@@ -237,6 +282,28 @@ class _AdminPageState extends State<AdminPage> {
               child: CircularProgressIndicator(color: adminGold),
             ),
           ),
+        Card(
+          color: adminPanel,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('رابط دعوة صديق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              adminField(inviteLinkController, 'رابط التطبيق المباشر'),
+              const SizedBox(height: 12),
+              const Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              adminField(updateVersionController, 'رقم الإصدار الجديد'),
+              adminField(apkUrlController, 'رابط ملف APK المباشر'),
+              const Text('ارفع ملف APK على رابط HTTPS مباشر، ثم ضع رقم الإصدار والرابط هنا ليتمكن الزائر من البحث عن التحديث وتثبيته.', style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5)),
+              const SizedBox(height: 12),
+              FilledButton.icon(onPressed: appConfigSaving ? null : saveAppConfig,
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                icon: appConfigSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save),
+                label: const Text('حفظ إعدادات التطبيق')),
+            ]),
+          ),
+        ),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Text(
@@ -3661,3 +3728,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تفعيل اختيار الباقات المتعددة للقنوات التلفزيونية داخل نموذج الإضافة والتعديل.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// لوحة المدير تتحكم برابط دعوة الأصدقاء وإصدار APK ورابط التحديث الداخلي.
