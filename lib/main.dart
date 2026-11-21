@@ -1381,11 +1381,22 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
     searchController.addListener(() {
       if (mounted) setState(() => searchQuery = searchController.text.trim());
     });
+    appSettingsRefreshNotifier.addListener(_refreshGridColumns);
     _loadPackages();
+  }
+
+  Future<void> _refreshGridColumns() async {
+    try {
+      final row = await AuthService.client.from('app_settings')
+          .select('setting_value').eq('setting_key', 'catalog_grid_columns').maybeSingle();
+      final value = (int.tryParse(row?['setting_value']?.toString() ?? '') ?? 5).clamp(2, 6).toInt();
+      if (mounted && value != gridColumns) setState(() => gridColumns = value);
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    appSettingsRefreshNotifier.removeListener(_refreshGridColumns);
     searchController.dispose();
     super.dispose();
   }
@@ -3543,13 +3554,24 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     super.initState();
     searchController.addListener(() { if (mounted) setState(() => searchQuery = searchController.text.trim()); });
     _load();
+    appSettingsRefreshNotifier.addListener(_refreshGridColumns);
     channelRefreshNotifier.addListener(_onExternalRefresh);
   }
 
   void _onExternalRefresh() { _load(); }
 
+  Future<void> _refreshGridColumns() async {
+    try {
+      final row = await AuthService.client.from('app_settings')
+          .select('setting_value').eq('setting_key', 'catalog_grid_columns').maybeSingle();
+      final value = (int.tryParse(row?['setting_value']?.toString() ?? '') ?? 5).clamp(2, 6).toInt();
+      if (mounted && value != gridColumns) setState(() => gridColumns = value);
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    appSettingsRefreshNotifier.removeListener(_refreshGridColumns);
     channelRefreshNotifier.removeListener(_onExternalRefresh);
     searchController.dispose();
     super.dispose();
@@ -5085,4 +5107,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: استكمال ربط ألوان الباقات والقنوات النشطة بمتغيرات ألوان الأقسام | التاريخ: 2026-11-21 | الوقت: 23:17:00 بتوقيت تركيا
+// آخر تعديل: تحديث عدد أعمدة الأفلام والمسلسلات والقنوات فور تغيير الإعداد الموحد | التاريخ: 2026-11-21 | الوقت: 23:31:00 بتوقيت تركيا
