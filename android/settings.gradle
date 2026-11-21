@@ -25,6 +25,21 @@ plugins {
 
 include ":app"
 
+// إضافة مرآة Maven Central إلى buildscript repositories لكل المشاريع الفرعية
+// بما فيها إضافات Flutter التي تعرّف مستودعاتها بشكل مستقل.
+gradle.beforeProject { project ->
+    project.buildscript.repositories.maven {
+        name = "MavenCentralMirror"
+        url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+    }
+}
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// إصلاح تحميل اعتماديات buildscript لإضافات Flutter عبر مرآة Maven Central.
+// ==========================================
+
+
 // ==========================================
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة مرآة Maven Central لتقليل أخطاء 429 أثناء تنزيل الاعتماديات.
