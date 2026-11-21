@@ -2292,11 +2292,18 @@ class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
       final uri = Uri.tryParse(apkUrl);
       if (uri == null || !uri.hasScheme || (uri.scheme != 'https' && uri.scheme != 'http')) throw Exception('رابط ملف التحديث غير صالح');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('يتوفر تحديث $latest، جارٍ تنزيله')));
-      final response = await http.get(uri).timeout(const Duration(minutes: 5));
-      if (response.statusCode != 200 || response.bodyBytes.isEmpty) throw Exception('فشل تنزيل ملف التحديث');
       final directory = await getTemporaryDirectory();
       final apk = File('${directory.path}/ShamFlix-update.apk');
-      await apk.writeAsBytes(response.bodyBytes, flush: true);
+      final client = http.Client();
+      try {
+        final request = http.Request('GET', uri);
+        final streamed = await client.send(request).timeout(const Duration(minutes: 5));
+        if (streamed.statusCode != 200 || streamed.contentLength == 0) throw Exception('فشل تنزيل ملف التحديث');
+        await streamed.stream.pipe(apk.openWrite());
+      } finally {
+        client.close();
+      }
+      if (!await apk.exists() || await apk.length() == 0) throw Exception('ملف التحديث فارغ');
       final result = await OpenFilex.open(apk.path, type: 'application/vnd.android.package-archive');
       if (result.type != ResultType.done) throw Exception('تعذر فتح مثبت التحديث: ${result.message}');
     } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')))); }
@@ -3720,3 +3727,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // استخدام نتائج التصفية المخزنة في القوائم لتجنب إعادة إنشاء Future أثناء البناء.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تنزيل ملفات APK بالبث المباشر إلى التخزين المؤقت لتقليل استهلاك الذاكرة.
