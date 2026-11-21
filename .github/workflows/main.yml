@@ -1,6 +1,12 @@
 name: Build Flutter APK
 
 on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       flutter_version:
@@ -41,6 +47,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Analyze Dart code
+        run: flutter analyze
+
       - name: Build APK
         run: flutter build apk --release
 
@@ -51,3 +60,5 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7
+
+# ShamFlix - آخر تعديل: تفعيل فحص Dart وبناء APK تلقائياً عند فتح Pull Request أو الدفع إلى main | التاريخ والوقت: 22/11/2026, 00:42:00 بتوقيت تركيا.
