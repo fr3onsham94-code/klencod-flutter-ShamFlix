@@ -3544,7 +3544,9 @@ class _AdminPageState extends State<AdminPage> {
                               ? Icons.live_tv_outlined
                               : isChannels
                                   ? Icons.tv
-                                  : Icons.people_outline,
+                                  : isOnline
+                                      ? Icons.wifi_tethering
+                                      : Icons.people_outline,
                       color: adminGold,
                       size: 30,
                     ),
@@ -3568,7 +3570,9 @@ class _AdminPageState extends State<AdminPage> {
                                   ? '${channels.length} قناة'
                                   : isUsers
                                       ? '${users.length} مستخدم'
-                                      : '${filteredUsers.length} نتيجة',
+                                      : isOnline
+                                          ? '${onlineUsers.length} متصل'
+                                          : '${filteredUsers.length} نتيجة',
                       style: const TextStyle(
                         color: adminGold,
                         fontWeight: FontWeight.bold,
@@ -3746,3 +3750,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة إدارة سيرفرات الحلقة مباشرة من نموذج التعديل وإدارة المواسم من نموذج المسلسل.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// عرض عدد المتصلين وأيقونة مخصصة في رأس صفحة المتصلين.
