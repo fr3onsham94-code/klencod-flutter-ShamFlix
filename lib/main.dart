@@ -30,6 +30,7 @@ final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
 final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
+final ValueNotifier<int> appSettingsRefreshNotifier = ValueNotifier<int>(0);
 final ValueNotifier<int> channelRefreshNotifier = ValueNotifier<int>(0);
 final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier<Locale>(const Locale('ar'));
 
@@ -545,133 +546,9 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
           foregroundColor: AppTheme.text,
         ),
       ),
-      home: const ShamFlixSplashGate(),
+      home: const HomePage(),
     ),
     ),
-    );
-  }
-}
-
-class ShamFlixSplashGate extends StatefulWidget {
-  const ShamFlixSplashGate({super.key});
-
-  @override
-  State<ShamFlixSplashGate> createState() => _ShamFlixSplashGateState();
-}
-
-class _ShamFlixSplashGateState extends State<ShamFlixSplashGate> {
-  bool _finished = false;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 1700), () {
-      if (mounted) setState(() => _finished = true);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_finished) return const HomePage();
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF090909),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0, -0.12),
-                radius: 0.85,
-                colors: [Color(0xFF241014), Color(0xFF100B0C), Color(0xFF090909)],
-                stops: [0, 0.48, 1],
-              ),
-            ),
-          ),
-          Center(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.82, end: 1),
-              duration: const Duration(milliseconds: 950),
-              curve: Curves.easeOutBack,
-              builder: (context, scale, child) => Transform.scale(
-                scale: scale,
-                child: child,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 112,
-                    height: 112,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF171111),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: const Color(0x66E50914), width: 1.4),
-                      boxShadow: const [
-                        BoxShadow(color: Color(0x55E50914), blurRadius: 42, spreadRadius: 3),
-                      ],
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        const Icon(Icons.movie_creation_rounded, color: Color(0xFFE50914), size: 72),
-                        Positioned(
-                          bottom: 20,
-                          right: 19,
-                          child: Container(
-                            width: 27,
-                            height: 27,
-                            decoration: const BoxDecoration(color: Color(0xFFE50914), shape: BoxShape.circle),
-                            child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'SHAM FLIX',
-                    textDirection: TextDirection.ltr,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 29,
-                      letterSpacing: 5,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 9),
-                  Container(
-                    width: 54,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE50914),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    appText('عالمك الترفيهي في مكان واحد', 'Your entertainment, all in one place', 'Eğlencen tek bir yerde'),
-                    style: const TextStyle(color: Color(0xFFB3B3B3), fontSize: 12, letterSpacing: 0.3),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 34,
-            child: Column(
-              children: [
-                const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE50914))),
-                const SizedBox(height: 10),
-                Text('PREMIUM ENTERTAINMENT', style: TextStyle(color: Colors.white.withOpacity(0.38), fontSize: 8, letterSpacing: 2.1)),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -794,12 +671,12 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
       child: Row(
         children: [
-          Container(width: 4, height: 22, color: AppTheme.sectionColor('home', 'primary')),
+          Container(width: 4, height: 22, color: gold),
           const SizedBox(width: 9),
           Text(
             title,
             style: TextStyle(
-              color: AppTheme.sectionColor('home', 'text'),
+              color: AppTheme.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -815,7 +692,7 @@ class _HomePageState extends State<HomePage> {
         height: height,
         color: panel,
         child: Center(
-          child: Icon(Icons.movie, color: AppTheme.sectionColor('home', 'primary'), size: 48),
+          child: Icon(Icons.movie, color: gold, size: 48),
         ),
       );
     }
@@ -830,7 +707,7 @@ class _HomePageState extends State<HomePage> {
           height: height,
           color: panel,
           child: Center(
-            child: Icon(Icons.movie, color: AppTheme.sectionColor('home', 'primary'), size: 48),
+            child: Icon(Icons.movie, color: gold, size: 48),
           ),
         );
       },
@@ -889,13 +766,13 @@ class _HomePageState extends State<HomePage> {
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: AppTheme.sectionColor('home', 'primary'),
+                            color: gold,
                             borderRadius: BorderRadius.circular(7),
                           ),
                           child: Text(
                             category,
                             style: TextStyle(
-                              color: AppTheme.sectionColor('home', 'text'),
+                              color: AppTheme.text,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
@@ -912,14 +789,14 @@ class _HomePageState extends State<HomePage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: AppTheme.sectionColor('home', 'text'),
+                color: AppTheme.text,
                 fontWeight: FontWeight.bold,
               ),
             ),
             Text(
               valueOf(item['release_year'], 'ShamFlix'),
               style: TextStyle(
-                color: AppTheme.sectionColor('home', 'secondaryText'),
+                color: AppTheme.secondaryText,
                 fontSize: 11,
               ),
             ),
@@ -945,7 +822,7 @@ class _HomePageState extends State<HomePage> {
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Center(
-                  child: CircularProgressIndicator(color: AppTheme.sectionColor('home', 'primary')),
+                  child: CircularProgressIndicator(color: gold),
                 );
               }
 
@@ -953,7 +830,7 @@ class _HomePageState extends State<HomePage> {
                 return Center(
                   child: Text(
                     'تعذر تحميل البيانات',
-                    style: TextStyle(color: AppTheme.sectionColor('home', 'secondaryText')),
+                    style: TextStyle(color: AppTheme.secondaryText),
                   ),
                 );
               }
@@ -970,7 +847,7 @@ class _HomePageState extends State<HomePage> {
                 return Center(
                   child: Text(
                     'لا يوجد محتوى منشور حالياً',
-                    style: TextStyle(color: AppTheme.sectionColor('home', 'secondaryText')),
+                    style: TextStyle(color: AppTheme.secondaryText),
                   ),
                 );
               }
@@ -1010,9 +887,9 @@ class _HomePageState extends State<HomePage> {
             SizedBox(
               height: 112,
               child: snapshot.connectionState == ConnectionState.waiting
-                  ? Center(child: CircularProgressIndicator(color: AppTheme.sectionColor('home', 'primary')))
+                  ? Center(child: CircularProgressIndicator(color: gold))
                   : records.isEmpty
-                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: AppTheme.sectionColor('home', 'secondaryText'))))
+                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: AppTheme.secondaryText)))
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
                           reverse: true,
@@ -1037,15 +914,15 @@ class _HomePageState extends State<HomePage> {
                                     child: SizedBox(
                                       width: 48, height: 48,
                                       child: logo.isEmpty
-                                          ? ColoredBox(color: bg, child: Icon(Icons.live_tv, color: AppTheme.sectionColor('home', 'primary')))
+                                          ? ColoredBox(color: bg, child: Icon(Icons.live_tv, color: gold))
                                           : Image.network(logo, fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => ColoredBox(color: bg, child: Icon(Icons.live_tv, color: AppTheme.sectionColor('home', 'primary')))),
+                                              errorBuilder: (_, __, ___) => ColoredBox(color: bg, child: Icon(Icons.live_tv, color: gold))),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(valueOf(record['title'], appText('قناة', 'Channel', 'Kanal')), maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: AppTheme.sectionColor('home', 'text'), fontWeight: FontWeight.bold))),
+                                    style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold))),
                                 ]),
                               ),
                             );
@@ -1077,13 +954,13 @@ class _HomePageState extends State<HomePage> {
                 child: Container(width: 145, margin: const EdgeInsets.only(left: 12),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     ClipRRect(borderRadius: BorderRadius.circular(10), child: SizedBox(width: 145, height: 145,
-                      child: poster.isEmpty ? Container(color: panel, child: Icon(Icons.play_circle, color: AppTheme.sectionColor('home', 'primary'), size: 42)) :
+                      child: poster.isEmpty ? Container(color: panel, child: Icon(Icons.play_circle, color: gold, size: 42)) :
                         Image.network(poster, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
-                          Container(color: panel, child: Icon(Icons.play_circle, color: AppTheme.sectionColor('home', 'primary'), size: 42))))),
+                          Container(color: panel, child: Icon(Icons.play_circle, color: gold, size: 42))))),
                     const SizedBox(height: 7),
                     Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: AppTheme.sectionColor('home', 'text'), fontWeight: FontWeight.bold)),
-                    Text('متابعة من ${formatWatchPosition(record['position'])}', style: TextStyle(color: AppTheme.sectionColor('home', 'primary'), fontSize: 11)),
+                      style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+                    Text('متابعة من ${formatWatchPosition(record['position'])}', style: TextStyle(color: gold, fontSize: 11)),
                   ]),
                 ),
               );
@@ -1144,12 +1021,12 @@ class _HomePageState extends State<HomePage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppTheme.sectionColor('home', 'primary'),
+                    color: gold,
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Text(
                     'SHAM FLIX',
-                    style: TextStyle(color: AppTheme.sectionColor('home', 'text'), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                    style: TextStyle(color: AppTheme.text, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
                   ),
                 ),
               ),
@@ -1169,7 +1046,7 @@ class _HomePageState extends State<HomePage> {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: AppTheme.sectionColor('home', 'text'), fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
+                      style: TextStyle(color: AppTheme.text, fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
                     ),
                     const SizedBox(height: 14),
                     Row(
@@ -1178,8 +1055,8 @@ class _HomePageState extends State<HomePage> {
                           ElevatedButton.icon(
                             onPressed: () => openDetails(featured, isSeries: false),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.sectionColor('home', 'button'),
-                              foregroundColor: AppTheme.sectionColor('home', 'text'),
+                              backgroundColor: gold,
+                              foregroundColor: AppTheme.text,
                               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                             ),
@@ -1193,8 +1070,8 @@ class _HomePageState extends State<HomePage> {
                           OutlinedButton.icon(
                             onPressed: () => openDetails(featured, isSeries: false),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.sectionColor('home', 'text'),
-                              side: BorderSide(color: AppTheme.sectionColor('home', 'secondaryText')),
+                              foregroundColor: AppTheme.text,
+                              side: BorderSide(color: AppTheme.secondaryText),
                               padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                             ),
@@ -1215,7 +1092,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget homeContent() {
     return RefreshIndicator(
-      color: AppTheme.sectionColor('home', 'primary'),
+      color: gold,
       backgroundColor: panel,
       onRefresh: refreshData,
       child: ListView(
@@ -1226,23 +1103,23 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(
                   'SHAM',
-                  style: TextStyle(color: AppTheme.sectionColor('home', 'text'), fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  style: TextStyle(color: AppTheme.text, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 Text(
                   'FLIX',
-                  style: TextStyle(color: AppTheme.sectionColor('home', 'primary'), fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  style: TextStyle(color: gold, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 const Spacer(),
                 IconButton(
                   onPressed: () {
                     showSearch(context: context, delegate: ShamFlixSearch());
                   },
-                  icon: Icon(Icons.search, color: AppTheme.sectionColor('home', 'text')),
+                  icon: Icon(Icons.search, color: AppTheme.text),
                 ),
                 IconButton(
                   tooltip: appText('الإشعارات', 'Notifications', 'Bildirimler'),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
-                  icon: Icon(Icons.notifications_none, color: AppTheme.sectionColor('home', 'text')),
+                  icon: Icon(Icons.notifications_none, color: AppTheme.text),
                 ),
               ],
             ),
@@ -1299,13 +1176,13 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         bottomNavigationBar: NavigationBar(
-          backgroundColor: AppTheme.sectionColor('home', 'panel'),
-          indicatorColor: AppTheme.sectionColor('home', 'primary').withOpacity(0.20),
+          backgroundColor: const Color(0xFF151515),
+          indicatorColor: const Color(0x33E50914),
           height: 62,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
             return TextStyle(
-              color: states.contains(WidgetState.selected) ? AppTheme.sectionColor('home', 'text') : AppTheme.sectionColor('home', 'secondaryText'),
+              color: states.contains(WidgetState.selected) ? AppTheme.text : AppTheme.secondaryText,
               fontSize: states.contains(WidgetState.selected) ? 10 : 9,
               fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.normal,
             );
@@ -1318,25 +1195,25 @@ class _HomePageState extends State<HomePage> {
           },
           destinations: [
             NavigationDestination(
-              icon: Icon(Icons.home_outlined, color: AppTheme.sectionColor('home', 'secondaryText'), size: 19),
-              selectedIcon: Icon(Icons.home, color: AppTheme.sectionColor('home', 'primary'), size: 19),
+              icon: Icon(Icons.home_outlined, color: AppTheme.secondaryText, size: 19),
+              selectedIcon: Icon(Icons.home, color: gold, size: 19),
               label: appText('الرئيسية', 'Home', 'Ana Sayfa'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.movie_outlined, color: AppTheme.sectionColor('home', 'secondaryText'), size: 19),
+              icon: Icon(Icons.movie_outlined, color: AppTheme.secondaryText, size: 19),
               label: appText('الأفلام', 'Movies', 'Filmler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.video_library_outlined, color: AppTheme.sectionColor('home', 'secondaryText'), size: 19),
+              icon: Icon(Icons.video_library_outlined, color: AppTheme.secondaryText, size: 19),
               label: appText('المسلسلات', 'Series', 'Diziler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.live_tv_outlined, color: AppTheme.sectionColor('home', 'secondaryText'), size: 19),
+              icon: Icon(Icons.live_tv_outlined, color: AppTheme.secondaryText, size: 19),
               label: appText('مباشر', 'Live TV', 'Canlı TV'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.person_outline, color: AppTheme.sectionColor('home', 'secondaryText'), size: 19),
-              selectedIcon: Icon(Icons.person, color: AppTheme.sectionColor('home', 'primary'), size: 19),
+              icon: Icon(Icons.person_outline, color: AppTheme.secondaryText, size: 19),
+              selectedIcon: Icon(Icons.person, color: gold, size: 19),
               label: appText('حسابي', 'My Account', 'Hesabım'),
             ),
           ],
@@ -1367,8 +1244,6 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   String? error;
   String? selectedPackageId;
   int gridColumns = 5;
-  final TextEditingController searchController = TextEditingController();
-  String searchQuery = '';
   List<Map<String, dynamic>> packages = [];
   final Map<String, List<Map<String, dynamic>>> packageContents = {};
 
@@ -1377,73 +1252,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   @override
   void initState() {
     super.initState();
-    searchController.addListener(() {
-      if (mounted) setState(() => searchQuery = searchController.text.trim());
-    });
-    appSettingsRefreshNotifier.addListener(_refreshGridColumns);
     _loadPackages();
-  }
-
-  Future<void> _refreshGridColumns() async {
-    try {
-      final row = await AuthService.client.from('app_settings')
-          .select('setting_value').eq('setting_key', 'catalog_grid_columns').maybeSingle();
-      final value = (int.tryParse(row?['setting_value']?.toString() ?? '') ?? 5).clamp(2, 6).toInt();
-      if (mounted && value != gridColumns) setState(() => gridColumns = value);
-    } catch (_) {}
-  }
-
-  @override
-  void dispose() {
-    appSettingsRefreshNotifier.removeListener(_refreshGridColumns);
-    searchController.dispose();
-    super.dispose();
-  }
-
-  String get _themeSection => widget.contentType == 'movie' ? 'movies' : 'series';
-
-  List<Map<String, dynamic>> get filteredItems {
-    final query = searchQuery.toLowerCase();
-    if (query.isEmpty) return selectedItems;
-    return selectedItems.where((item) {
-      final title = valueOf(item['title']).toLowerCase();
-      final year = valueOf(item['release_year']).toLowerCase();
-      final category = valueOf(item['category']).toLowerCase();
-      return title.contains(query) || year.contains(query) || category.contains(query);
-    }).toList();
-  }
-
-  Widget _searchField() {
-    final primary = AppTheme.sectionColor(_themeSection, 'primary');
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 2, 10, 8),
-      child: TextField(
-        controller: searchController,
-        textInputAction: TextInputAction.search,
-        style: TextStyle(color: AppTheme.sectionColor(_themeSection, 'text'), fontSize: 13),
-        decoration: InputDecoration(
-          hintText: appText('ابحث عن فيلم أو مسلسل...', 'Search movies or series...', 'Film veya dizi ara...'),
-          hintStyle: TextStyle(color: AppTheme.sectionColor(_themeSection, 'secondaryText'), fontSize: 12),
-          prefixIcon: Icon(Icons.search_rounded, color: primary),
-          suffixIcon: searchQuery.isEmpty ? null : IconButton(
-            tooltip: appText('مسح البحث', 'Clear search', 'Aramayı temizle'),
-            onPressed: searchController.clear,
-            icon: Icon(Icons.close_rounded, color: AppTheme.sectionColor(_themeSection, 'secondaryText')),
-          ),
-          filled: true,
-          fillColor: AppTheme.sectionColor(_themeSection, 'panel'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: primary.withOpacity(0.22)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: primary, width: 1.3),
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _loadPackages() async {
@@ -1536,15 +1345,15 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           aspectRatio: 0.68,
           child: url.isEmpty
               ? Container(
-                  color: AppTheme.sectionColor(_themeSection, 'panel'),
-                  child: Icon(Icons.movie, color: AppTheme.sectionColor(_themeSection, 'primary'), size: 28),
+                  color: panel,
+                  child: Icon(Icons.movie, color: gold, size: 28),
                 )
               : Image.network(
                   url,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
-                    color: AppTheme.sectionColor(_themeSection, 'panel'),
-                    child: Icon(Icons.movie, color: AppTheme.sectionColor(_themeSection, 'primary'), size: 28),
+                    color: panel,
+                    child: Icon(Icons.movie, color: gold, size: 28),
                   ),
                 ),
         ),
@@ -1570,7 +1379,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: AppTheme.sectionColor(_themeSection, 'text'),
+                    color: AppTheme.text,
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1578,13 +1387,13 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
               Text(
                 '${contents.length} ${appText('عنصر', 'items', 'içerik')}',
-                style: TextStyle(color: AppTheme.sectionColor(_themeSection, 'secondaryText'), fontSize: 10),
+                style: TextStyle(color: AppTheme.secondaryText, fontSize: 10),
               ),
               TextButton(
                 onPressed: () => _openPackage(id),
                 child: Text(
                   appText('عرض الكل', 'See all', 'Tümünü gör'),
-                  style: TextStyle(color: AppTheme.sectionColor(_themeSection, 'primary'), fontSize: 11),
+                  style: TextStyle(color: gold, fontSize: 11),
                 ),
               ),
             ],
@@ -1601,7 +1410,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 appText('لا يوجد محتوى في هذه الباقة حالياً',
                     'No content in this package yet',
                     'Bu pakette henüz içerik yok'),
-                style: TextStyle(color: AppTheme.sectionColor(_themeSection, 'secondaryText'), fontSize: 11),
+                style: TextStyle(color: AppTheme.secondaryText, fontSize: 11),
               ),
             )
           else
@@ -1628,7 +1437,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: AppTheme.sectionColor(_themeSection, 'text'),
+                              color: AppTheme.text,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1682,7 +1491,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               appText('الباقات', 'PACKAGES', 'PAKETLER'),
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppTheme.sectionColor(_themeSection, 'primary'),
+                color: gold,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
@@ -1711,7 +1520,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: active ? AppTheme.sectionColor(_themeSection, 'primary') : AppTheme.sectionColor(_themeSection, 'border'),
+                            color: active ? gold : Colors.white24,
                             width: active ? 1.2 : 0.7,
                           ),
                         ),
@@ -1721,7 +1530,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: active ? AppTheme.sectionColor(_themeSection, 'primary') : AppTheme.sectionColor(_themeSection, 'secondaryText'),
+                            color: active ? gold : AppTheme.secondaryText,
                             fontSize: 10,
                             height: 1.3,
                             fontWeight: active
@@ -1735,7 +1544,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                     Text(
                       '($count)',
                       style: TextStyle(
-                        color: active ? AppTheme.sectionColor(_themeSection, 'primary') : AppTheme.sectionColor(_themeSection, 'secondaryText'),
+                        color: active ? gold : AppTheme.secondaryText,
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1771,7 +1580,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
       (entry) => entry['id'].toString() == selectedPackageId,
       orElse: () => <String, dynamic>{},
     );
-    final contents = filteredItems;
+    final contents = selectedItems;
     return Column(
       children: [
         Padding(
@@ -1782,7 +1591,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 width: 3,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: AppTheme.sectionColor(_themeSection, 'primary'),
+                  color: gold,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -1793,7 +1602,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: AppTheme.sectionColor(_themeSection, 'text'),
+                    color: AppTheme.text,
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1801,22 +1610,19 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
               Text(
                 '${contents.length}',
-                style: TextStyle(color: AppTheme.sectionColor(_themeSection, 'secondaryText'), fontSize: 12),
+                style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
               ),
             ],
           ),
         ),
-        _searchField(),
         Expanded(
           child: contents.isEmpty
               ? Center(
                   child: Text(
-                    searchQuery.isNotEmpty
-                        ? appText('لا توجد نتائج مطابقة', 'No matching results', 'Eşleşen sonuç bulunamadı')
-                        : appText('لا يوجد محتوى في هذه الباقة حالياً',
+                    appText('لا يوجد محتوى في هذه الباقة حالياً',
                         'No content in this package yet',
                         'Bu pakette henüz içerik yok'),
-                    style: TextStyle(color: AppTheme.sectionColor(_themeSection, 'secondaryText')),
+                    style: TextStyle(color: AppTheme.secondaryText),
                   ),
                 )
               : GridView.builder(
@@ -1844,7 +1650,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: AppTheme.sectionColor(_themeSection, 'text'),
+                              color: AppTheme.text,
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                             ),
@@ -1852,7 +1658,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                           Text(
                             valueOf(item['release_year'], ''),
                             style: TextStyle(
-                              color: AppTheme.sectionColor(_themeSection, 'secondaryText'),
+                              color: AppTheme.secondaryText,
                               fontSize: 10,
                             ),
                           ),
@@ -1868,24 +1674,22 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppTheme.sectionColor(_themeSection, 'background'),
-      child: Directionality(
-        textDirection: appLocaleNotifier.value.languageCode == 'ar'
-            ? TextDirection.rtl
-            : TextDirection.ltr,
-        child: Column(
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar'
+          ? TextDirection.rtl
+          : TextDirection.ltr,
+      child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
-                Container(width: 4, height: 22, color: AppTheme.sectionColor(_themeSection, 'primary')),
+                Container(width: 4, height: 22, color: gold),
                 const SizedBox(width: 9),
                 Text(
                   widget.title,
                   style: TextStyle(
-                    color: AppTheme.sectionColor(_themeSection, 'text'),
+                    color: AppTheme.text,
                     fontSize: 19,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1893,7 +1697,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 const Spacer(),
                 IconButton(
                   onPressed: _loadPackages,
-                  icon: Icon(Icons.refresh, color: AppTheme.sectionColor(_themeSection, 'primary')),
+                  icon: Icon(Icons.refresh, color: gold),
                 ),
               ],
             ),
@@ -1901,7 +1705,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           Expanded(
             child: loading
                 ? Center(
-                    child: CircularProgressIndicator(color: AppTheme.sectionColor(_themeSection, 'primary')),
+                    child: CircularProgressIndicator(color: gold),
                   )
                 : error != null
                     ? Center(
@@ -1915,7 +1719,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             child: Text(
                               appText('لا توجد باقات حالياً',
                                   'No packages yet', 'Henüz paket yok'),
-                              style: TextStyle(color: AppTheme.sectionColor(_themeSection, 'secondaryText')),
+                              style: TextStyle(color: AppTheme.secondaryText),
                             ),
                           )
                         : Row(
@@ -1934,7 +1738,6 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                           ),
           ),
         ],
-        ),
       ),
     );
   }
@@ -2388,8 +2191,8 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: panel,
-        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: AppTheme.sectionColor('settings', 'primary'))),
-        content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: AppTheme.sectionColor('settings', 'secondaryText'))),
+        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: gold)),
+        content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: AppTheme.secondaryText)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('مسح السجل', style: TextStyle(color: Colors.redAccent))),
@@ -2499,25 +2302,25 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: panel,
-          title: Text('يتوفر تحديث جديد', style: TextStyle(color: AppTheme.sectionColor('settings', 'primary'))),
+          title: Text('يتوفر تحديث جديد', style: TextStyle(color: gold)),
           content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('الإصدار الحالي: ${packageInfo.version}', style: TextStyle(color: AppTheme.sectionColor('settings', 'secondaryText'))),
-              Text('الإصدار الجديد: $latest', style: TextStyle(color: AppTheme.sectionColor('settings', 'text'), fontWeight: FontWeight.bold)),
+              Text('الإصدار الحالي: ${packageInfo.version}', style: TextStyle(color: AppTheme.secondaryText)),
+              Text('الإصدار الجديد: $latest', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
               if ((value['release_notes']?.toString() ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text('ما الجديد؟', style: TextStyle(color: AppTheme.sectionColor('settings', 'primary'), fontWeight: FontWeight.bold)),
+                Text('ما الجديد؟', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 5),
-                Text(value['release_notes'].toString(), style: TextStyle(color: AppTheme.sectionColor('settings', 'secondaryText'))),
+                Text(value['release_notes'].toString(), style: TextStyle(color: AppTheme.secondaryText)),
               ],
             ],
           )),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('لاحقاً')),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppTheme.sectionColor('settings', 'button'), foregroundColor: AppTheme.sectionColor('settings', 'text')),
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: AppTheme.text),
               onPressed: () {
                 installAfterDialog = true;
                 Navigator.pop(dialogContext);
@@ -2540,17 +2343,17 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   Widget _tile(IconData icon, String title, String subtitle, VoidCallback onTap) => Card(
     color: panel,
     child: ListTile(
-      leading: Icon(icon, color: AppTheme.sectionColor('settings', 'primary')),
-      title: Text(title, style: TextStyle(color: AppTheme.sectionColor('settings', 'text'), fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: TextStyle(color: AppTheme.sectionColor('settings', 'secondaryText'), fontSize: 12)),
-      trailing: Icon(Icons.chevron_left, color: AppTheme.sectionColor('settings', 'primary')),
+      leading: Icon(icon, color: gold),
+      title: Text(title, style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+      trailing: Icon(Icons.chevron_left, color: gold),
       onTap: busy ? null : onTap,
     ),
   );
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return Scaffold(backgroundColor: AppTheme.sectionColor('settings', 'background'),backgroundColor: bg, body: Center(child: CircularProgressIndicator(color: AppTheme.sectionColor('settings', 'primary'))));
+    if (loading) return Scaffold(backgroundColor: bg, body: Center(child: CircularProgressIndicator(color: gold)));
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
@@ -2565,12 +2368,12 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(children: [
-                Icon(Icons.language, color: AppTheme.sectionColor('settings', 'primary')),
+                Icon(Icons.language, color: gold),
                 const SizedBox(width: 12),
-                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: AppTheme.sectionColor('settings', 'text'), fontWeight: FontWeight.w600))),
+                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600))),
                 DropdownButton<String>(
                   value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
-                  style: TextStyle(color: AppTheme.sectionColor('settings', 'text')),
+                  style: TextStyle(color: AppTheme.text),
                   items: const [
                     DropdownMenuItem(value: 'ar', child: Text('العربية')),
                     DropdownMenuItem(value: 'en', child: Text('English')),
@@ -2584,9 +2387,9 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           Card(
             color: panel,
             child: SwitchListTile(
-              value: wifiOnly, activeColor: AppTheme.sectionColor('settings', 'primary'), secondary: Icon(Icons.wifi, color: AppTheme.sectionColor('settings', 'primary')),
-              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: AppTheme.sectionColor('settings', 'text'))),
-              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: AppTheme.sectionColor('settings', 'secondaryText'), fontSize: 12)),
+              value: wifiOnly, activeColor: gold, secondary: Icon(Icons.wifi, color: gold),
+              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: AppTheme.text)),
+              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
               onChanged: _setWifiOnly,
             ),
           ),
@@ -2594,10 +2397,10 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             color: panel,
             child: SwitchListTile(
               value: forceLandscape,
-              activeColor: AppTheme.sectionColor('settings', 'primary'),
-              secondary: Icon(Icons.screen_rotation, color: AppTheme.sectionColor('settings', 'primary')),
-              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: AppTheme.sectionColor('settings', 'text'))),
-              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: AppTheme.sectionColor('settings', 'secondaryText'), fontSize: 12)),
+              activeColor: gold,
+              secondary: Icon(Icons.screen_rotation, color: gold),
+              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: AppTheme.text)),
+              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
               onChanged: _setForceLandscape,
             ),
           ),
@@ -2605,7 +2408,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           _tile(Icons.history, appText('مسح السجل بالكامل', 'Clear Watch History', 'İzleme Geçmişini Temizle'), appText('حذف سجل المشاهدة من الجهاز والحساب', 'Delete watch history from this device and account', 'İzleme geçmişini cihazdan ve hesaptan sil'), _clearHistory),
           _tile(Icons.refresh, appText('تحديث قائمة القنوات', 'Refresh Channel List', 'Kanal Listesini Yenile'), appText('جلب أحدث القنوات المنشورة', 'Fetch the latest published channels', 'En yeni yayınlanan kanalları getir'), _refreshChannels),
           _tile(Icons.system_update_alt, appText('البحث عن تحديث للتطبيق', 'Check for App Updates', 'Uygulama Güncellemelerini Kontrol Et'), appText('التحقق من وجود إصدار جديد', 'Check whether a new version is available', 'Yeni sürüm olup olmadığını kontrol et'), _checkForUpdate),
-          if (busy) Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: AppTheme.sectionColor('settings', 'primary')))),
+          if (busy) Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: gold))),
         ]),
       ),
     );
@@ -2621,15 +2424,15 @@ class PrivacyPage extends StatelessWidget {
       backgroundColor: bg,
       appBar: AppBar(backgroundColor: bg, title: Text(appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'))),
       body: ListView(padding: const EdgeInsets.all(20), children: [
-        Text('SHAM FLIX', style: TextStyle(color: AppTheme.sectionColor('settings', 'primary'), fontSize: 25, fontWeight: FontWeight.bold)),
+        Text('SHAM FLIX', style: TextStyle(color: gold, fontSize: 25, fontWeight: FontWeight.bold)),
         SizedBox(height: 14),
-        Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: AppTheme.sectionColor('settings', 'primary'), fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text(appText('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', 'The SHAM FLIX name, design and interface are protected by their owners. Displayed content and streaming links remain subject to their respective rights holders.', 'ShamFlix adı, tasarımı ve arayüzü sahiplerine aittir. Gösterilen içerikler ve yayın bağlantıları ilgili hak sahiplerinin koşullarına tabidir.'), style: TextStyle(color: AppTheme.sectionColor('settings', 'secondaryText'), height: 1.7)),
+        Text(appText('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', 'The SHAM FLIX name, design and interface are protected by their owners. Displayed content and streaming links remain subject to their respective rights holders.', 'ShamFlix adı, tasarımı ve arayüzü sahiplerine aittir. Gösterilen içerikler ve yayın bağlantıları ilgili hak sahiplerinin koşullarına tabidir.'), style: TextStyle(color: AppTheme.secondaryText, height: 1.7)),
         SizedBox(height: 20),
-        Text(appText('الخصوصية', 'Privacy', 'Gizlilik'), style: TextStyle(color: AppTheme.sectionColor('settings', 'primary'), fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(appText('الخصوصية', 'Privacy', 'Gizlilik'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text(appText('يستخدم التطبيق بيانات أساسية لتشغيل الحسابات وحفظ المفضلة وسجل المشاهدة وتحسين الخدمة.', 'The app uses basic data to operate accounts, save favorites and watch history, and improve the service.', 'Uygulama; hesapları çalıştırmak, favorileri ve izleme geçmişini kaydetmek ve hizmeti geliştirmek için temel verileri kullanır.'), style: TextStyle(color: AppTheme.sectionColor('settings', 'secondaryText'), height: 1.7)),
+        Text(appText('يستخدم التطبيق بيانات أساسية لتشغيل الحسابات وحفظ المفضلة وسجل المشاهدة وتحسين الخدمة.', 'The app uses basic data to operate accounts, save favorites and watch history, and improve the service.', 'Uygulama; hesapları çalıştırmak, favorileri ve izleme geçmişini kaydetmek ve hizmeti geliştirmek için temel verileri kullanır.'), style: TextStyle(color: AppTheme.secondaryText, height: 1.7)),
       ]),
     ),
   );
@@ -3544,46 +3347,25 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   List<Map<String, dynamic>> selectedServers = [];
   String selectedUrl = '';
   bool starting = false;
-  int gridColumns = 5;
-  final TextEditingController searchController = TextEditingController();
-  String searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    searchController.addListener(() { if (mounted) setState(() => searchQuery = searchController.text.trim()); });
     _load();
-    appSettingsRefreshNotifier.addListener(_refreshGridColumns);
     channelRefreshNotifier.addListener(_onExternalRefresh);
   }
 
   void _onExternalRefresh() { _load(); }
 
-  Future<void> _refreshGridColumns() async {
-    try {
-      final row = await AuthService.client.from('app_settings')
-          .select('setting_value').eq('setting_key', 'catalog_grid_columns').maybeSingle();
-      final value = (int.tryParse(row?['setting_value']?.toString() ?? '') ?? 5).clamp(2, 6).toInt();
-      if (mounted && value != gridColumns) setState(() => gridColumns = value);
-    } catch (_) {}
-  }
-
   @override
   void dispose() {
-    appSettingsRefreshNotifier.removeListener(_refreshGridColumns);
     channelRefreshNotifier.removeListener(_onExternalRefresh);
-    searchController.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     setState(() { loading = true; error = null; });
     try {
-      try {
-        final gridSetting = await AuthService.client.from('app_settings')
-            .select('setting_value').eq('setting_key', 'catalog_grid_columns').maybeSingle();
-        gridColumns = (int.tryParse(gridSetting?['setting_value']?.toString() ?? '') ?? 5).clamp(2, 6).toInt();
-      } catch (_) { gridColumns = 5; }
       final packageRows = await AuthService.client
           .from('content_packages')
           .select('id,name,sort_order')
@@ -3633,38 +3415,6 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     if (mounted) setState(() => loading = false);
   }
 
-  List<Map<String, dynamic>> get filteredChannels {
-    final query = searchQuery.toLowerCase();
-    if (query.isEmpty) return channels;
-    return channels.where((channel) => valueOf(channel['name']).toLowerCase().contains(query)).toList();
-  }
-
-  Widget _searchField() {
-    final primary = AppTheme.sectionColor('live', 'primary');
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 2, 10, 8),
-      child: TextField(
-        controller: searchController,
-        textInputAction: TextInputAction.search,
-        style: TextStyle(color: AppTheme.sectionColor('live', 'text'), fontSize: 13),
-        decoration: InputDecoration(
-          hintText: appText('ابحث عن قناة...', 'Search channels...', 'Kanal ara...'),
-          hintStyle: TextStyle(color: AppTheme.sectionColor('live', 'secondaryText'), fontSize: 12),
-          prefixIcon: Icon(Icons.search_rounded, color: primary),
-          suffixIcon: searchQuery.isEmpty ? null : IconButton(
-            onPressed: searchController.clear,
-            icon: Icon(Icons.close_rounded, color: AppTheme.sectionColor('live', 'secondaryText')),
-          ),
-          filled: true,
-          fillColor: AppTheme.sectionColor('live', 'panel'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primary.withOpacity(0.22))),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primary, width: 1.3)),
-        ),
-      ),
-    );
-  }
-
   Future<void> _playChannel(Map<String, dynamic> channel) async {
     if (starting) return;
     setState(() => starting = true);
@@ -3707,16 +3457,6 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         selectedServers = servers;
         selectedUrl = url;
       });
-      await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => ShamFlixPlayerPage(
-          key: ValueKey('live-${channel['id']}-$url'),
-          url: url,
-          title: valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
-          servers: servers,
-          progressKey: 'channel-$id',
-          embedded: false,
-        ),
-      ));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('تعذر تشغيل القناة: $e')),
@@ -3734,9 +3474,9 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       onTap: () => _playChannel(channel),
       child: Container(
         decoration: BoxDecoration(
-          color: active ? AppTheme.sectionColor('live', 'primary').withOpacity(0.18) : AppTheme.sectionColor('live', 'panel'),
+          color: active ? const Color(0xFF302719) : panel,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: active ? AppTheme.sectionColor('live', 'primary') : AppTheme.sectionColor('live', 'border'), width: active ? 1.4 : 0.7),
+          border: Border.all(color: active ? gold : Colors.white10, width: active ? 1.4 : 0.7),
         ),
         padding: const EdgeInsets.all(6),
         child: Column(
@@ -3748,24 +3488,24 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                   Center(
                     child: Container(
                       width: double.infinity,
-                      decoration: BoxDecoration(color: AppTheme.sectionColor('live', 'background'), borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.all(5),
                       child: logo.isEmpty
-                          ? Icon(Icons.live_tv, color: AppTheme.sectionColor('live', 'primary'), size: 30)
+                          ? Icon(Icons.live_tv, color: gold, size: 30)
                           : Image.network(logo, fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: AppTheme.sectionColor('live', 'primary'), size: 30)),
+                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: gold, size: 30)),
                     ),
                   ),
                   Positioned(
                     top: 4, right: 4,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(color: AppTheme.sectionColor('live', 'badge'), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: const Color(0xFFE50914), borderRadius: BorderRadius.circular(4)),
                       child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   if (active)
-                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: AppTheme.sectionColor('live', 'primary'), size: 16)),
+                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: gold, size: 16)),
                 ],
               ),
             ),
@@ -3773,7 +3513,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             Text(
               valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
               maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
-              style: TextStyle(color: active ? AppTheme.sectionColor('live', 'primary') : AppTheme.sectionColor('live', 'text'), fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(color: active ? gold : AppTheme.text, fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -3785,8 +3525,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     return Container(
       width: 126,
       decoration: BoxDecoration(
-        color: AppTheme.sectionColor('live', 'background'),
-        border: Border(right: BorderSide(color: AppTheme.sectionColor('live', 'border'))),
+        color: const Color(0xFF111111),
+        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
       ),
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
@@ -3794,7 +3534,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(7, 4, 7, 10),
             child: Text(appText('الباقات', 'PACKAGES', 'PAKETLER'),
-              style: TextStyle(color: AppTheme.sectionColor('live', 'secondaryText'), fontSize: 11, fontWeight: FontWeight.bold)),
+              style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, fontWeight: FontWeight.bold)),
           ),
           ...packages.map((package) {
             final id = package['id'].toString();
@@ -3802,7 +3542,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Material(
-                color: active ? AppTheme.sectionColor('live', 'primary') : AppTheme.sectionColor('live', 'panel'),
+                color: active ? const Color(0xFFE50914) : panel,
                 borderRadius: BorderRadius.circular(8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
@@ -3810,12 +3550,12 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                     child: Row(children: [
-                      Icon(Icons.live_tv, color: active ? Colors.white : AppTheme.sectionColor('live', 'secondaryText'), size: 17),
+                      Icon(Icons.live_tv, color: active ? Colors.white : AppTheme.secondaryText, size: 17),
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(package['name']?.toString() ?? 'باقة',
                           maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: active ? Colors.white : AppTheme.sectionColor('live', 'text'), fontSize: 11,
+                          style: TextStyle(color: active ? Colors.white : AppTheme.text, fontSize: 11,
                             fontWeight: active ? FontWeight.bold : FontWeight.normal)),
                       ),
                     ]),
@@ -3831,24 +3571,56 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppTheme.sectionColor('live', 'background'),
-      child: Directionality(
-        textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
-        child: Column(
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
             child: Row(children: [
-              Container(width: 4, height: 22, color: AppTheme.sectionColor('live', 'primary')),
+              Container(width: 4, height: 22, color: gold),
               const SizedBox(width: 9),
               Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
-                style: TextStyle(color: AppTheme.sectionColor('live', 'text'), fontSize: 19, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: AppTheme.text, fontSize: 19, fontWeight: FontWeight.bold)),
               const Spacer(),
-              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: AppTheme.sectionColor('live', 'primary'))),
+              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: gold)),
             ]),
           ),
-          _searchField(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: selectedChannel == null || selectedUrl.isEmpty
+                    ? Container(
+                        color: Colors.black,
+                        child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.live_tv, color: gold, size: 48),
+                          const SizedBox(height: 8),
+                          Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'),
+                            style: TextStyle(color: AppTheme.secondaryText)),
+                          if (starting) Padding(padding: const EdgeInsets.only(top: 8),
+                            child: CircularProgressIndicator(color: gold)),
+                        ])),
+                      )
+                    : ShamFlixPlayerPage(
+                        key: ValueKey('${selectedChannel!['id']}-$selectedUrl'),
+                        url: selectedUrl,
+                        title: valueOf(selectedChannel!['name'], appText('قناة', 'Channel', 'Kanal')),
+                        servers: selectedServers,
+                        progressKey: 'channel-${selectedChannel!['id']}',
+                        embedded: true,
+                        onClose: () => setState(() {
+                          selectedChannel = null;
+                          selectedServers = [];
+                          selectedUrl = '';
+                        }),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Expanded(
             child: Row(
               textDirection: TextDirection.ltr,
@@ -3866,31 +3638,31 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                             child: Text(
                               packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
                                 orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
-                              style: TextStyle(color: AppTheme.sectionColor('live', 'text'), fontSize: 14, fontWeight: FontWeight.bold),
+                              style: TextStyle(color: AppTheme.text, fontSize: 14, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
                       Expanded(
                         child: loading
-                            ? Center(child: CircularProgressIndicator(color: AppTheme.sectionColor('live', 'primary')))
+                            ? Center(child: CircularProgressIndicator(color: gold))
                             : error != null
                                 ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
-                                : filteredChannels.isEmpty
-                                    ? Center(child: Text(searchQuery.isNotEmpty ? appText('لا توجد قنوات مطابقة', 'No matching channels', 'Eşleşen kanal yok') : appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
-                                        style: TextStyle(color: AppTheme.sectionColor('live', 'secondaryText'))))
+                                : channels.isEmpty
+                                    ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
+                                        style: TextStyle(color: AppTheme.secondaryText)))
                                     : RefreshIndicator(
-                                        color: AppTheme.sectionColor('live', 'primary'),
+                                        color: gold,
                                         onRefresh: _load,
                                         child: GridView.builder(
                                           padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
-                                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                            crossAxisCount: gridColumns,
+                                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: 5,
                                             crossAxisSpacing: 7,
                                             mainAxisSpacing: 7,
                                             childAspectRatio: 0.88,
                                           ),
-                                          itemCount: filteredChannels.length,
-                                          itemBuilder: (context, index) => _channelTile(filteredChannels[index]),
+                                          itemCount: channels.length,
+                                          itemBuilder: (context, index) => _channelTile(channels[index]),
                                         ),
                                       ),
                       ),
@@ -3901,7 +3673,6 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             ),
           ),
         ],
-        ),
       ),
     );
   }
@@ -5106,4 +4877,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: ربط صفحات الكتالوج بإشعار إعدادات مشترك لتحديث عدد الأعمدة فور حفظه | التاريخ: 2026-11-21 | الوقت: 23:35:00 بتوقيت تركيا
+// آخر تعديل: تحويل صفحة القنوات إلى Sidebar يسار وشبكة من 5 قنوات مع شارة LIVE | التاريخ: 2026-11-21 | الوقت: 22:12:00 بتوقيت تركيا
