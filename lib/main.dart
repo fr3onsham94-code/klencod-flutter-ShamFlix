@@ -3190,13 +3190,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 widget.title,
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: widget.embedded ? 12 : 16,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
-                                              const Text(
+                                              Text(
                                                 'SHAMFLIX PLAYER',
                                                 style: TextStyle(
                                                   color: gold,
@@ -3885,3 +3885,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // منع إنشاء مستمع الشبكة بعد التخلص من صفحة المشغل.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إزالة const من أنماط المشغل التي تعتمد على حجم العرض المضمن.
