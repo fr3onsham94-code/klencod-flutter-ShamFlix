@@ -1247,7 +1247,7 @@ class _DetailsPageState extends State<DetailsPage> {
           child: SafeArea(
             child: Center(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.72),
+                constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.30),
                 child: ListView(
                   shrinkWrap: true,
                   padding: const EdgeInsets.all(16),
@@ -1747,34 +1747,19 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         return SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.72),
+              constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
               child: ListView(
                 shrinkWrap: true,
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Text('سرعة التشغيل', textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                  ),
-                  for (final option in <MapEntry<double, String>>[
-                    const MapEntry(0.5, 'نصف السرعة'),
-                    const MapEntry(0.75, 'سرعة بطيئة'),
-                    const MapEntry(1.0, 'السرعة العادية'),
-                    const MapEntry(1.25, 'أسرع قليلاً'),
-                    const MapEntry(1.5, 'سرعة 1.5'),
-                    const MapEntry(1.75, 'سرعة 1.75'),
-                    const MapEntry(2.0, 'ضعف السرعة'),
-                  ])
+                  for (final speed in <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0])
                     ListTile(
                       dense: true,
-                      visualDensity: const VisualDensity(vertical: -2),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                      title: Text('${option.key}x', textAlign: TextAlign.center,
-                        style: TextStyle(color: player.state.rate == option.key ? gold : Colors.white, fontSize: 13)),
-                      subtitle: Text(option.value, textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                      onTap: () => Navigator.pop(sheetContext, option.key),
+                      visualDensity: const VisualDensity(vertical: -3),
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${speed}x', textAlign: TextAlign.center,
+                        style: TextStyle(color: player.state.rate == speed ? gold : Colors.white, fontSize: 13)),
+                      onTap: () => Navigator.pop(sheetContext, speed),
                     ),
                 ],
               ),
@@ -1829,7 +1814,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         return SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.72),
+              constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.30),
               child: ListView(
                 shrinkWrap: true,
                 children: [
@@ -1867,7 +1852,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         return SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.72),
+              constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.30),
               child: ListView(
                 shrinkWrap: true,
                 children: [
@@ -2637,3 +2622,5 @@ class ShamFlixSearch extends SearchDelegate {
 // جعل قائمة سرعات التشغيل قابلة للتمرير وملائمة للشاشة العمودية والأفقية بتاريخ 21-11-2026.
 
 // توحيد حدود ارتفاع وعرض قوائم السرعة والصوت والترجمة والسيرفرات لتناسب الوضعين العمودي والأفقي بتاريخ 21-11-2026.
+
+// تصغير ارتفاع جميع قوائم المشغّل إلى 30%، وجعل قائمة السرعة بعرض صغير وإظهار السرعات فقط بتاريخ 21-11-2026.
