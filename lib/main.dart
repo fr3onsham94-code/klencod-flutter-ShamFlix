@@ -7181,3 +7181,4248 @@ class ShamFlixSearch extends SearchDelegate {
 
 
 // آخر تعديل: توسيع اكتشاف روابط الوسائط وقوائم البث وروابط RTSP/RTMP وUDP/RTP/TCP لتوجيهها إلى المشغل الداخلي أو الخارجي بدلاً من WebView | التاريخ والوقت: 22/11/2026, 00:40:00 بتوقيت تركيا.
+,
+      caseSensitive: false,
+    ).hasMatch(uri.path);
+  }
+
+  Future<void> _startPlayback(
+    String url,
+    String title, {
+    List<Map<String, dynamic>> servers = const [],
+    int initialServerIndex = 0,
+    String progressKey = '',
+  }) async {
+    final prefsForNetwork = await SharedPreferences.getInstance();
+    if (prefsForNetwork.getBool('shamflix_wifi_only') == true) {
+      final connections = await Connectivity().checkConnectivity();
+      if (!connections.contains(ConnectivityResult.wifi)) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط. غيّر إعداد الشبكة للمتابعة.')),
+        );
+        return;
+      }
+    }
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || !uri.hasScheme) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(appText('رابط التشغيل غير صالح', 'Invalid playback link', 'Geçersiz oynatma bağlantısı'))),
+      );
+      return;
+    }
+    if (!_isDirectMediaUrl(url)) {
+      if (uri.scheme == 'http' || uri.scheme == 'https') {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => ShamFlixWebPage(url: url, title: title),
+        ));
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(appText('نوع الرابط غير مدعوم داخل التطبيق', 'This link type is not supported in the app', 'Bu bağlantı türü uygulamada desteklenmiyor'))),
+        );
+      }
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final selectedPlayer = prefs.getString(_playerPreferenceKey) ?? 'internal';
+    if (!mounted) return;
+    if (selectedPlayer == 'internal') {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ShamFlixPlayerPage(
+          url: url,
+          title: title,
+          servers: servers,
+          initialServerIndex: initialServerIndex,
+          progressKey: progressKey,
+        ),
+      ));
+      return;
+    }
+    final packages = selectedPlayer == 'vlc'
+        ? <String>['org.videolan.vlc']
+        : <String>['com.mxtech.videoplayer.ad', 'com.mxtech.videoplayer.pro'];
+    try {
+      var launched = false;
+      for (final packageName in packages) {
+        final intent = AndroidIntent(
+          action: 'action_view',
+          data: url,
+          type: 'video/*',
+          package: packageName,
+        );
+        if (await intent.canResolveActivity() == true) {
+          await intent.launch();
+          launched = true;
+          break;
+        }
+      }
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(selectedPlayer == 'vlc'
+              ? 'لم يتم العثور على VLC. تأكد من تثبيته.'
+              : 'لم يتم العثور على MX Player. تأكد من تثبيته.'),
+          action: SnackBarAction(
+            label: appText('داخلي', 'Built-in', 'Dahili'),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => ShamFlixPlayerPage(
+                url: url,
+                title: title,
+                servers: servers,
+                initialServerIndex: initialServerIndex,
+                progressKey: progressKey,
+              ),
+            )),
+          ),
+        ));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر تشغيل المشغل الخارجي. جرّب المشغل الداخلي.')),
+      );
+    }
+  }
+
+  void _showPlayerMissing(String player) {
+    final name = player == 'vlc' ? 'VLC' : 'MX Player';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تأكد من تثبيت $name على جهازك')),
+    );
+  }
+
+  Widget _episodeList(Map<String, dynamic> season) {
+    final seasonId = season['id']?.toString() ?? '';
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: SupabaseService.getEpisodes(seasonId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: gold)));
+        }
+        if (snapshot.hasError) {
+          return const Padding(padding: EdgeInsets.all(12), child: Text('تعذر تحميل الحلقات', style: TextStyle(color: Colors.redAccent)));
+        }
+        final episodes = snapshot.data ?? [];
+        if (episodes.isEmpty) {
+          return Padding(padding: const EdgeInsets.all(12), child: Text(
+            appText('لا توجد حلقات منشورة في هذا الموسم', 'No episodes published in this season', 'Bu sezonda yayınlanmış bölüm yok'),
+            style: TextStyle(color: Colors.white70)));
+        }
+        return Column(children: episodes.asMap().entries.map((entry) {
+          final episode = entry.value;
+          final number = episode['episode_number']?.toString() ?? '${entry.key + 1}';
+          final episodeTitle = valueOf(episode['title'], 'الحلقة $number');
+          final duration = valueOf(episode['duration'] ?? episode['runtime']);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(color: const Color(0xFF202020), borderRadius: BorderRadius.circular(10)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+              leading: Container(
+                width: 46, height: 46, alignment: Alignment.center,
+                decoration: BoxDecoration(color: gold.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
+                child: Text(number, style: TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 16))),
+              title: Text(episodeTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: Text(duration.isEmpty ? appText('تشغيل الحلقة', 'Play episode', 'Bölümü oynat') : '$duration • ${appText('دقيقة', 'min', 'dk')}',
+                style: TextStyle(color: Colors.white70, fontSize: 12)),
+              trailing: Icon(Icons.play_circle_fill_rounded, color: gold, size: 30),
+              onTap: () async {
+                final episodeRecord = Map<String, dynamic>.from(episode);
+                if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
+                await saveWatchRecord(contentType: 'episode', item: episodeRecord, title: episodeTitle,
+                  fallbackPoster: valueOf(widget.item['poster_url']));
+                await _chooseAndPlay(contentType: 'episode', contentId: episode['id'].toString(),
+                  title: episodeTitle, legacyUrl: episode['stream_url']?.toString());
+              },
+            ),
+          );
+        }).toList());
+      },
+    );
+  }
+
+  Widget _detailsHero(String title, String poster, String backdrop, {required bool isChannel}) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    const posterWidth = 104.0;
+    const posterHeight = 148.0;
+    final heroHeight = isLandscape ? 230.0 : 310.0;
+    final heroImage = backdrop.isNotEmpty ? backdrop : (isChannel ? poster : '');
+    return SizedBox(
+      width: double.infinity, height: heroHeight,
+      child: Stack(fit: StackFit.expand, children: [
+        if (heroImage.isNotEmpty)
+          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: panel))
+        else ColoredBox(color: panel),
+        const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [Color(0x22000000), Color(0x55000000), Color(0xFF090909)],
+          stops: [0.0, 0.52, 1.0]))),
+        Positioned(
+          right: 18, left: 18, bottom: 16,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            if (!isChannel) ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: SizedBox(width: posterWidth, height: posterHeight,
+                child: poster.isEmpty
+                  ? Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))
+                  : Image.network(poster, width: posterWidth, height: posterHeight, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))))),
+            if (!isChannel) const SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4)),
+                child: Text(isChannel ? appText('مباشر', 'LIVE', 'CANLI') : 'SHAM FLIX',
+                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+              const SizedBox(height: 8),
+              Text(title, maxLines: isLandscape ? 2 : 3, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
+                  shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
+            ])),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _detailsInformation(Map<String, dynamic> item, {required bool isSeries, required bool isChannel,
+    required String description, required String director, required String cast}) {
+    final year = valueOf(item['release_year']);
+    final category = valueOf(item['category']);
+    final rating = valueOf(item['rating']);
+    final duration = valueOf(item['duration'] ?? item['runtime']);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        if (rating.isNotEmpty) _detailTag(Icons.star, rating),
+        if (year.isNotEmpty) _detailTag(Icons.calendar_today, year),
+        if (duration.isNotEmpty && !isSeries) _detailTag(Icons.schedule, duration),
+        _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie,
+          isChannel ? appText('قناة', 'Channel', 'Kanal') : isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film')),
+      ]),
+      if (category.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Wrap(spacing: 8, runSpacing: 8, children: category.split(RegExp(r'[,،|]')).map((genre) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          decoration: BoxDecoration(color: const Color(0xFF292929), borderRadius: BorderRadius.circular(20)),
+          child: Text(genre.trim(), style: TextStyle(color: Colors.white70, fontSize: 12)),
+        )).toList()),
+      ],
+      const SizedBox(height: 20),
+      Text(appText('القصة والوصف', 'About this title', 'Hikâye ve Açıklama'),
+        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 9),
+      Text(description, style: TextStyle(color: Colors.white70, height: 1.7, fontSize: 14)),
+      if (director.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: TextStyle(color: Colors.white70, fontSize: 13)),
+      ],
+      if (cast.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+      ],
+      const SizedBox(height: 18),
+      _recommendationsSection(),
+    ]);
+  }
+
+  Widget _moviePlaySection(Map<String, dynamic> item, String title, {required bool isChannel}) {
+    return SizedBox(width: double.infinity, child: FilledButton.icon(
+      style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+      onPressed: () => _chooseAndPlay(contentType: isChannel ? 'channel' : 'movie',
+        contentId: item['id'].toString(), title: title, legacyUrl: item['stream_url']?.toString()),
+      icon: const Icon(Icons.play_arrow_rounded, size: 25),
+      label: Text(isChannel ? appText('تشغيل القناة الآن', 'Watch Live', 'Canlı İzle') : appText('مشاهدة الآن', 'Watch Now', 'Şimdi İzle'),
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+    ));
+  }
+
+  Widget _seriesEpisodesSection() {
+    final selectedSeason = seasons.isNotEmpty ? seasons[selectedSeasonIndex.clamp(0, seasons.length - 1).toInt()] : null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Container(width: 4, height: 22, decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4))),
+        const SizedBox(width: 9),
+        Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'),
+          style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+      ]),
+      const SizedBox(height: 14),
+      if (seasonsLoading)
+        Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: gold)))
+      else if (seasonsError != null)
+        Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
+      else if (seasons.isEmpty)
+        Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'),
+          style: TextStyle(color: Colors.white70))
+      else ...[
+        SizedBox(height: 42, child: ListView.separated(
+          scrollDirection: Axis.horizontal, reverse: true, itemCount: seasons.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final season = seasons[index];
+            final selected = index == selectedSeasonIndex;
+            final label = valueOf(season['name'], appText('الموسم ${season['season_number']}', 'Season ${season['season_number']}', 'Sezon ${season['season_number']}'));
+            return ChoiceChip(
+              label: Text(label), selected: selected,
+              onSelected: (_) => setState(() => selectedSeasonIndex = index),
+              selectedColor: gold, backgroundColor: const Color(0xFF292929),
+              labelStyle: TextStyle(color: Colors.white, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+              side: BorderSide.none, showCheckmark: false,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            );
+          },
+        )),
+        const SizedBox(height: 12),
+        if (selectedSeason != null) _episodeList(selectedSeason),
+      ],
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final isSeries = widget.isSeries;
+    final isChannel = widget.isChannel;
+    final title = valueOf(item['title'] ?? item['name'], appText('بدون عنوان', 'Untitled', 'Başlıksız'));
+    final poster = valueOf(item['poster_url'] ?? item['logo_url']);
+    final backdrop = valueOf(item['backdrop_url']);
+    final director = valueOf(item['director']);
+    final cast = valueOf(item['cast']);
+    final description = valueOf(item['description'], appText('لا يوجد وصف لهذا المحتوى حالياً.', 'No description is available for this title yet.', 'Bu içerik için henüz açıklama yok.'));
+    Widget information = _detailsInformation(item, isSeries: isSeries, isChannel: isChannel,
+      description: description, director: director, cast: cast);
+
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
+          IconButton(tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
+            onPressed: _toggleFavorite,
+            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : Colors.white)),
+        ]),
+        body: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _detailsHero(title, poster, backdrop, isChannel: isChannel),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                if (!isSeries) ...[
+                  _moviePlaySection(item, title, isChannel: isChannel),
+                  const SizedBox(height: 20),
+                ],
+                information,
+                if (isSeries) ...[
+                  const SizedBox(height: 24),
+                  _seriesEpisodesSection(),
+                ],
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailTag(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: gold, size: 16),
+        const SizedBox(width: 5),
+        Text(text, style: TextStyle(color: Colors.white70)),
+      ],
+    );
+  }
+}
+
+const String _playerPreferenceKey = 'shamflix_player_preference';
+
+class ShamFlixPlayerSettingsPage extends StatefulWidget {
+  const ShamFlixPlayerSettingsPage({super.key});
+
+  @override
+  State<ShamFlixPlayerSettingsPage> createState() => _ShamFlixPlayerSettingsPageState();
+}
+
+class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage> {
+  String selectedPlayer = 'internal';
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      selectedPlayer = prefs.getString(_playerPreferenceKey) ?? 'internal';
+      loading = false;
+    });
+  }
+
+  Future<void> _save(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerPreferenceKey, value);
+    if (!mounted) return;
+    setState(() => selectedPlayer = value);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ اختيار المشغل')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(backgroundColor: bg, title: Text(appText('إعدادات المشغل', 'Player Settings', 'Oynatıcı Ayarları'))),
+        body: loading
+            ? Center(child: CircularProgressIndicator(color: gold))
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Text(appText('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', 'Choose the default player for movies, episodes and channels', 'Film, bölüm ve kanallar için varsayılan oynatıcıyı seçin'), style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 14),
+                  _playerOption('internal', 'المشغل الداخلي', 'تشغيل داخل تطبيق ShamFlix', Icons.smart_display),
+                  _playerOption('vlc', 'VLC', 'يتطلب تثبيت تطبيق VLC', Icons.play_circle),
+                  _playerOption('mx', 'MX Player', 'يتطلب تثبيت تطبيق MX Player', Icons.ondemand_video),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _playerOption(String value, String title, String subtitle, IconData icon) {
+    return Card(
+      color: panel,
+      child: RadioListTile<String>(
+        value: value,
+        groupValue: selectedPlayer,
+        activeColor: gold,
+        secondary: Icon(icon, color: gold),
+        title: Text(title, style: TextStyle(color: Colors.white)),
+        subtitle: Text(subtitle, style: TextStyle(color: Colors.white70)),
+        onChanged: (next) { if (next != null) _save(next); },
+      ),
+    );
+  }
+}
+
+class ChannelsPackagesPage extends StatefulWidget {
+  const ChannelsPackagesPage({super.key});
+
+  @override
+  State<ChannelsPackagesPage> createState() => _ChannelsPackagesPageState();
+}
+
+class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
+  bool loading = true;
+  String? error;
+  List<Map<String, dynamic>> packages = [];
+  List<Map<String, dynamic>> channels = [];
+  String? selectedPackageId;
+  int gridColumns = 5;
+  bool starting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    channelRefreshNotifier.addListener(_onExternalRefresh);
+  }
+
+  void _onExternalRefresh() { _load(); }
+
+  @override
+  void dispose() {
+    channelRefreshNotifier.removeListener(_onExternalRefresh);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      try {
+        final gridSetting = await AuthService.client
+            .from('app_settings')
+            .select('setting_value')
+            .eq('setting_key', 'catalog_grid_columns')
+            .maybeSingle();
+        final savedColumns = int.tryParse(
+          gridSetting?['setting_value']?.toString() ?? '',
+        );
+        gridColumns = (savedColumns ?? 5).clamp(2, 6).toInt();
+      } catch (_) {
+        gridColumns = 5;
+      }
+      final packageRows = await AuthService.client
+          .from('content_packages')
+          .select('id,name,sort_order')
+          .eq('content_type', 'channel')
+          .order('sort_order');
+      packages = packageRows.map((row) => Map<String, dynamic>.from(row)).toList();
+      selectedPackageId = packages.isEmpty ? null : packages.first['id'].toString();
+      await _loadChannels();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _loadChannels() async {
+    if (selectedPackageId == null) {
+      channels = await SupabaseService.getChannels();
+      return;
+    }
+    final links = await AuthService.client
+        .from('content_package_items')
+        .select('content_id')
+        .eq('content_type', 'channel')
+        .eq('package_id', selectedPackageId!);
+    final ids = links.map((row) => row['content_id'].toString()).toList();
+    if (ids.isEmpty) {
+      channels = [];
+      return;
+    }
+    final rows = await AuthService.client.from('channels')
+        .select().inFilter('id', ids)
+        .eq('is_published', true)
+        .order('name');
+    channels = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  Future<void> _selectPackage(String? id) async {
+    setState(() { selectedPackageId = id; loading = true; error = null; });
+    try {
+      await _loadChannels();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _playChannel(Map<String, dynamic> channel) async {
+    if (starting) return;
+    setState(() => starting = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('shamflix_wifi_only') == true) {
+        final connections = await Connectivity().checkConnectivity();
+        if (!connections.contains(ConnectivityResult.wifi)) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط.')),
+          );
+          return;
+        }
+      }
+      final id = channel['id']?.toString() ?? '';
+      final servers = id.isEmpty ? <Map<String, dynamic>>[] :
+          await SupabaseService.getPlaybackServers(contentType: 'channel', contentId: id);
+      final url = servers.isNotEmpty
+          ? valueOf(servers.first['stream_url'])
+          : valueOf(channel['stream_url']);
+      final uri = Uri.tryParse(url);
+      if (url.isEmpty || uri == null || !uri.hasScheme) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('رابط القناة غير متوفر حالياً')),
+        );
+        return;
+      }
+      await ShamFlixLocalStore.addHistory({
+        'contentType': 'channel',
+        'contentId': id,
+        'title': valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+        'poster_url': valueOf(channel['logo_url']),
+        'item': Map<String, dynamic>.from(channel),
+        'isChannel': true,
+        'progressKey': 'channel-$id',
+      });
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShamFlixPlayerPage(
+            url: url,
+            title: valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+            servers: servers,
+            progressKey: 'channel-$id',
+            embedded: false,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تشغيل القناة: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => starting = false);
+    }
+  }
+
+  Widget _channelTile(Map<String, dynamic> channel) {
+    final active = false;
+    final logo = valueOf(channel['logo_url']);
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _playChannel(channel),
+      child: Container(
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF302719) : panel,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: active ? gold : Colors.white10, width: active ? 1.4 : 0.7),
+        ),
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Center(
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.all(5),
+                      child: logo.isEmpty
+                          ? Icon(Icons.live_tv, color: gold, size: 30)
+                          : Image.network(logo, fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: gold, size: 30)),
+                    ),
+                  ),
+                  Positioned(
+                    top: 4, right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(color: const Color(0xFFE50914), borderRadius: BorderRadius.circular(4)),
+                      child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  if (active)
+                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: gold, size: 16)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+              maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
+              style: TextStyle(color: active ? gold : Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _packageSidebar() {
+    return Container(
+      width: 126,
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(7, 4, 7, 10),
+            child: Text(appText('الباقات', 'PACKAGES', 'PAKETLER'),
+              style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+          ...packages.map((package) {
+            final id = package['id'].toString();
+            final active = id == selectedPackageId;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Material(
+                color: active ? const Color(0xFFE50914) : panel,
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _selectPackage(id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    child: Row(children: [
+                      Icon(Icons.live_tv, color: active ? Colors.white : Colors.white70, size: 17),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(package['name']?.toString() ?? 'باقة',
+                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: active ? Colors.white : Colors.white, fontSize: 11,
+                            fontWeight: active ? FontWeight.bold : FontWeight.normal)),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+            child: Row(children: [
+              Container(width: 4, height: 22, color: gold),
+              const SizedBox(width: 9),
+              Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
+                style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: gold)),
+            ]),
+          ),
+          if (starting)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: LinearProgressIndicator(color: gold, backgroundColor: panel),
+            ),
+          Expanded(
+            child: Row(
+              textDirection: TextDirection.ltr,
+              children: [
+                if (packages.isNotEmpty) _packageSidebar(),
+                Expanded(
+                  child: Directionality(
+                    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+                    child: Column(children: [
+                      if (selectedPackageId != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
+                                orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
+                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: loading
+                            ? Center(child: CircularProgressIndicator(color: gold))
+                            : error != null
+                                ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
+                                : channels.isEmpty
+                                    ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
+                                        style: TextStyle(color: Colors.white70)))
+                                    : RefreshIndicator(
+                                        color: gold,
+                                        onRefresh: _load,
+                                        child: GridView.builder(
+                                          padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
+                                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: gridColumns,
+                                            crossAxisSpacing: 9,
+                                            mainAxisSpacing: 9,
+                                            childAspectRatio: 1.0,
+                                          ),
+                                          itemCount: channels.length,
+                                          itemBuilder: (context, index) => _channelTile(channels[index]),
+                                        ),
+                                      ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+
+class ShamFlixPlayerPage extends StatefulWidget {
+  final String url;
+  final String title;
+  final List<Map<String, dynamic>> servers;
+  final int initialServerIndex;
+  final String progressKey;
+  final bool embedded;
+  final VoidCallback? onClose;
+
+  const ShamFlixPlayerPage({
+    super.key,
+    required this.url,
+    required this.title,
+    this.servers = const [],
+    this.initialServerIndex = 0,
+    this.progressKey = '',
+    this.embedded = false,
+    this.onClose,
+  });
+
+  @override
+  State<ShamFlixPlayerPage> createState() => _ShamFlixPlayerPageState();
+}
+
+class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
+  // قائمة سرعات موحدة للوضعين العمودي والأفقي.
+  static const List<double> _playbackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+  late final Player player;
+  late final VideoController controller;
+  Timer? controlsTimer;
+  String? error;
+  bool opening = true;
+  bool controlsVisible = true;
+  bool seeking = false;
+  double seekValue = 0;
+  bool landscape = true;
+  bool controlsLocked = false;
+  int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
+  late int currentServerIndex;
+  final Set<int> _failedServers = <int>{};
+  bool _failoverInProgress = false;
+  StreamSubscription<Duration>? _positionSubscription;
+  int _lastSavedSecond = -1;
+
+  String get _settingsPrefix =>
+      ShamFlixLocalStore.playerPrefix(widget.progressKey, widget.title);
+
+  @override
+  void initState() {
+    super.initState();
+    currentServerIndex = widget.servers.isEmpty
+        ? 0
+        : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
+    player = Player();
+    controller = VideoController(player);
+    landscape = !widget.embedded;
+    if (!widget.embedded) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      _setLandscape(true);
+    }
+    player.stream.error.listen(_handlePlaybackError);
+    _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
+    _open();
+  }
+
+  Future<void> _setLandscape(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final landscapeOnly = prefs.getBool('shamflix_force_landscape') ?? false;
+    final shouldUseLandscape = landscapeOnly || value;
+    landscape = shouldUseLandscape;
+    await SystemChrome.setPreferredOrientations(
+      shouldUseLandscape
+          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : const [
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ],
+    );
+  }
+
+  Future<void> _open([String? url]) async {
+    try {
+      await player.open(Media(url ?? widget.url)).timeout(const Duration(seconds: 20));
+      if (!mounted) return;
+      await _savePreferredServer();
+      final prefs = await SharedPreferences.getInstance();
+      final savedRate = prefs.getDouble('${_settingsPrefix}_rate') ?? 1.0;
+      final savedFit = prefs.getInt('${_settingsPrefix}_fit') ?? 0;
+      if (_playbackSpeeds.contains(savedRate)) await player.setRate(savedRate);
+      if (mounted) setState(() {
+        videoFitMode = savedFit.clamp(0, 2).toInt();
+        opening = false;
+        error = null;
+      });
+      await _restorePlaybackPosition(prefs);
+      await _restoreTrackPreferences(prefs);
+      if (mounted) _showControls();
+    } catch (e) {
+      _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
+    }
+  }
+
+  Future<void> _savePreferredServer() async {
+    if (widget.servers.isEmpty || currentServerIndex < 0 || currentServerIndex >= widget.servers.length || widget.progressKey.isEmpty) return;
+    final server = widget.servers[currentServerIndex];
+    final key = valueOf(server['id'] ?? server['server_name']);
+    if (key.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('shamflix_preferred_server_${widget.progressKey}', key);
+  }
+
+  Future<void> _restorePlaybackPosition(SharedPreferences prefs) async {
+    final savedMs = prefs.getInt('${_settingsPrefix}_position') ?? 0;
+    var duration = player.state.duration;
+    for (int attempt = 0; attempt < 8 && duration <= Duration.zero; attempt++) {
+      await Future.delayed(const Duration(milliseconds: 250));
+      duration = player.state.duration;
+    }
+    if (savedMs > 10000 && duration > Duration.zero &&
+        savedMs < duration.inMilliseconds - 15000) {
+      await player.seek(Duration(milliseconds: savedMs));
+      if (mounted) {
+        _message('تم استكمال المشاهدة من مكان التوقف');
+      }
+    }
+  }
+
+  Future<void> _restoreTrackPreferences(SharedPreferences prefs) async {
+    final audioId = prefs.getString('${_settingsPrefix}_audio');
+    final subtitleId = prefs.getString('${_settingsPrefix}_subtitle');
+    final externalSubtitle = prefs.getString('${_settingsPrefix}_external_subtitle');
+    var restoredExternalSubtitle = false;
+    if (externalSubtitle != null && externalSubtitle.trim().isNotEmpty) {
+      final externalUri = Uri.tryParse(externalSubtitle);
+      final isRemote = externalUri != null &&
+          (externalUri.scheme == 'http' || externalUri.scheme == 'https');
+      if (isRemote || await File(externalSubtitle).exists()) {
+        final subtitleName = isRemote && externalUri!.pathSegments.isNotEmpty
+            ? externalUri.pathSegments.last
+            : externalSubtitle.split(Platform.pathSeparator).last;
+        await player.setSubtitleTrack(
+          SubtitleTrack.uri(externalSubtitle, title: subtitleName),
+        );
+        restoredExternalSubtitle = true;
+      } else {
+        await prefs.remove('${_settingsPrefix}_external_subtitle');
+      }
+    }
+    if (audioId != null) {
+      for (final track in player.state.tracks.audio) {
+        if (track.id.toString() == audioId) {
+          await player.setAudioTrack(track);
+          break;
+        }
+      }
+    }
+    if (subtitleId != null && !restoredExternalSubtitle) {
+      if (subtitleId == 'no') {
+        await player.setSubtitleTrack(SubtitleTrack.no());
+      } else {
+        for (final track in player.state.tracks.subtitle) {
+          if (track.id.toString() == subtitleId) {
+            await player.setSubtitleTrack(track);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _saveProgressAtPosition(Duration position) async {
+    if (position.inSeconds < 1 || position.inSeconds - _lastSavedSecond < 5) return;
+    _lastSavedSecond = position.inSeconds;
+    final duration = player.state.duration;
+    if (duration <= Duration.zero) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('${_settingsPrefix}_position', position.inMilliseconds);
+    if (widget.progressKey.isNotEmpty) await ShamFlixLocalStore.updateProgress(widget.progressKey, position.inMilliseconds);
+  }
+
+  Future<void> _savePlayerSetting(String key, Object value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value is int) await prefs.setInt('${_settingsPrefix}_$key', value);
+    if (value is double) await prefs.setDouble('${_settingsPrefix}_$key', value);
+    if (value is String) await prefs.setString('${_settingsPrefix}_$key', value);
+  }
+
+  Future<void> _handlePlaybackError(String message) async {
+    if (!mounted || _failoverInProgress) return;
+    if (widget.servers.length > 1) {
+      _failoverInProgress = true;
+      _failedServers.add(currentServerIndex);
+      for (int offset = 1; offset <= widget.servers.length; offset++) {
+        final next = (currentServerIndex + offset) % widget.servers.length;
+        if (_failedServers.contains(next)) continue;
+        final nextUrl = valueOf(widget.servers[next]['stream_url']).trim();
+        if (nextUrl.isEmpty) {
+          _failedServers.add(next);
+          continue;
+        }
+        if (mounted) {
+          setState(() {
+            currentServerIndex = next;
+            opening = true;
+            error = null;
+            controlsVisible = true;
+          });
+          _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
+        }
+        try {
+          await player.open(Media(nextUrl)).timeout(const Duration(seconds: 20));
+          if (!mounted) return;
+          final playbackPrefs = await SharedPreferences.getInstance();
+          await _restoreTrackPreferences(playbackPrefs);
+          await _savePreferredServer();
+          _failedServers.clear();
+          setState(() => opening = false);
+          _failoverInProgress = false;
+          _showControls();
+          return;
+        } catch (_) {
+          _failedServers.add(next);
+        }
+      }
+      _failoverInProgress = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      error = 'تعذر تشغيل الفيديو. جرّب سيرفراً آخر.\n$message';
+      opening = false;
+      controlsVisible = true;
+    });
+  }
+
+  void _showControls() {
+    controlsTimer?.cancel();
+    if (!mounted) return;
+    setState(() => controlsVisible = true);
+    if (player.state.playing && !opening && error == null && !controlsLocked) {
+      controlsTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted && player.state.playing && !seeking) {
+          setState(() => controlsVisible = false);
+        }
+      });
+    }
+  }
+
+  void _toggleControls() {
+    if (controlsLocked) {
+      setState(() => controlsVisible = true);
+      return;
+    }
+    if (controlsVisible) {
+      controlsTimer?.cancel();
+      setState(() => controlsVisible = false);
+    } else {
+      _showControls();
+    }
+  }
+
+  String _time(Duration value) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = value.inHours;
+    final m = value.inMinutes.remainder(60);
+    final s = value.inSeconds.remainder(60);
+    if (h > 0) return '${two(h)}:${two(m)}:${two(s)}';
+    return '${two(m)}:${two(s)}';
+  }
+
+  Future<void> _pickSpeed() async {
+    final selected = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (sheetContext) {
+        final size = MediaQuery.sizeOf(sheetContext);
+        return SafeArea(
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  children: [
+                    for (final speed in _playbackSpeeds)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -3),
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${speed}x', textAlign: TextAlign.center,
+                          style: TextStyle(color: player.state.rate == speed ? gold : Colors.white, fontSize: 13)),
+                        onTap: () => Navigator.pop(sheetContext, speed),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null) {
+      await player.setRate(selected);
+      await _savePlayerSetting('rate', selected);
+      _showControls();
+    }
+  }
+
+  String _friendlyTrackLabel(dynamic track, int index) {
+    final language = (track.language ?? '').toString().trim().toLowerCase();
+    final title = (track.title ?? '').toString().trim();
+    const languages = <String, String>{
+      'ar': 'العربية', 'ara': 'العربية', 'arabic': 'العربية',
+      'en': 'الإنجليزية', 'eng': 'الإنجليزية', 'english': 'الإنجليزية',
+      'tr': 'التركية', 'tur': 'التركية', 'turkish': 'التركية',
+      'fr': 'الفرنسية', 'fra': 'الفرنسية', 'fre': 'الفرنسية',
+      'de': 'الألمانية', 'deu': 'الألمانية', 'ger': 'الألمانية',
+      'es': 'الإسبانية', 'spa': 'الإسبانية',
+      'ru': 'الروسية', 'rus': 'الروسية',
+      'ku': 'الكردية', 'kur': 'الكردية',
+      'und': 'غير محدد', 'unknown': 'غير محدد',
+    };
+    final readableLanguage = languages[language] ??
+        (language.isEmpty ? '' : language.toUpperCase());
+    if (readableLanguage.isNotEmpty && title.isNotEmpty &&
+        title.toLowerCase() != language) {
+      return '$readableLanguage - $title';
+    }
+    if (readableLanguage.isNotEmpty) return readableLanguage;
+    if (title.isNotEmpty) return title;
+    return 'مسار ${index + 1}';
+  }
+
+  Future<void> _pickAudioTrack() async {
+    final tracks = player.state.tracks.audio;
+    if (tracks.isEmpty) {
+      _message('لا توجد مسارات صوت إضافية لهذا المصدر');
+      return;
+    }
+    final selected = await showModalBottomSheet<AudioTrack>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (sheetContext) {
+        final size = MediaQuery.sizeOf(sheetContext);
+        return SafeArea(
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 220, maxHeight: size.height * 0.30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    ListTile(title: Text(appText('مسار الصوت', 'Audio Track', 'Ses Parçası'), textAlign: TextAlign.center,
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                    for (int index = 0; index < tracks.length; index++)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                        onTap: () => Navigator.pop(sheetContext, tracks[index]),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null) {
+      await player.setAudioTrack(selected);
+      await _savePlayerSetting('audio', selected.id.toString());
+      _showControls();
+    }
+  }
+
+  Future<void> _pickSubtitleTrack() async {
+    final tracks = player.state.tracks.subtitle;
+    final selected = await showModalBottomSheet<Object?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (sheetContext) {
+        final size = MediaQuery.sizeOf(sheetContext);
+        return SafeArea(
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 220, maxHeight: size.height * 0.30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                    ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
+                      leading: Icon(Icons.folder_open_rounded, color: gold, size: 18),
+                      title: Text(appText('تحميل ترجمة من الجهاز', 'Load Subtitle File', 'Cihazdan Altyazı Yükle'), textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, '__local_subtitle__'),
+                    ),
+                    ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
+                      leading: Icon(Icons.link_rounded, color: gold, size: 18),
+                      title: Text(appText('إضافة ترجمة من رابط', 'Load Subtitle from URL', 'URL ile Altyazı Yükle'), textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, '__url_subtitle__'),
+                    ),
+                    ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
+                      title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
+                    ),
+                    for (int index = 0; index < tracks.length; index++)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                        onTap: () => Navigator.pop(sheetContext, tracks[index]),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selected == '__local_subtitle__') {
+      await _pickLocalSubtitle();
+      return;
+    }
+    if (selected == '__url_subtitle__') {
+      await _pickSubtitleFromUrl();
+      return;
+    }
+    if (selected is SubtitleTrack) {
+      await player.setSubtitleTrack(selected);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('${_settingsPrefix}_external_subtitle');
+      await _savePlayerSetting('subtitle', selected.id.toString());
+      _showControls();
+    }
+  }
+
+  Future<void> _pickLocalSubtitle() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['srt', 'ass', 'ssa', 'vtt', 'sub', 'smi', 'txt'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.single;
+      var bytes = picked.bytes;
+      if (bytes == null && picked.path != null) {
+        bytes = await File(picked.path!).readAsBytes();
+      }
+      if (bytes == null || bytes.isEmpty) {
+        _message('ملف الترجمة فارغ أو تعذر قراءته');
+        return;
+      }
+      final temporaryDirectory = await getTemporaryDirectory();
+      final subtitleDirectory = Directory(
+        '${temporaryDirectory.path}${Platform.pathSeparator}shamflix_subtitles',
+      );
+      await subtitleDirectory.create(recursive: true);
+      final safeName = picked.name.replaceAll(
+        RegExp(r'[^A-Za-z0-9._-]'),
+        '_',
+      );
+      final subtitleFile = File(
+        '${subtitleDirectory.path}${Platform.pathSeparator}${DateTime.now().microsecondsSinceEpoch}_$safeName',
+      );
+      await subtitleFile.writeAsBytes(bytes, flush: true);
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(subtitleFile.path, title: picked.name),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '${_settingsPrefix}_external_subtitle',
+        subtitleFile.path,
+      );
+      await prefs.remove('${_settingsPrefix}_subtitle');
+      _message('تم تحميل الترجمة: ${picked.name}');
+      _showControls();
+    } catch (e) {
+      _message('تعذر تحميل ملف الترجمة: $e');
+    }
+  }
+
+  Future<void> _pickSubtitleFromUrl() async {
+    final urlController = TextEditingController();
+    try {
+      final enteredUrl = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF202020),
+          title: Text(
+            appText('رابط ملف الترجمة', 'Subtitle URL', 'Altyazı URL\'si'),
+            style: TextStyle(color: Colors.white),
+          ),
+          content: TextField(
+            controller: urlController,
+            keyboardType: TextInputType.url,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'https://example.com/subtitle.srt',
+              hintStyle: const TextStyle(color: Colors.white38),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(appText('إلغاء', 'Cancel', 'İptal')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold),
+              onPressed: () => Navigator.pop(dialogContext, urlController.text.trim()),
+              child: Text(appText('تحميل', 'Load', 'Yükle')),
+            ),
+          ],
+        ),
+      );
+      if (enteredUrl == null || enteredUrl.isEmpty) return;
+      final uri = Uri.tryParse(enteredUrl);
+      if (uri == null ||
+          !uri.hasAuthority ||
+          (uri.scheme != 'http' && uri.scheme != 'https')) {
+        _message('أدخل رابط ترجمة صحيحاً يبدأ بـ http أو https');
+        return;
+      }
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(
+          uri.toString(),
+          title: uri.pathSegments.isNotEmpty
+              ? uri.pathSegments.last
+              : 'External Subtitle',
+        ),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '${_settingsPrefix}_external_subtitle',
+        uri.toString(),
+      );
+      await prefs.remove('${_settingsPrefix}_subtitle');
+      _message('تم تحميل الترجمة الخارجية');
+      _showControls();
+    } catch (e) {
+      _message('تعذر تحميل الترجمة من الرابط: $e');
+    } finally {
+      urlController.dispose();
+    }
+  }
+
+  void _message(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: const Color(0xFF292929)),
+    );
+  }
+
+  Future<void> _switchServer(int index) async {
+    if (index < 0 || index >= widget.servers.length ||
+        index == currentServerIndex) return;
+    final url = valueOf(widget.servers[index]['stream_url']).trim();
+    if (url.isEmpty) {
+      _message('رابط هذا السيرفر غير متوفر');
+      return;
+    }
+    controlsTimer?.cancel();
+    _failedServers
+      ..clear()
+      ..add(currentServerIndex);
+    setState(() {
+      currentServerIndex = index;
+      opening = true;
+      error = null;
+      controlsVisible = true;
+    });
+    await _open(url);
+  }
+
+  Widget _serverButton(int index) {
+    final active = index == currentServerIndex;
+    final name = valueOf(widget.servers[index]['server_name'], 'السيرفر ${index + 1}');
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      child: Tooltip(
+        message: name,
+        child: Material(
+          color: active ? gold : Colors.black.withOpacity(0.62),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => _switchServer(index),
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Text('S${index + 1}',
+                  style: TextStyle(
+                    color: active ? Colors.black : Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleFullscreen() async {
+    await _setLandscape(!landscape);
+    if (mounted) setState(() {});
+    _showControls();
+  }
+
+  void _toggleControlsLock() {
+    controlsTimer?.cancel();
+    setState(() {
+      controlsLocked = !controlsLocked;
+      controlsVisible = true;
+    });
+    if (!controlsLocked) _showControls();
+  }
+
+  Widget _toolButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 19),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: Colors.white70, fontSize: 9)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _cycleVideoFit() {
+    setState(() => videoFitMode = (videoFitMode + 1) % 3);
+    _savePlayerSetting('fit', videoFitMode);
+    final labels = ['احتواء كامل بدون قص', 'ملء الشاشة مع قص الأطراف', 'تمديد الصورة لملء الشاشة'];
+    _message('طريقة عرض الصورة: ${labels[videoFitMode]}');
+    _showControls();
+  }
+
+  BoxFit get _currentVideoFit {
+    switch (videoFitMode) {
+      case 1:
+        return BoxFit.cover;
+      case 2:
+        return BoxFit.fill;
+      default:
+        return BoxFit.contain;
+    }
+  }
+
+  String get _videoFitTooltip {
+    switch (videoFitMode) {
+      case 1:
+        return 'ملء الشاشة مع قص';
+      case 2:
+        return 'تمديد الصورة';
+      default:
+        return 'احتواء كامل';
+    }
+  }
+
+  @override
+  void dispose() {
+    controlsTimer?.cancel();
+    _positionSubscription?.cancel();
+    _saveProgressAtPosition(player.state.position);
+    _savePlayerSetting('rate', player.state.rate);
+    _savePlayerSetting('fit', videoFitMode);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    unawaited(applyAppOrientationPolicy());
+    player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: error != null
+            ? SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(22),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.error_outline, color: gold, size: 48),
+                        const SizedBox(height: 14),
+                        Text(error!, textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white70)),
+                        const SizedBox(height: 18),
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
+                          onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
+                          child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleControls,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (!opening)
+                      Video(
+                        controller: controller,
+                        fit: _currentVideoFit,
+                        controls: NoVideoControls,
+                      ),
+                    if (opening)
+                      Center(child: CircularProgressIndicator(color: gold)),
+                    if (!opening)
+                      StreamBuilder<bool>(
+                        stream: player.stream.buffering,
+                        builder: (context, snapshot) => snapshot.data == true
+                            ? Center(child: CircularProgressIndicator(color: gold))
+                            : const SizedBox.shrink(),
+                      ),
+                    Positioned(
+                      top: 12,
+                      right: 14,
+                      child: SafeArea(
+                        child: StreamBuilder<bool>(
+                          stream: player.stream.buffering,
+                          builder: (context, snapshot) {
+                            final buffering = snapshot.data == true;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.68),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: buffering ? gold : Colors.green),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.circle, size: 7,
+                                    color: buffering ? gold : Colors.greenAccent),
+                                  const SizedBox(width: 6),
+                                  Text(buffering ? appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor') : appText('البث متصل', 'Stream Connected', 'Yayın Bağlandı'),
+                                    style: TextStyle(color: Colors.white, fontSize: 10)),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    if (controlsLocked)
+                      Positioned(
+                        bottom: 20,
+                        left: 0,
+                        right: 0,
+                        child: SafeArea(
+                          child: Center(
+                            child: Material(
+                              color: Colors.black.withOpacity(0.78),
+                              shape: const StadiumBorder(),
+                              child: TextButton.icon(
+                                onPressed: _toggleControlsLock,
+                                icon: Icon(Icons.lock_open_rounded, color: gold),
+                                label: Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
+                                    style: TextStyle(color: Colors.white)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      AnimatedOpacity(
+                        opacity: controlsVisible ? 1 : 0,
+                        duration: const Duration(milliseconds: 250),
+                        child: IgnorePointer(
+                          ignoring: !controlsVisible,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Color(0xE6000000),
+                                  Color(0x22000000),
+                                  Colors.transparent,
+                                  Color(0x33000000),
+                                  Color(0xF0000000),
+                                ],
+                                stops: [0, 0.18, 0.48, 0.72, 1],
+                              ),
+                            ),
+                            child: SafeArea(
+                              child: Column(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                    child: Row(
+                                      children: [
+                                        _controlButton(
+                                          icon: widget.embedded ? Icons.close_rounded : Icons.arrow_back_rounded,
+                                          size: 22,
+                                          onTap: widget.embedded ? (widget.onClose ?? () {}) : () => Navigator.pop(context),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                widget.title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              Text(
+                                                'SHAM FLIX PLAYER',
+                                                style: TextStyle(
+                                                  color: gold,
+                                                  fontSize: 9,
+                                                  letterSpacing: 2,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (widget.servers.length > 1)
+                                          SizedBox(
+                                            width: 150,
+                                            height: 42,
+                                            child: SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  for (int index = 0; index < widget.servers.length; index++)
+                                                    _serverButton(index),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  StreamBuilder<bool>(
+                                    stream: player.stream.playing,
+                                    builder: (context, snapshot) {
+                                      final playing = snapshot.data ?? false;
+                                      return Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          _controlButton(
+                                            icon: Icons.replay_10_rounded,
+                                            size: 38,
+                                            onTap: () {
+                                              final next = player.state.position - const Duration(seconds: 10);
+                                              player.seek(next.isNegative ? Duration.zero : next);
+                                              _showControls();
+                                            },
+                                          ),
+                                          const SizedBox(width: 30),
+                                          _controlButton(
+                                            icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                            size: 66,
+                                            onTap: () async {
+                                              await player.playOrPause();
+                                              _showControls();
+                                            },
+                                            filled: true,
+                                          ),
+                                          const SizedBox(width: 30),
+                                          _controlButton(
+                                            icon: Icons.forward_10_rounded,
+                                            size: 38,
+                                            onTap: () {
+                                              player.seek(player.state.position + const Duration(seconds: 10));
+                                              _showControls();
+                                            },
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  const Spacer(),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
+                                    child: StreamBuilder<Duration>(
+                                      stream: player.stream.position,
+                                      builder: (context, positionSnapshot) {
+                                        final position = positionSnapshot.data ?? Duration.zero;
+                                        return StreamBuilder<Duration>(
+                                          stream: player.stream.duration,
+                                          builder: (context, durationSnapshot) {
+                                            final duration = durationSnapshot.data ?? Duration.zero;
+                                            final max = duration.inMilliseconds > 0
+                                                ? duration.inMilliseconds.toDouble()
+                                                : 1.0;
+                                            final current = seeking
+                                                ? seekValue
+                                                : position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
+                                            return Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                SliderTheme(
+                                                  data: SliderTheme.of(context).copyWith(
+                                                    trackHeight: 3.5,
+                                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                                  ),
+                                                  child: Slider(
+                                                    value: current.clamp(0.0, max).toDouble(),
+                                                    max: max,
+                                                    activeColor: gold,
+                                                    inactiveColor: Colors.white24,
+                                                    onChangeStart: duration == Duration.zero
+                                                        ? null
+                                                        : (value) {
+                                                            setState(() {
+                                                              seeking = true;
+                                                              seekValue = value;
+                                                            });
+                                                            controlsTimer?.cancel();
+                                                          },
+                                                    onChanged: duration == Duration.zero
+                                                        ? null
+                                                        : (value) => setState(() => seekValue = value),
+                                                    onChangeEnd: duration == Duration.zero
+                                                        ? null
+                                                        : (value) {
+                                                            player.seek(Duration(milliseconds: value.round()));
+                                                            setState(() => seeking = false);
+                                                            _showControls();
+                                                          },
+                                                  ),
+                                                ),
+                                                Row(
+                                                  children: [
+                                                    Text(_time(position),
+                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
+                                                    const Spacer(),
+                                                    Text(_time(duration),
+                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white.withOpacity(0.07),
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    border: Border.all(color: Colors.white12),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                                    children: [
+                                                      _toolButton(
+                                                        icon: Icons.audiotrack_rounded,
+                                                        label: appText('الصوت', 'Audio', 'Ses'),
+                                                        onTap: _pickAudioTrack,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.subtitles_rounded,
+                                                        label: appText('الترجمة', 'Subtitles', 'Altyazılar'),
+                                                        onTap: _pickSubtitleTrack,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.speed_rounded,
+                                                        label: '${player.state.rate}x',
+                                                        onTap: _pickSpeed,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.fit_screen_rounded,
+                                                        label: appText('حجم الصورة', 'Picture Size', 'Görüntü Boyutu'),
+                                                        onTap: _cycleVideoFit,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.screen_rotation_alt_rounded,
+                                                        label: appText('تدوير', 'Rotate', 'Döndür'),
+                                                        onTap: _toggleFullscreen,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: controlsLocked
+                                                            ? Icons.lock_open_rounded
+                                                            : Icons.lock_outline_rounded,
+                                                        label: controlsLocked ? appText('فتح القفل', 'Unlock', 'Kilidi Aç') : appText('قفل اللمس', 'Lock Touch', 'Dokunmayı Kilitle'),
+                                                        onTap: _toggleControlsLock,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _controlButton({
+    required IconData icon,
+    required double size,
+    required VoidCallback onTap,
+    bool filled = false,
+  }) {
+    return Material(
+      color: filled ? gold.withOpacity(0.95) : Colors.black.withOpacity(0.35),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: size + 12,
+          height: size + 12,
+          child: Icon(icon, color: filled ? Colors.black : Colors.white, size: size),
+        ),
+      ),
+    );
+  }
+}
+
+class ShamFlixWebPage extends StatefulWidget {
+  final String url;
+  final String title;
+  const ShamFlixWebPage({super.key, required this.url, required this.title});
+  @override
+  State<ShamFlixWebPage> createState() => _ShamFlixWebPageState();
+}
+class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
+  late final WebViewController controller;
+  int progress = 0;
+  bool canGoBack = false;
+  bool canGoForward = false;
+  String? pageError;
+  @override
+  void initState() {
+    super.initState();
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(NavigationDelegate(
+        onProgress: (value) {
+          if (mounted) setState(() => progress = value);
+        },
+        onPageStarted: (_) {
+          if (mounted) setState(() => pageError = null);
+        },
+        onPageFinished: (_) async {
+          final back = await controller.canGoBack();
+          final forward = await controller.canGoForward();
+          if (mounted) setState(() {
+            canGoBack = back;
+            canGoForward = forward;
+            progress = 100;
+          });
+        },
+        onWebResourceError: (error) {
+          if (error.isForMainFrame == true && mounted) {
+            setState(() => pageError =
+                'تعذر تحميل الصفحة. تحقق من اتصال الإنترنت أو جرّب سيرفراً آخر.');
+          }
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: bg,
+          title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          actions: [
+            IconButton(tooltip: 'رجوع', onPressed: canGoBack ? () => controller.goBack() : null,
+                icon: const Icon(Icons.arrow_back)),
+            IconButton(tooltip: 'تقدم', onPressed: canGoForward ? () => controller.goForward() : null,
+                icon: const Icon(Icons.arrow_forward)),
+            IconButton(tooltip: 'تحديث', onPressed: () => controller.reload(),
+                icon: const Icon(Icons.refresh)),
+          ],
+        ),
+        body: Column(children: [
+          if (progress < 100)
+            LinearProgressIndicator(value: progress / 100, color: gold, backgroundColor: panel),
+          Expanded(
+            child: pageError != null
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(pageError!, textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70)),
+                  ))
+                : WebViewWidget(controller: controller),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class ShamFlixSearch extends SearchDelegate {
+  String categoryFilter = 'الكل';
+  String yearFilter = '';
+
+  Future<List<Map<String, dynamic>>> searchContent() async {
+    final movieResults = await SupabaseService.getMovies();
+    final seriesResults = await SupabaseService.getSeries();
+
+    final allResults = [
+      ...movieResults.map((item) => {...item, '_isSeries': false}),
+      ...seriesResults.map((item) => {...item, '_isSeries': true}),
+    ];
+
+    final searchText = query.trim().toLowerCase();
+
+    if (searchText.isEmpty && categoryFilter == 'الكل' && yearFilter.trim().isEmpty) return [];
+
+    return allResults.where((item) {
+      final searchable = [valueOf(item['title']), valueOf(item['category']), valueOf(item['release_year']), valueOf(item['description'])].join(' ').toLowerCase();
+      final matchesText = searchText.isEmpty || searchable.contains(searchText);
+      final matchesCategory = categoryFilter == 'الكل' || valueOf(item['category']) == categoryFilter;
+      final matchesYear = yearFilter.trim().isEmpty || valueOf(item['release_year']).contains(yearFilter.trim());
+      return matchesText && matchesCategory && matchesYear;
+    }).toList();
+  }
+
+  @override
+  String get searchFieldLabel => 'ابحث عن فيلم أو مسلسل';
+
+
+  Future<void> openFilters(BuildContext context) async {
+    final yearController = TextEditingController(text: yearFilter);
+    var selectedCategory = categoryFilter;
+    await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        backgroundColor: panel, title: Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: gold)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: selectedCategory, dropdownColor: panel,
+            decoration: InputDecoration(labelText: 'التصنيف', labelStyle: TextStyle(color: Colors.white70)),
+            items: const ['الكل', 'أكشن', 'دراما', 'كوميديا', 'رعب', 'خيال علمي']
+              .map((value) => DropdownMenuItem(value: value, child: Text(value, style: TextStyle(color: Colors.white)))).toList(),
+            onChanged: (value) => setDialogState(() => selectedCategory = value ?? 'الكل')),
+          const SizedBox(height: 12),
+          TextField(controller: yearController, keyboardType: TextInputType.number, style: TextStyle(color: Colors.white),
+            decoration: const InputDecoration(labelText: 'سنة الإصدار', hintText: 'مثال: 2026')),
+        ]),
+        actions: [
+          TextButton(onPressed: () { categoryFilter = 'الكل'; yearFilter = ''; Navigator.pop(dialogContext); }, child: Text(appText('مسح التصفية', 'Clear Filters', 'Filtreleri Temizle'))),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
+            onPressed: () { categoryFilter = selectedCategory; yearFilter = yearController.text; Navigator.pop(dialogContext); },
+            child: Text(appText('تطبيق', 'Apply', 'Uygula'))),
+        ],
+      ),
+    ));
+    yearController.dispose();
+    showResults(context);
+  }
+
+  @override
+  List<Widget> buildActions(BuildContext context) => [
+    IconButton(tooltip: 'تصفية حسب التصنيف والسنة', onPressed: () => openFilters(context),
+      icon: Icon(Icons.tune, color: categoryFilter != 'الكل' || yearFilter.isNotEmpty ? gold : Colors.white)),
+    IconButton(onPressed: () { query = ''; showSuggestions(context); }, icon: const Icon(Icons.clear)),
+  ];
+
+  @override
+  Widget buildLeading(BuildContext context) {
+    return IconButton(
+      onPressed: () => close(context, null),
+      icon: const Icon(Icons.arrow_back),
+    );
+  }
+
+  Widget results(BuildContext context) {
+    if (query.trim().isEmpty && categoryFilter == 'الكل' && yearFilter.trim().isEmpty) {
+      return Center(
+        child: Text(
+          'اكتب اسم الفيلم أو المسلسل أو استخدم التصفية',
+          style: TextStyle(color: Colors.white70),
+        ),
+      );
+    }
+
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: searchContent(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(
+            child: CircularProgressIndicator(color: gold),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'حدث خطأ أثناء البحث',
+              style: TextStyle(color: Colors.white70),
+            ),
+          );
+        }
+
+        final items = snapshot.data ?? [];
+
+        if (items.isEmpty) {
+          return Center(
+            child: Text(
+              'لا توجد نتائج',
+              style: TextStyle(color: Colors.white70),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            final poster = valueOf(item['poster_url']);
+
+            final isSeries = item['_isSeries'] == true;
+
+            return ListTile(
+              leading: SizedBox(
+                width: 48,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: poster.isEmpty
+                      ? Icon(Icons.movie, color: gold)
+                      : Image.network(
+                          poster,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) {
+                            return Icon(
+                              Icons.movie,
+                              color: gold,
+                            );
+                          },
+                        ),
+                ),
+              ),
+              title: Text(
+                valueOf(item['title'], appText('بدون عنوان', 'Untitled', 'Başlıksız')),
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film'),
+                style: TextStyle(color: gold),
+              ),
+              onTap: () {
+                close(context, null);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DetailsPage(
+                      item: item,
+                      isSeries: isSeries,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    return results(context);
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    return results(context);
+  }
+}
+
+// آخر تعديل: إصلاح مراجع ألوان الصفحات العامة والتفاصيل والإعدادات والقنوات خارج صفحة الباقات | التاريخ: 2026-11-21 | الوقت: 23:50:00 بتوقيت تركيا
+
+// آخر تعديل: إضافة تحميل ملفات الترجمة الخارجية من الجهاز أو الرابط، مع حفظ الاختيار واستعادته عند فتح المشغل | التاريخ والوقت: 22/11/2026, 00:29:37 بتوقيت تركيا.
+,
+      caseSensitive: false,
+    ).hasMatch(uri.path);
+  }
+
+  Future<void> _startPlayback(
+    String url,
+    String title, {
+    List<Map<String, dynamic>> servers = const [],
+    int initialServerIndex = 0,
+    String progressKey = '',
+  }) async {
+    final prefsForNetwork = await SharedPreferences.getInstance();
+    if (prefsForNetwork.getBool('shamflix_wifi_only') == true) {
+      final connections = await Connectivity().checkConnectivity();
+      if (!connections.contains(ConnectivityResult.wifi)) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط. غيّر إعداد الشبكة للمتابعة.')),
+        );
+        return;
+      }
+    }
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || !uri.hasScheme) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(appText('رابط التشغيل غير صالح', 'Invalid playback link', 'Geçersiz oynatma bağlantısı'))),
+      );
+      return;
+    }
+    if (!_isDirectMediaUrl(url)) {
+      if (uri.scheme == 'http' || uri.scheme == 'https') {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => ShamFlixWebPage(url: url, title: title),
+        ));
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(appText('نوع الرابط غير مدعوم داخل التطبيق', 'This link type is not supported in the app', 'Bu bağlantı türü uygulamada desteklenmiyor'))),
+        );
+      }
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final selectedPlayer = prefs.getString(_playerPreferenceKey) ?? 'internal';
+    if (!mounted) return;
+    if (selectedPlayer == 'internal') {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ShamFlixPlayerPage(
+          url: url,
+          title: title,
+          servers: servers,
+          initialServerIndex: initialServerIndex,
+          progressKey: progressKey,
+        ),
+      ));
+      return;
+    }
+    final packages = selectedPlayer == 'vlc'
+        ? <String>['org.videolan.vlc']
+        : <String>['com.mxtech.videoplayer.ad', 'com.mxtech.videoplayer.pro'];
+    try {
+      var launched = false;
+      for (final packageName in packages) {
+        final intent = AndroidIntent(
+          action: 'action_view',
+          data: url,
+          type: 'video/*',
+          package: packageName,
+        );
+        if (await intent.canResolveActivity() == true) {
+          await intent.launch();
+          launched = true;
+          break;
+        }
+      }
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(selectedPlayer == 'vlc'
+              ? 'لم يتم العثور على VLC. تأكد من تثبيته.'
+              : 'لم يتم العثور على MX Player. تأكد من تثبيته.'),
+          action: SnackBarAction(
+            label: appText('داخلي', 'Built-in', 'Dahili'),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => ShamFlixPlayerPage(
+                url: url,
+                title: title,
+                servers: servers,
+                initialServerIndex: initialServerIndex,
+                progressKey: progressKey,
+              ),
+            )),
+          ),
+        ));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر تشغيل المشغل الخارجي. جرّب المشغل الداخلي.')),
+      );
+    }
+  }
+
+  void _showPlayerMissing(String player) {
+    final name = player == 'vlc' ? 'VLC' : 'MX Player';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تأكد من تثبيت $name على جهازك')),
+    );
+  }
+
+  Widget _episodeList(Map<String, dynamic> season) {
+    final seasonId = season['id']?.toString() ?? '';
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: SupabaseService.getEpisodes(seasonId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: gold)));
+        }
+        if (snapshot.hasError) {
+          return const Padding(padding: EdgeInsets.all(12), child: Text('تعذر تحميل الحلقات', style: TextStyle(color: Colors.redAccent)));
+        }
+        final episodes = snapshot.data ?? [];
+        if (episodes.isEmpty) {
+          return Padding(padding: const EdgeInsets.all(12), child: Text(
+            appText('لا توجد حلقات منشورة في هذا الموسم', 'No episodes published in this season', 'Bu sezonda yayınlanmış bölüm yok'),
+            style: TextStyle(color: Colors.white70)));
+        }
+        return Column(children: episodes.asMap().entries.map((entry) {
+          final episode = entry.value;
+          final number = episode['episode_number']?.toString() ?? '${entry.key + 1}';
+          final episodeTitle = valueOf(episode['title'], 'الحلقة $number');
+          final duration = valueOf(episode['duration'] ?? episode['runtime']);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(color: const Color(0xFF202020), borderRadius: BorderRadius.circular(10)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+              leading: Container(
+                width: 46, height: 46, alignment: Alignment.center,
+                decoration: BoxDecoration(color: gold.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
+                child: Text(number, style: TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 16))),
+              title: Text(episodeTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: Text(duration.isEmpty ? appText('تشغيل الحلقة', 'Play episode', 'Bölümü oynat') : '$duration • ${appText('دقيقة', 'min', 'dk')}',
+                style: TextStyle(color: Colors.white70, fontSize: 12)),
+              trailing: Icon(Icons.play_circle_fill_rounded, color: gold, size: 30),
+              onTap: () async {
+                final episodeRecord = Map<String, dynamic>.from(episode);
+                if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
+                await saveWatchRecord(contentType: 'episode', item: episodeRecord, title: episodeTitle,
+                  fallbackPoster: valueOf(widget.item['poster_url']));
+                await _chooseAndPlay(contentType: 'episode', contentId: episode['id'].toString(),
+                  title: episodeTitle, legacyUrl: episode['stream_url']?.toString());
+              },
+            ),
+          );
+        }).toList());
+      },
+    );
+  }
+
+  Widget _detailsHero(String title, String poster, String backdrop, {required bool isChannel}) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    const posterWidth = 104.0;
+    const posterHeight = 148.0;
+    final heroHeight = isLandscape ? 230.0 : 310.0;
+    final heroImage = backdrop.isNotEmpty ? backdrop : (isChannel ? poster : '');
+    return SizedBox(
+      width: double.infinity, height: heroHeight,
+      child: Stack(fit: StackFit.expand, children: [
+        if (heroImage.isNotEmpty)
+          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: panel))
+        else ColoredBox(color: panel),
+        const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [Color(0x22000000), Color(0x55000000), Color(0xFF090909)],
+          stops: [0.0, 0.52, 1.0]))),
+        Positioned(
+          right: 18, left: 18, bottom: 16,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            if (!isChannel) ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: SizedBox(width: posterWidth, height: posterHeight,
+                child: poster.isEmpty
+                  ? Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))
+                  : Image.network(poster, width: posterWidth, height: posterHeight, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))))),
+            if (!isChannel) const SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4)),
+                child: Text(isChannel ? appText('مباشر', 'LIVE', 'CANLI') : 'SHAM FLIX',
+                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+              const SizedBox(height: 8),
+              Text(title, maxLines: isLandscape ? 2 : 3, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
+                  shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
+            ])),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _detailsInformation(Map<String, dynamic> item, {required bool isSeries, required bool isChannel,
+    required String description, required String director, required String cast}) {
+    final year = valueOf(item['release_year']);
+    final category = valueOf(item['category']);
+    final rating = valueOf(item['rating']);
+    final duration = valueOf(item['duration'] ?? item['runtime']);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        if (rating.isNotEmpty) _detailTag(Icons.star, rating),
+        if (year.isNotEmpty) _detailTag(Icons.calendar_today, year),
+        if (duration.isNotEmpty && !isSeries) _detailTag(Icons.schedule, duration),
+        _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie,
+          isChannel ? appText('قناة', 'Channel', 'Kanal') : isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film')),
+      ]),
+      if (category.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Wrap(spacing: 8, runSpacing: 8, children: category.split(RegExp(r'[,،|]')).map((genre) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          decoration: BoxDecoration(color: const Color(0xFF292929), borderRadius: BorderRadius.circular(20)),
+          child: Text(genre.trim(), style: TextStyle(color: Colors.white70, fontSize: 12)),
+        )).toList()),
+      ],
+      const SizedBox(height: 20),
+      Text(appText('القصة والوصف', 'About this title', 'Hikâye ve Açıklama'),
+        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 9),
+      Text(description, style: TextStyle(color: Colors.white70, height: 1.7, fontSize: 14)),
+      if (director.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: TextStyle(color: Colors.white70, fontSize: 13)),
+      ],
+      if (cast.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+      ],
+      const SizedBox(height: 18),
+      _recommendationsSection(),
+    ]);
+  }
+
+  Widget _moviePlaySection(Map<String, dynamic> item, String title, {required bool isChannel}) {
+    return SizedBox(width: double.infinity, child: FilledButton.icon(
+      style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+      onPressed: () => _chooseAndPlay(contentType: isChannel ? 'channel' : 'movie',
+        contentId: item['id'].toString(), title: title, legacyUrl: item['stream_url']?.toString()),
+      icon: const Icon(Icons.play_arrow_rounded, size: 25),
+      label: Text(isChannel ? appText('تشغيل القناة الآن', 'Watch Live', 'Canlı İzle') : appText('مشاهدة الآن', 'Watch Now', 'Şimdi İzle'),
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+    ));
+  }
+
+  Widget _seriesEpisodesSection() {
+    final selectedSeason = seasons.isNotEmpty ? seasons[selectedSeasonIndex.clamp(0, seasons.length - 1).toInt()] : null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Container(width: 4, height: 22, decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4))),
+        const SizedBox(width: 9),
+        Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'),
+          style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+      ]),
+      const SizedBox(height: 14),
+      if (seasonsLoading)
+        Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: gold)))
+      else if (seasonsError != null)
+        Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
+      else if (seasons.isEmpty)
+        Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'),
+          style: TextStyle(color: Colors.white70))
+      else ...[
+        SizedBox(height: 42, child: ListView.separated(
+          scrollDirection: Axis.horizontal, reverse: true, itemCount: seasons.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final season = seasons[index];
+            final selected = index == selectedSeasonIndex;
+            final label = valueOf(season['name'], appText('الموسم ${season['season_number']}', 'Season ${season['season_number']}', 'Sezon ${season['season_number']}'));
+            return ChoiceChip(
+              label: Text(label), selected: selected,
+              onSelected: (_) => setState(() => selectedSeasonIndex = index),
+              selectedColor: gold, backgroundColor: const Color(0xFF292929),
+              labelStyle: TextStyle(color: Colors.white, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+              side: BorderSide.none, showCheckmark: false,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            );
+          },
+        )),
+        const SizedBox(height: 12),
+        if (selectedSeason != null) _episodeList(selectedSeason),
+      ],
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final isSeries = widget.isSeries;
+    final isChannel = widget.isChannel;
+    final title = valueOf(item['title'] ?? item['name'], appText('بدون عنوان', 'Untitled', 'Başlıksız'));
+    final poster = valueOf(item['poster_url'] ?? item['logo_url']);
+    final backdrop = valueOf(item['backdrop_url']);
+    final director = valueOf(item['director']);
+    final cast = valueOf(item['cast']);
+    final description = valueOf(item['description'], appText('لا يوجد وصف لهذا المحتوى حالياً.', 'No description is available for this title yet.', 'Bu içerik için henüz açıklama yok.'));
+    Widget information = _detailsInformation(item, isSeries: isSeries, isChannel: isChannel,
+      description: description, director: director, cast: cast);
+
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
+          IconButton(tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
+            onPressed: _toggleFavorite,
+            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : Colors.white)),
+        ]),
+        body: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _detailsHero(title, poster, backdrop, isChannel: isChannel),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                if (!isSeries) ...[
+                  _moviePlaySection(item, title, isChannel: isChannel),
+                  const SizedBox(height: 20),
+                ],
+                information,
+                if (isSeries) ...[
+                  const SizedBox(height: 24),
+                  _seriesEpisodesSection(),
+                ],
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailTag(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: gold, size: 16),
+        const SizedBox(width: 5),
+        Text(text, style: TextStyle(color: Colors.white70)),
+      ],
+    );
+  }
+}
+
+const String _playerPreferenceKey = 'shamflix_player_preference';
+
+class ShamFlixPlayerSettingsPage extends StatefulWidget {
+  const ShamFlixPlayerSettingsPage({super.key});
+
+  @override
+  State<ShamFlixPlayerSettingsPage> createState() => _ShamFlixPlayerSettingsPageState();
+}
+
+class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage> {
+  String selectedPlayer = 'internal';
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      selectedPlayer = prefs.getString(_playerPreferenceKey) ?? 'internal';
+      loading = false;
+    });
+  }
+
+  Future<void> _save(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerPreferenceKey, value);
+    if (!mounted) return;
+    setState(() => selectedPlayer = value);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ اختيار المشغل')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(backgroundColor: bg, title: Text(appText('إعدادات المشغل', 'Player Settings', 'Oynatıcı Ayarları'))),
+        body: loading
+            ? Center(child: CircularProgressIndicator(color: gold))
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Text(appText('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', 'Choose the default player for movies, episodes and channels', 'Film, bölüm ve kanallar için varsayılan oynatıcıyı seçin'), style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 14),
+                  _playerOption('internal', 'المشغل الداخلي', 'تشغيل داخل تطبيق ShamFlix', Icons.smart_display),
+                  _playerOption('vlc', 'VLC', 'يتطلب تثبيت تطبيق VLC', Icons.play_circle),
+                  _playerOption('mx', 'MX Player', 'يتطلب تثبيت تطبيق MX Player', Icons.ondemand_video),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _playerOption(String value, String title, String subtitle, IconData icon) {
+    return Card(
+      color: panel,
+      child: RadioListTile<String>(
+        value: value,
+        groupValue: selectedPlayer,
+        activeColor: gold,
+        secondary: Icon(icon, color: gold),
+        title: Text(title, style: TextStyle(color: Colors.white)),
+        subtitle: Text(subtitle, style: TextStyle(color: Colors.white70)),
+        onChanged: (next) { if (next != null) _save(next); },
+      ),
+    );
+  }
+}
+
+class ChannelsPackagesPage extends StatefulWidget {
+  const ChannelsPackagesPage({super.key});
+
+  @override
+  State<ChannelsPackagesPage> createState() => _ChannelsPackagesPageState();
+}
+
+class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
+  bool loading = true;
+  String? error;
+  List<Map<String, dynamic>> packages = [];
+  List<Map<String, dynamic>> channels = [];
+  String? selectedPackageId;
+  int gridColumns = 5;
+  bool starting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    channelRefreshNotifier.addListener(_onExternalRefresh);
+  }
+
+  void _onExternalRefresh() { _load(); }
+
+  @override
+  void dispose() {
+    channelRefreshNotifier.removeListener(_onExternalRefresh);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      try {
+        final gridSetting = await AuthService.client
+            .from('app_settings')
+            .select('setting_value')
+            .eq('setting_key', 'catalog_grid_columns')
+            .maybeSingle();
+        final savedColumns = int.tryParse(
+          gridSetting?['setting_value']?.toString() ?? '',
+        );
+        gridColumns = (savedColumns ?? 5).clamp(2, 6).toInt();
+      } catch (_) {
+        gridColumns = 5;
+      }
+      final packageRows = await AuthService.client
+          .from('content_packages')
+          .select('id,name,sort_order')
+          .eq('content_type', 'channel')
+          .order('sort_order');
+      packages = packageRows.map((row) => Map<String, dynamic>.from(row)).toList();
+      selectedPackageId = packages.isEmpty ? null : packages.first['id'].toString();
+      await _loadChannels();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _loadChannels() async {
+    if (selectedPackageId == null) {
+      channels = await SupabaseService.getChannels();
+      return;
+    }
+    final links = await AuthService.client
+        .from('content_package_items')
+        .select('content_id')
+        .eq('content_type', 'channel')
+        .eq('package_id', selectedPackageId!);
+    final ids = links.map((row) => row['content_id'].toString()).toList();
+    if (ids.isEmpty) {
+      channels = [];
+      return;
+    }
+    final rows = await AuthService.client.from('channels')
+        .select().inFilter('id', ids)
+        .eq('is_published', true)
+        .order('name');
+    channels = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  Future<void> _selectPackage(String? id) async {
+    setState(() { selectedPackageId = id; loading = true; error = null; });
+    try {
+      await _loadChannels();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _playChannel(Map<String, dynamic> channel) async {
+    if (starting) return;
+    setState(() => starting = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('shamflix_wifi_only') == true) {
+        final connections = await Connectivity().checkConnectivity();
+        if (!connections.contains(ConnectivityResult.wifi)) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط.')),
+          );
+          return;
+        }
+      }
+      final id = channel['id']?.toString() ?? '';
+      final servers = id.isEmpty ? <Map<String, dynamic>>[] :
+          await SupabaseService.getPlaybackServers(contentType: 'channel', contentId: id);
+      final url = servers.isNotEmpty
+          ? valueOf(servers.first['stream_url'])
+          : valueOf(channel['stream_url']);
+      final uri = Uri.tryParse(url);
+      if (url.isEmpty || uri == null || !uri.hasScheme) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('رابط القناة غير متوفر حالياً')),
+        );
+        return;
+      }
+      await ShamFlixLocalStore.addHistory({
+        'contentType': 'channel',
+        'contentId': id,
+        'title': valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+        'poster_url': valueOf(channel['logo_url']),
+        'item': Map<String, dynamic>.from(channel),
+        'isChannel': true,
+        'progressKey': 'channel-$id',
+      });
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShamFlixPlayerPage(
+            url: url,
+            title: valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+            servers: servers,
+            progressKey: 'channel-$id',
+            embedded: false,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تشغيل القناة: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => starting = false);
+    }
+  }
+
+  Widget _channelTile(Map<String, dynamic> channel) {
+    final active = false;
+    final logo = valueOf(channel['logo_url']);
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _playChannel(channel),
+      child: Container(
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF302719) : panel,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: active ? gold : Colors.white10, width: active ? 1.4 : 0.7),
+        ),
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Center(
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.all(5),
+                      child: logo.isEmpty
+                          ? Icon(Icons.live_tv, color: gold, size: 30)
+                          : Image.network(logo, fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: gold, size: 30)),
+                    ),
+                  ),
+                  Positioned(
+                    top: 4, right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(color: const Color(0xFFE50914), borderRadius: BorderRadius.circular(4)),
+                      child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  if (active)
+                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: gold, size: 16)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+              maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
+              style: TextStyle(color: active ? gold : Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _packageSidebar() {
+    return Container(
+      width: 126,
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(7, 4, 7, 10),
+            child: Text(appText('الباقات', 'PACKAGES', 'PAKETLER'),
+              style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+          ...packages.map((package) {
+            final id = package['id'].toString();
+            final active = id == selectedPackageId;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Material(
+                color: active ? const Color(0xFFE50914) : panel,
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _selectPackage(id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    child: Row(children: [
+                      Icon(Icons.live_tv, color: active ? Colors.white : Colors.white70, size: 17),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(package['name']?.toString() ?? 'باقة',
+                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: active ? Colors.white : Colors.white, fontSize: 11,
+                            fontWeight: active ? FontWeight.bold : FontWeight.normal)),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+            child: Row(children: [
+              Container(width: 4, height: 22, color: gold),
+              const SizedBox(width: 9),
+              Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
+                style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: gold)),
+            ]),
+          ),
+          if (starting)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: LinearProgressIndicator(color: gold, backgroundColor: panel),
+            ),
+          Expanded(
+            child: Row(
+              textDirection: TextDirection.ltr,
+              children: [
+                if (packages.isNotEmpty) _packageSidebar(),
+                Expanded(
+                  child: Directionality(
+                    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+                    child: Column(children: [
+                      if (selectedPackageId != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
+                                orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
+                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: loading
+                            ? Center(child: CircularProgressIndicator(color: gold))
+                            : error != null
+                                ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
+                                : channels.isEmpty
+                                    ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
+                                        style: TextStyle(color: Colors.white70)))
+                                    : RefreshIndicator(
+                                        color: gold,
+                                        onRefresh: _load,
+                                        child: GridView.builder(
+                                          padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
+                                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: gridColumns,
+                                            crossAxisSpacing: 9,
+                                            mainAxisSpacing: 9,
+                                            childAspectRatio: 1.0,
+                                          ),
+                                          itemCount: channels.length,
+                                          itemBuilder: (context, index) => _channelTile(channels[index]),
+                                        ),
+                                      ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+
+class ShamFlixPlayerPage extends StatefulWidget {
+  final String url;
+  final String title;
+  final List<Map<String, dynamic>> servers;
+  final int initialServerIndex;
+  final String progressKey;
+  final bool embedded;
+  final VoidCallback? onClose;
+
+  const ShamFlixPlayerPage({
+    super.key,
+    required this.url,
+    required this.title,
+    this.servers = const [],
+    this.initialServerIndex = 0,
+    this.progressKey = '',
+    this.embedded = false,
+    this.onClose,
+  });
+
+  @override
+  State<ShamFlixPlayerPage> createState() => _ShamFlixPlayerPageState();
+}
+
+class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
+  // قائمة سرعات موحدة للوضعين العمودي والأفقي.
+  static const List<double> _playbackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+  late final Player player;
+  late final VideoController controller;
+  Timer? controlsTimer;
+  String? error;
+  bool opening = true;
+  bool controlsVisible = true;
+  bool seeking = false;
+  double seekValue = 0;
+  bool landscape = true;
+  bool controlsLocked = false;
+  int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
+  late int currentServerIndex;
+  final Set<int> _failedServers = <int>{};
+  bool _failoverInProgress = false;
+  StreamSubscription<Duration>? _positionSubscription;
+  int _lastSavedSecond = -1;
+
+  String get _settingsPrefix =>
+      ShamFlixLocalStore.playerPrefix(widget.progressKey, widget.title);
+
+  @override
+  void initState() {
+    super.initState();
+    currentServerIndex = widget.servers.isEmpty
+        ? 0
+        : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
+    player = Player();
+    controller = VideoController(player);
+    landscape = !widget.embedded;
+    if (!widget.embedded) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      _setLandscape(true);
+    }
+    player.stream.error.listen(_handlePlaybackError);
+    _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
+    _open();
+  }
+
+  Future<void> _setLandscape(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final landscapeOnly = prefs.getBool('shamflix_force_landscape') ?? false;
+    final shouldUseLandscape = landscapeOnly || value;
+    landscape = shouldUseLandscape;
+    await SystemChrome.setPreferredOrientations(
+      shouldUseLandscape
+          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : const [
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ],
+    );
+  }
+
+  Future<void> _open([String? url]) async {
+    try {
+      await player.open(Media(url ?? widget.url)).timeout(const Duration(seconds: 20));
+      if (!mounted) return;
+      await _savePreferredServer();
+      final prefs = await SharedPreferences.getInstance();
+      final savedRate = prefs.getDouble('${_settingsPrefix}_rate') ?? 1.0;
+      final savedFit = prefs.getInt('${_settingsPrefix}_fit') ?? 0;
+      if (_playbackSpeeds.contains(savedRate)) await player.setRate(savedRate);
+      if (mounted) setState(() {
+        videoFitMode = savedFit.clamp(0, 2).toInt();
+        opening = false;
+        error = null;
+      });
+      await _restorePlaybackPosition(prefs);
+      await _restoreTrackPreferences(prefs);
+      if (mounted) _showControls();
+    } catch (e) {
+      _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
+    }
+  }
+
+  Future<void> _savePreferredServer() async {
+    if (widget.servers.isEmpty || currentServerIndex < 0 || currentServerIndex >= widget.servers.length || widget.progressKey.isEmpty) return;
+    final server = widget.servers[currentServerIndex];
+    final key = valueOf(server['id'] ?? server['server_name']);
+    if (key.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('shamflix_preferred_server_${widget.progressKey}', key);
+  }
+
+  Future<void> _restorePlaybackPosition(SharedPreferences prefs) async {
+    final savedMs = prefs.getInt('${_settingsPrefix}_position') ?? 0;
+    var duration = player.state.duration;
+    for (int attempt = 0; attempt < 8 && duration <= Duration.zero; attempt++) {
+      await Future.delayed(const Duration(milliseconds: 250));
+      duration = player.state.duration;
+    }
+    if (savedMs > 10000 && duration > Duration.zero &&
+        savedMs < duration.inMilliseconds - 15000) {
+      await player.seek(Duration(milliseconds: savedMs));
+      if (mounted) {
+        _message('تم استكمال المشاهدة من مكان التوقف');
+      }
+    }
+  }
+
+  Future<void> _restoreTrackPreferences(SharedPreferences prefs) async {
+    final audioId = prefs.getString('${_settingsPrefix}_audio');
+    final subtitleId = prefs.getString('${_settingsPrefix}_subtitle');
+    final externalSubtitle = prefs.getString('${_settingsPrefix}_external_subtitle');
+    var restoredExternalSubtitle = false;
+    if (externalSubtitle != null && externalSubtitle.trim().isNotEmpty) {
+      final externalUri = Uri.tryParse(externalSubtitle);
+      final isRemote = externalUri != null &&
+          (externalUri.scheme == 'http' || externalUri.scheme == 'https');
+      if (isRemote || await File(externalSubtitle).exists()) {
+        final subtitleName = isRemote && externalUri!.pathSegments.isNotEmpty
+            ? externalUri.pathSegments.last
+            : externalSubtitle.split(Platform.pathSeparator).last;
+        await player.setSubtitleTrack(
+          SubtitleTrack.uri(externalSubtitle, title: subtitleName),
+        );
+        restoredExternalSubtitle = true;
+      } else {
+        await prefs.remove('${_settingsPrefix}_external_subtitle');
+      }
+    }
+    if (audioId != null) {
+      for (final track in player.state.tracks.audio) {
+        if (track.id.toString() == audioId) {
+          await player.setAudioTrack(track);
+          break;
+        }
+      }
+    }
+    if (subtitleId != null && !restoredExternalSubtitle) {
+      if (subtitleId == 'no') {
+        await player.setSubtitleTrack(SubtitleTrack.no());
+      } else {
+        for (final track in player.state.tracks.subtitle) {
+          if (track.id.toString() == subtitleId) {
+            await player.setSubtitleTrack(track);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _saveProgressAtPosition(Duration position) async {
+    if (position.inSeconds < 1 || position.inSeconds - _lastSavedSecond < 5) return;
+    _lastSavedSecond = position.inSeconds;
+    final duration = player.state.duration;
+    if (duration <= Duration.zero) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('${_settingsPrefix}_position', position.inMilliseconds);
+    if (widget.progressKey.isNotEmpty) await ShamFlixLocalStore.updateProgress(widget.progressKey, position.inMilliseconds);
+  }
+
+  Future<void> _savePlayerSetting(String key, Object value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value is int) await prefs.setInt('${_settingsPrefix}_$key', value);
+    if (value is double) await prefs.setDouble('${_settingsPrefix}_$key', value);
+    if (value is String) await prefs.setString('${_settingsPrefix}_$key', value);
+  }
+
+  Future<void> _handlePlaybackError(String message) async {
+    if (!mounted || _failoverInProgress) return;
+    if (widget.servers.length > 1) {
+      _failoverInProgress = true;
+      _failedServers.add(currentServerIndex);
+      for (int offset = 1; offset <= widget.servers.length; offset++) {
+        final next = (currentServerIndex + offset) % widget.servers.length;
+        if (_failedServers.contains(next)) continue;
+        final nextUrl = valueOf(widget.servers[next]['stream_url']).trim();
+        if (nextUrl.isEmpty) {
+          _failedServers.add(next);
+          continue;
+        }
+        if (mounted) {
+          setState(() {
+            currentServerIndex = next;
+            opening = true;
+            error = null;
+            controlsVisible = true;
+          });
+          _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
+        }
+        try {
+          await player.open(Media(nextUrl)).timeout(const Duration(seconds: 20));
+          if (!mounted) return;
+          final playbackPrefs = await SharedPreferences.getInstance();
+          await _restoreTrackPreferences(playbackPrefs);
+          await _savePreferredServer();
+          _failedServers.clear();
+          setState(() => opening = false);
+          _failoverInProgress = false;
+          _showControls();
+          return;
+        } catch (_) {
+          _failedServers.add(next);
+        }
+      }
+      _failoverInProgress = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      error = 'تعذر تشغيل الفيديو. جرّب سيرفراً آخر.\n$message';
+      opening = false;
+      controlsVisible = true;
+    });
+  }
+
+  void _showControls() {
+    controlsTimer?.cancel();
+    if (!mounted) return;
+    setState(() => controlsVisible = true);
+    if (player.state.playing && !opening && error == null && !controlsLocked) {
+      controlsTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted && player.state.playing && !seeking) {
+          setState(() => controlsVisible = false);
+        }
+      });
+    }
+  }
+
+  void _toggleControls() {
+    if (controlsLocked) {
+      setState(() => controlsVisible = true);
+      return;
+    }
+    if (controlsVisible) {
+      controlsTimer?.cancel();
+      setState(() => controlsVisible = false);
+    } else {
+      _showControls();
+    }
+  }
+
+  String _time(Duration value) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = value.inHours;
+    final m = value.inMinutes.remainder(60);
+    final s = value.inSeconds.remainder(60);
+    if (h > 0) return '${two(h)}:${two(m)}:${two(s)}';
+    return '${two(m)}:${two(s)}';
+  }
+
+  Future<void> _pickSpeed() async {
+    final selected = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (sheetContext) {
+        final size = MediaQuery.sizeOf(sheetContext);
+        return SafeArea(
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  children: [
+                    for (final speed in _playbackSpeeds)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -3),
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${speed}x', textAlign: TextAlign.center,
+                          style: TextStyle(color: player.state.rate == speed ? gold : Colors.white, fontSize: 13)),
+                        onTap: () => Navigator.pop(sheetContext, speed),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null) {
+      await player.setRate(selected);
+      await _savePlayerSetting('rate', selected);
+      _showControls();
+    }
+  }
+
+  String _friendlyTrackLabel(dynamic track, int index) {
+    final language = (track.language ?? '').toString().trim().toLowerCase();
+    final title = (track.title ?? '').toString().trim();
+    const languages = <String, String>{
+      'ar': 'العربية', 'ara': 'العربية', 'arabic': 'العربية',
+      'en': 'الإنجليزية', 'eng': 'الإنجليزية', 'english': 'الإنجليزية',
+      'tr': 'التركية', 'tur': 'التركية', 'turkish': 'التركية',
+      'fr': 'الفرنسية', 'fra': 'الفرنسية', 'fre': 'الفرنسية',
+      'de': 'الألمانية', 'deu': 'الألمانية', 'ger': 'الألمانية',
+      'es': 'الإسبانية', 'spa': 'الإسبانية',
+      'ru': 'الروسية', 'rus': 'الروسية',
+      'ku': 'الكردية', 'kur': 'الكردية',
+      'und': 'غير محدد', 'unknown': 'غير محدد',
+    };
+    final readableLanguage = languages[language] ??
+        (language.isEmpty ? '' : language.toUpperCase());
+    if (readableLanguage.isNotEmpty && title.isNotEmpty &&
+        title.toLowerCase() != language) {
+      return '$readableLanguage - $title';
+    }
+    if (readableLanguage.isNotEmpty) return readableLanguage;
+    if (title.isNotEmpty) return title;
+    return 'مسار ${index + 1}';
+  }
+
+  Future<void> _pickAudioTrack() async {
+    final tracks = player.state.tracks.audio;
+    if (tracks.isEmpty) {
+      _message('لا توجد مسارات صوت إضافية لهذا المصدر');
+      return;
+    }
+    final selected = await showModalBottomSheet<AudioTrack>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (sheetContext) {
+        final size = MediaQuery.sizeOf(sheetContext);
+        return SafeArea(
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 220, maxHeight: size.height * 0.30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    ListTile(title: Text(appText('مسار الصوت', 'Audio Track', 'Ses Parçası'), textAlign: TextAlign.center,
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                    for (int index = 0; index < tracks.length; index++)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                        onTap: () => Navigator.pop(sheetContext, tracks[index]),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null) {
+      await player.setAudioTrack(selected);
+      await _savePlayerSetting('audio', selected.id.toString());
+      _showControls();
+    }
+  }
+
+  Future<void> _pickSubtitleTrack() async {
+    final tracks = player.state.tracks.subtitle;
+    final selected = await showModalBottomSheet<Object?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (sheetContext) {
+        final size = MediaQuery.sizeOf(sheetContext);
+        return SafeArea(
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 220, maxHeight: size.height * 0.30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                    ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
+                      leading: Icon(Icons.folder_open_rounded, color: gold, size: 18),
+                      title: Text(appText('تحميل ترجمة من الجهاز', 'Load Subtitle File', 'Cihazdan Altyazı Yükle'), textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, '__local_subtitle__'),
+                    ),
+                    ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
+                      leading: Icon(Icons.link_rounded, color: gold, size: 18),
+                      title: Text(appText('إضافة ترجمة من رابط', 'Load Subtitle from URL', 'URL ile Altyazı Yükle'), textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, '__url_subtitle__'),
+                    ),
+                    ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
+                      title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
+                    ),
+                    for (int index = 0; index < tracks.length; index++)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                        onTap: () => Navigator.pop(sheetContext, tracks[index]),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (selected == '__local_subtitle__') {
+      await _pickLocalSubtitle();
+      return;
+    }
+    if (selected == '__url_subtitle__') {
+      await _pickSubtitleFromUrl();
+      return;
+    }
+    if (selected is SubtitleTrack) {
+      await player.setSubtitleTrack(selected);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('${_settingsPrefix}_external_subtitle');
+      await _savePlayerSetting('subtitle', selected.id.toString());
+      _showControls();
+    }
+  }
+
+  Future<void> _pickLocalSubtitle() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['srt', 'ass', 'ssa', 'vtt', 'sub', 'smi', 'txt'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.single;
+      var bytes = picked.bytes;
+      if (bytes == null && picked.path != null) {
+        bytes = await File(picked.path!).readAsBytes();
+      }
+      if (bytes == null || bytes.isEmpty) {
+        _message('ملف الترجمة فارغ أو تعذر قراءته');
+        return;
+      }
+      final temporaryDirectory = await getTemporaryDirectory();
+      final subtitleDirectory = Directory(
+        '${temporaryDirectory.path}${Platform.pathSeparator}shamflix_subtitles',
+      );
+      await subtitleDirectory.create(recursive: true);
+      final safeName = picked.name.replaceAll(
+        RegExp(r'[^A-Za-z0-9._-]'),
+        '_',
+      );
+      final subtitleFile = File(
+        '${subtitleDirectory.path}${Platform.pathSeparator}${DateTime.now().microsecondsSinceEpoch}_$safeName',
+      );
+      await subtitleFile.writeAsBytes(bytes, flush: true);
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(subtitleFile.path, title: picked.name),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '${_settingsPrefix}_external_subtitle',
+        subtitleFile.path,
+      );
+      await prefs.remove('${_settingsPrefix}_subtitle');
+      _message('تم تحميل الترجمة: ${picked.name}');
+      _showControls();
+    } catch (e) {
+      _message('تعذر تحميل ملف الترجمة: $e');
+    }
+  }
+
+  Future<void> _pickSubtitleFromUrl() async {
+    final urlController = TextEditingController();
+    try {
+      final enteredUrl = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF202020),
+          title: Text(
+            appText('رابط ملف الترجمة', 'Subtitle URL', 'Altyazı URL\'si'),
+            style: TextStyle(color: Colors.white),
+          ),
+          content: TextField(
+            controller: urlController,
+            keyboardType: TextInputType.url,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'https://example.com/subtitle.srt',
+              hintStyle: const TextStyle(color: Colors.white38),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(appText('إلغاء', 'Cancel', 'İptal')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold),
+              onPressed: () => Navigator.pop(dialogContext, urlController.text.trim()),
+              child: Text(appText('تحميل', 'Load', 'Yükle')),
+            ),
+          ],
+        ),
+      );
+      if (enteredUrl == null || enteredUrl.isEmpty) return;
+      final uri = Uri.tryParse(enteredUrl);
+      if (uri == null ||
+          !uri.hasAuthority ||
+          (uri.scheme != 'http' && uri.scheme != 'https')) {
+        _message('أدخل رابط ترجمة صحيحاً يبدأ بـ http أو https');
+        return;
+      }
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(
+          uri.toString(),
+          title: uri.pathSegments.isNotEmpty
+              ? uri.pathSegments.last
+              : 'External Subtitle',
+        ),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '${_settingsPrefix}_external_subtitle',
+        uri.toString(),
+      );
+      await prefs.remove('${_settingsPrefix}_subtitle');
+      _message('تم تحميل الترجمة الخارجية');
+      _showControls();
+    } catch (e) {
+      _message('تعذر تحميل الترجمة من الرابط: $e');
+    } finally {
+      urlController.dispose();
+    }
+  }
+
+  void _message(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: const Color(0xFF292929)),
+    );
+  }
+
+  Future<void> _switchServer(int index) async {
+    if (index < 0 || index >= widget.servers.length ||
+        index == currentServerIndex) return;
+    final url = valueOf(widget.servers[index]['stream_url']).trim();
+    if (url.isEmpty) {
+      _message('رابط هذا السيرفر غير متوفر');
+      return;
+    }
+    controlsTimer?.cancel();
+    _failedServers
+      ..clear()
+      ..add(currentServerIndex);
+    setState(() {
+      currentServerIndex = index;
+      opening = true;
+      error = null;
+      controlsVisible = true;
+    });
+    await _open(url);
+  }
+
+  Widget _serverButton(int index) {
+    final active = index == currentServerIndex;
+    final name = valueOf(widget.servers[index]['server_name'], 'السيرفر ${index + 1}');
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      child: Tooltip(
+        message: name,
+        child: Material(
+          color: active ? gold : Colors.black.withOpacity(0.62),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => _switchServer(index),
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Text('S${index + 1}',
+                  style: TextStyle(
+                    color: active ? Colors.black : Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleFullscreen() async {
+    await _setLandscape(!landscape);
+    if (mounted) setState(() {});
+    _showControls();
+  }
+
+  void _toggleControlsLock() {
+    controlsTimer?.cancel();
+    setState(() {
+      controlsLocked = !controlsLocked;
+      controlsVisible = true;
+    });
+    if (!controlsLocked) _showControls();
+  }
+
+  Widget _toolButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 19),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: Colors.white70, fontSize: 9)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _cycleVideoFit() {
+    setState(() => videoFitMode = (videoFitMode + 1) % 3);
+    _savePlayerSetting('fit', videoFitMode);
+    final labels = ['احتواء كامل بدون قص', 'ملء الشاشة مع قص الأطراف', 'تمديد الصورة لملء الشاشة'];
+    _message('طريقة عرض الصورة: ${labels[videoFitMode]}');
+    _showControls();
+  }
+
+  BoxFit get _currentVideoFit {
+    switch (videoFitMode) {
+      case 1:
+        return BoxFit.cover;
+      case 2:
+        return BoxFit.fill;
+      default:
+        return BoxFit.contain;
+    }
+  }
+
+  String get _videoFitTooltip {
+    switch (videoFitMode) {
+      case 1:
+        return 'ملء الشاشة مع قص';
+      case 2:
+        return 'تمديد الصورة';
+      default:
+        return 'احتواء كامل';
+    }
+  }
+
+  @override
+  void dispose() {
+    controlsTimer?.cancel();
+    _positionSubscription?.cancel();
+    _saveProgressAtPosition(player.state.position);
+    _savePlayerSetting('rate', player.state.rate);
+    _savePlayerSetting('fit', videoFitMode);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    unawaited(applyAppOrientationPolicy());
+    player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: error != null
+            ? SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(22),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.error_outline, color: gold, size: 48),
+                        const SizedBox(height: 14),
+                        Text(error!, textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white70)),
+                        const SizedBox(height: 18),
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
+                          onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
+                          child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleControls,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (!opening)
+                      Video(
+                        controller: controller,
+                        fit: _currentVideoFit,
+                        controls: NoVideoControls,
+                      ),
+                    if (opening)
+                      Center(child: CircularProgressIndicator(color: gold)),
+                    if (!opening)
+                      StreamBuilder<bool>(
+                        stream: player.stream.buffering,
+                        builder: (context, snapshot) => snapshot.data == true
+                            ? Center(child: CircularProgressIndicator(color: gold))
+                            : const SizedBox.shrink(),
+                      ),
+                    Positioned(
+                      top: 12,
+                      right: 14,
+                      child: SafeArea(
+                        child: StreamBuilder<bool>(
+                          stream: player.stream.buffering,
+                          builder: (context, snapshot) {
+                            final buffering = snapshot.data == true;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.68),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: buffering ? gold : Colors.green),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.circle, size: 7,
+                                    color: buffering ? gold : Colors.greenAccent),
+                                  const SizedBox(width: 6),
+                                  Text(buffering ? appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor') : appText('البث متصل', 'Stream Connected', 'Yayın Bağlandı'),
+                                    style: TextStyle(color: Colors.white, fontSize: 10)),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    if (controlsLocked)
+                      Positioned(
+                        bottom: 20,
+                        left: 0,
+                        right: 0,
+                        child: SafeArea(
+                          child: Center(
+                            child: Material(
+                              color: Colors.black.withOpacity(0.78),
+                              shape: const StadiumBorder(),
+                              child: TextButton.icon(
+                                onPressed: _toggleControlsLock,
+                                icon: Icon(Icons.lock_open_rounded, color: gold),
+                                label: Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
+                                    style: TextStyle(color: Colors.white)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      AnimatedOpacity(
+                        opacity: controlsVisible ? 1 : 0,
+                        duration: const Duration(milliseconds: 250),
+                        child: IgnorePointer(
+                          ignoring: !controlsVisible,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Color(0xE6000000),
+                                  Color(0x22000000),
+                                  Colors.transparent,
+                                  Color(0x33000000),
+                                  Color(0xF0000000),
+                                ],
+                                stops: [0, 0.18, 0.48, 0.72, 1],
+                              ),
+                            ),
+                            child: SafeArea(
+                              child: Column(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                    child: Row(
+                                      children: [
+                                        _controlButton(
+                                          icon: widget.embedded ? Icons.close_rounded : Icons.arrow_back_rounded,
+                                          size: 22,
+                                          onTap: widget.embedded ? (widget.onClose ?? () {}) : () => Navigator.pop(context),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                widget.title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              Text(
+                                                'SHAM FLIX PLAYER',
+                                                style: TextStyle(
+                                                  color: gold,
+                                                  fontSize: 9,
+                                                  letterSpacing: 2,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (widget.servers.length > 1)
+                                          SizedBox(
+                                            width: 150,
+                                            height: 42,
+                                            child: SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  for (int index = 0; index < widget.servers.length; index++)
+                                                    _serverButton(index),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  StreamBuilder<bool>(
+                                    stream: player.stream.playing,
+                                    builder: (context, snapshot) {
+                                      final playing = snapshot.data ?? false;
+                                      return Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          _controlButton(
+                                            icon: Icons.replay_10_rounded,
+                                            size: 38,
+                                            onTap: () {
+                                              final next = player.state.position - const Duration(seconds: 10);
+                                              player.seek(next.isNegative ? Duration.zero : next);
+                                              _showControls();
+                                            },
+                                          ),
+                                          const SizedBox(width: 30),
+                                          _controlButton(
+                                            icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                            size: 66,
+                                            onTap: () async {
+                                              await player.playOrPause();
+                                              _showControls();
+                                            },
+                                            filled: true,
+                                          ),
+                                          const SizedBox(width: 30),
+                                          _controlButton(
+                                            icon: Icons.forward_10_rounded,
+                                            size: 38,
+                                            onTap: () {
+                                              player.seek(player.state.position + const Duration(seconds: 10));
+                                              _showControls();
+                                            },
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  const Spacer(),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
+                                    child: StreamBuilder<Duration>(
+                                      stream: player.stream.position,
+                                      builder: (context, positionSnapshot) {
+                                        final position = positionSnapshot.data ?? Duration.zero;
+                                        return StreamBuilder<Duration>(
+                                          stream: player.stream.duration,
+                                          builder: (context, durationSnapshot) {
+                                            final duration = durationSnapshot.data ?? Duration.zero;
+                                            final max = duration.inMilliseconds > 0
+                                                ? duration.inMilliseconds.toDouble()
+                                                : 1.0;
+                                            final current = seeking
+                                                ? seekValue
+                                                : position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
+                                            return Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                SliderTheme(
+                                                  data: SliderTheme.of(context).copyWith(
+                                                    trackHeight: 3.5,
+                                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                                  ),
+                                                  child: Slider(
+                                                    value: current.clamp(0.0, max).toDouble(),
+                                                    max: max,
+                                                    activeColor: gold,
+                                                    inactiveColor: Colors.white24,
+                                                    onChangeStart: duration == Duration.zero
+                                                        ? null
+                                                        : (value) {
+                                                            setState(() {
+                                                              seeking = true;
+                                                              seekValue = value;
+                                                            });
+                                                            controlsTimer?.cancel();
+                                                          },
+                                                    onChanged: duration == Duration.zero
+                                                        ? null
+                                                        : (value) => setState(() => seekValue = value),
+                                                    onChangeEnd: duration == Duration.zero
+                                                        ? null
+                                                        : (value) {
+                                                            player.seek(Duration(milliseconds: value.round()));
+                                                            setState(() => seeking = false);
+                                                            _showControls();
+                                                          },
+                                                  ),
+                                                ),
+                                                Row(
+                                                  children: [
+                                                    Text(_time(position),
+                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
+                                                    const Spacer(),
+                                                    Text(_time(duration),
+                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white.withOpacity(0.07),
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    border: Border.all(color: Colors.white12),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                                    children: [
+                                                      _toolButton(
+                                                        icon: Icons.audiotrack_rounded,
+                                                        label: appText('الصوت', 'Audio', 'Ses'),
+                                                        onTap: _pickAudioTrack,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.subtitles_rounded,
+                                                        label: appText('الترجمة', 'Subtitles', 'Altyazılar'),
+                                                        onTap: _pickSubtitleTrack,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.speed_rounded,
+                                                        label: '${player.state.rate}x',
+                                                        onTap: _pickSpeed,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.fit_screen_rounded,
+                                                        label: appText('حجم الصورة', 'Picture Size', 'Görüntü Boyutu'),
+                                                        onTap: _cycleVideoFit,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.screen_rotation_alt_rounded,
+                                                        label: appText('تدوير', 'Rotate', 'Döndür'),
+                                                        onTap: _toggleFullscreen,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: controlsLocked
+                                                            ? Icons.lock_open_rounded
+                                                            : Icons.lock_outline_rounded,
+                                                        label: controlsLocked ? appText('فتح القفل', 'Unlock', 'Kilidi Aç') : appText('قفل اللمس', 'Lock Touch', 'Dokunmayı Kilitle'),
+                                                        onTap: _toggleControlsLock,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _controlButton({
+    required IconData icon,
+    required double size,
+    required VoidCallback onTap,
+    bool filled = false,
+  }) {
+    return Material(
+      color: filled ? gold.withOpacity(0.95) : Colors.black.withOpacity(0.35),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: size + 12,
+          height: size + 12,
+          child: Icon(icon, color: filled ? Colors.black : Colors.white, size: size),
+        ),
+      ),
+    );
+  }
+}
+
+class ShamFlixWebPage extends StatefulWidget {
+  final String url;
+  final String title;
+  const ShamFlixWebPage({super.key, required this.url, required this.title});
+  @override
+  State<ShamFlixWebPage> createState() => _ShamFlixWebPageState();
+}
+class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
+  late final WebViewController controller;
+  int progress = 0;
+  bool canGoBack = false;
+  bool canGoForward = false;
+  String? pageError;
+  @override
+  void initState() {
+    super.initState();
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(NavigationDelegate(
+        onProgress: (value) {
+          if (mounted) setState(() => progress = value);
+        },
+        onPageStarted: (_) {
+          if (mounted) setState(() => pageError = null);
+        },
+        onPageFinished: (_) async {
+          final back = await controller.canGoBack();
+          final forward = await controller.canGoForward();
+          if (mounted) setState(() {
+            canGoBack = back;
+            canGoForward = forward;
+            progress = 100;
+          });
+        },
+        onWebResourceError: (error) {
+          if (error.isForMainFrame == true && mounted) {
+            setState(() => pageError =
+                'تعذر تحميل الصفحة. تحقق من اتصال الإنترنت أو جرّب سيرفراً آخر.');
+          }
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: bg,
+          title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          actions: [
+            IconButton(tooltip: 'رجوع', onPressed: canGoBack ? () => controller.goBack() : null,
+                icon: const Icon(Icons.arrow_back)),
+            IconButton(tooltip: 'تقدم', onPressed: canGoForward ? () => controller.goForward() : null,
+                icon: const Icon(Icons.arrow_forward)),
+            IconButton(tooltip: 'تحديث', onPressed: () => controller.reload(),
+                icon: const Icon(Icons.refresh)),
+          ],
+        ),
+        body: Column(children: [
+          if (progress < 100)
+            LinearProgressIndicator(value: progress / 100, color: gold, backgroundColor: panel),
+          Expanded(
+            child: pageError != null
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(pageError!, textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70)),
+                  ))
+                : WebViewWidget(controller: controller),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class ShamFlixSearch extends SearchDelegate {
+  String categoryFilter = 'الكل';
+  String yearFilter = '';
+
+  Future<List<Map<String, dynamic>>> searchContent() async {
+    final movieResults = await SupabaseService.getMovies();
+    final seriesResults = await SupabaseService.getSeries();
+
+    final allResults = [
+      ...movieResults.map((item) => {...item, '_isSeries': false}),
+      ...seriesResults.map((item) => {...item, '_isSeries': true}),
+    ];
+
+    final searchText = query.trim().toLowerCase();
+
+    if (searchText.isEmpty && categoryFilter == 'الكل' && yearFilter.trim().isEmpty) return [];
+
+    return allResults.where((item) {
+      final searchable = [valueOf(item['title']), valueOf(item['category']), valueOf(item['release_year']), valueOf(item['description'])].join(' ').toLowerCase();
+      final matchesText = searchText.isEmpty || searchable.contains(searchText);
+      final matchesCategory = categoryFilter == 'الكل' || valueOf(item['category']) == categoryFilter;
+      final matchesYear = yearFilter.trim().isEmpty || valueOf(item['release_year']).contains(yearFilter.trim());
+      return matchesText && matchesCategory && matchesYear;
+    }).toList();
+  }
+
+  @override
+  String get searchFieldLabel => 'ابحث عن فيلم أو مسلسل';
+
+
+  Future<void> openFilters(BuildContext context) async {
+    final yearController = TextEditingController(text: yearFilter);
+    var selectedCategory = categoryFilter;
+    await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        backgroundColor: panel, title: Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: gold)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: selectedCategory, dropdownColor: panel,
+            decoration: InputDecoration(labelText: 'التصنيف', labelStyle: TextStyle(color: Colors.white70)),
+            items: const ['الكل', 'أكشن', 'دراما', 'كوميديا', 'رعب', 'خيال علمي']
+              .map((value) => DropdownMenuItem(value: value, child: Text(value, style: TextStyle(color: Colors.white)))).toList(),
+            onChanged: (value) => setDialogState(() => selectedCategory = value ?? 'الكل')),
+          const SizedBox(height: 12),
+          TextField(controller: yearController, keyboardType: TextInputType.number, style: TextStyle(color: Colors.white),
+            decoration: const InputDecoration(labelText: 'سنة الإصدار', hintText: 'مثال: 2026')),
+        ]),
+        actions: [
+          TextButton(onPressed: () { categoryFilter = 'الكل'; yearFilter = ''; Navigator.pop(dialogContext); }, child: Text(appText('مسح التصفية', 'Clear Filters', 'Filtreleri Temizle'))),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
+            onPressed: () { categoryFilter = selectedCategory; yearFilter = yearController.text; Navigator.pop(dialogContext); },
+            child: Text(appText('تطبيق', 'Apply', 'Uygula'))),
+        ],
+      ),
+    ));
+    yearController.dispose();
+    showResults(context);
+  }
+
+  @override
+  List<Widget> buildActions(BuildContext context) => [
+    IconButton(tooltip: 'تصفية حسب التصنيف والسنة', onPressed: () => openFilters(context),
+      icon: Icon(Icons.tune, color: categoryFilter != 'الكل' || yearFilter.isNotEmpty ? gold : Colors.white)),
+    IconButton(onPressed: () { query = ''; showSuggestions(context); }, icon: const Icon(Icons.clear)),
+  ];
+
+  @override
+  Widget buildLeading(BuildContext context) {
+    return IconButton(
+      onPressed: () => close(context, null),
+      icon: const Icon(Icons.arrow_back),
+    );
+  }
+
+  Widget results(BuildContext context) {
+    if (query.trim().isEmpty && categoryFilter == 'الكل' && yearFilter.trim().isEmpty) {
+      return Center(
+        child: Text(
+          'اكتب اسم الفيلم أو المسلسل أو استخدم التصفية',
+          style: TextStyle(color: Colors.white70),
+        ),
+      );
+    }
+
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: searchContent(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(
+            child: CircularProgressIndicator(color: gold),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'حدث خطأ أثناء البحث',
+              style: TextStyle(color: Colors.white70),
+            ),
+          );
+        }
+
+        final items = snapshot.data ?? [];
+
+        if (items.isEmpty) {
+          return Center(
+            child: Text(
+              'لا توجد نتائج',
+              style: TextStyle(color: Colors.white70),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            final poster = valueOf(item['poster_url']);
+
+            final isSeries = item['_isSeries'] == true;
+
+            return ListTile(
+              leading: SizedBox(
+                width: 48,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: poster.isEmpty
+                      ? Icon(Icons.movie, color: gold)
+                      : Image.network(
+                          poster,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) {
+                            return Icon(
+                              Icons.movie,
+                              color: gold,
+                            );
+                          },
+                        ),
+                ),
+              ),
+              title: Text(
+                valueOf(item['title'], appText('بدون عنوان', 'Untitled', 'Başlıksız')),
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film'),
+                style: TextStyle(color: gold),
+              ),
+              onTap: () {
+                close(context, null);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DetailsPage(
+                      item: item,
+                      isSeries: isSeries,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    return results(context);
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    return results(context);
+  }
+}
+
+// آخر تعديل: إصلاح مراجع ألوان الصفحات العامة والتفاصيل والإعدادات والقنوات خارج صفحة الباقات | التاريخ: 2026-11-21 | الوقت: 23:50:00 بتوقيت تركيا
+
+// آخر تعديل: إضافة تحميل ملفات الترجمة الخارجية من الجهاز أو الرابط، مع حفظ الاختيار واستعادته عند فتح المشغل | التاريخ والوقت: 22/11/2026, 00:29:37 بتوقيت تركيا.
+
+
+// آخر تعديل: توسيع اكتشاف روابط الوسائط وقوائم البث وروابط RTSP/RTMP وUDP/RTP/TCP لتوجيهها إلى المشغل الداخلي أو الخارجي بدلاً من WebView | التاريخ والوقت: 22/11/2026, 00:40:00 بتوقيت تركيا.
