@@ -30,7 +30,6 @@ final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
 final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
-final ValueNotifier<int> appSettingsRefreshNotifier = ValueNotifier<int>(0);
 final ValueNotifier<int> channelRefreshNotifier = ValueNotifier<int>(0);
 final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier<Locale>(const Locale('ar'));
 
