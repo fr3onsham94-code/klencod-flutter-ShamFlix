@@ -123,21 +123,53 @@ create trigger notify_new_channel after insert on public.channels for each row w
 execute function public.notify_users_new_content('channel');
 
 
-create or replace function public.get_content_rating_summary(p_content_type text, p_content_id text)
-returns table(average numeric, rating_count bigint, likes bigint, dislikes bigint)
-language sql
-security definer
-set search_path = ''
+
+create table if not exists public.content_rating_stats (
+  content_type text not null, content_id text not null, average numeric not null default 0,
+  rating_count bigint not null default 0, likes bigint not null default 0, dislikes bigint not null default 0,
+  updated_at timestamptz not null default now(), primary key (content_type, content_id)
+);
+alter table public.content_rating_stats enable row level security;
+grant select on public.content_rating_stats to anon, authenticated;
+drop policy if exists "Public can read rating summaries" on public.content_rating_stats;
+create policy "Public can read rating summaries" on public.content_rating_stats
+for select to anon, authenticated using (true);
+create or replace function public.refresh_content_rating_stats(p_type text, p_id text)
+returns void language plpgsql security definer set search_path = ''
 as $$
-  select coalesce(avg(r.rating), 0)::numeric,
-         count(*)::bigint,
-         count(*) filter (where r.reaction = 'like')::bigint,
-         count(*) filter (where r.reaction = 'dislike')::bigint
-  from public.user_ratings r
-  where r.content_type = p_content_type and r.content_id = p_content_id;
+begin
+  insert into public.content_rating_stats(content_type, content_id, average, rating_count, likes, dislikes, updated_at)
+  select p_type, p_id, coalesce(avg(rating), 0), count(*)::bigint,
+         count(*) filter (where reaction = 'like')::bigint,
+         count(*) filter (where reaction = 'dislike')::bigint, now()
+  from public.user_ratings where content_type = p_type and content_id = p_id
+  on conflict (content_type, content_id) do update
+  set average = excluded.average, rating_count = excluded.rating_count,
+      likes = excluded.likes, dislikes = excluded.dislikes, updated_at = now();
+end;
 $$;
-revoke all on function public.get_content_rating_summary(text, text) from public;
-grant execute on function public.get_content_rating_summary(text, text) to anon, authenticated;
+revoke all on function public.refresh_content_rating_stats(text, text) from public, anon, authenticated;
+create or replace function public.handle_user_rating_stats()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if TG_OP = 'DELETE' then
+    perform public.refresh_content_rating_stats(old.content_type, old.content_id); return old;
+  elsif TG_OP = 'UPDATE' then
+    perform public.refresh_content_rating_stats(new.content_type, new.content_id);
+    if old.content_type is distinct from new.content_type or old.content_id is distinct from new.content_id then
+      perform public.refresh_content_rating_stats(old.content_type, old.content_id);
+    end if;
+    return new;
+  else
+    perform public.refresh_content_rating_stats(new.content_type, new.content_id); return new;
+  end if;
+end;
+$$;
+revoke all on function public.handle_user_rating_stats() from public, anon, authenticated;
+drop trigger if exists user_rating_stats_trigger on public.user_ratings;
+create trigger user_rating_stats_trigger after insert or update or delete on public.user_ratings
+for each row execute function public.handle_user_rating_stats();
 
 drop trigger if exists notify_published_movie on public.movies;
 create trigger notify_published_movie after update of is_published on public.movies
