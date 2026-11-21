@@ -27,6 +27,9 @@ class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> series = [];
   List<Map<String, dynamic>> channels = [];
   List<Map<String, dynamic>> users = [];
+  List<Map<String, dynamic>> activeSessions = [];
+  bool presenceLoading = false;
+  String? presenceError;
 
   bool catalogLoading = false;
   String? catalogError;
@@ -72,6 +75,10 @@ class _AdminPageState extends State<AdminPage> {
 
   Uri get appSettingsUrl => Uri.parse(
         '${SupabaseService.projectUrl}/rest/v1/app_settings',
+      );
+
+  Uri get presenceUrl => Uri.parse(
+        '${SupabaseService.projectUrl}/rest/v1/app_presence',
       );
 
   @override
@@ -245,6 +252,108 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   // =========================
+  Future<void> loadPresence() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+    setState(() {
+      presenceLoading = true;
+      presenceError = null;
+    });
+    try {
+      final cleanupBefore = DateTime.now().toUtc()
+          .subtract(const Duration(days: 1)).toIso8601String();
+      await http.delete(
+        presenceUrl.replace(queryParameters: {'last_seen': 'lt.$cleanupBefore'}),
+        headers: headers,
+      );
+
+      final cutoff = DateTime.now().toUtc()
+          .subtract(const Duration(minutes: 2)).toIso8601String();
+      final response = await http.get(
+        presenceUrl.replace(queryParameters: {
+          'select': 'session_id,user_id,display_name,last_seen',
+          'last_seen': 'gte.$cutoff',
+          'order': 'last_seen.desc',
+          'limit': '500',
+        }),
+        headers: headers,
+      );
+      if (response.statusCode != 200) throw Exception(_readError(response));
+      final rows = (jsonDecode(response.body) as List)
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final latestBySession = <String, Map<String, dynamic>>{};
+      for (final row in rows) {
+        final id = row['session_id']?.toString() ?? '';
+        if (id.isNotEmpty && !latestBySession.containsKey(id)) {
+          latestBySession[id] = row;
+        }
+      }
+      activeSessions = latestBySession.values.toList();
+    } catch (e) {
+      presenceError = e.toString();
+    }
+    if (mounted) setState(() => presenceLoading = false);
+  }
+
+  Widget presenceSection() {
+    if (presenceLoading) {
+      return const Center(child: CircularProgressIndicator(color: adminGold));
+    }
+    if (presenceError != null) return errorView(presenceError!, loadPresence);
+    if (activeSessions.isEmpty) {
+      return RefreshIndicator(
+        color: adminGold,
+        onRefresh: loadPresence,
+        child: ListView(children: const [
+          SizedBox(height: 120),
+          Center(child: Icon(Icons.wifi_off, color: Colors.white38, size: 48)),
+          SizedBox(height: 12),
+          Center(child: Text('لا يوجد زوار أو مستخدمون متصلون حالياً', style: TextStyle(color: Colors.white54))),
+        ]),
+      );
+    }
+    return RefreshIndicator(
+      color: adminGold,
+      onRefresh: loadPresence,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
+        children: [
+          Card(
+            color: adminPanel,
+            child: ListTile(
+              leading: const Icon(Icons.people_alt_outlined, color: adminGold, size: 32),
+              title: const Text('المتصلون خلال آخر دقيقتين', style: TextStyle(color: Colors.white)),
+              trailing: Text('${activeSessions.length}', style: const TextStyle(color: adminGold, fontSize: 24, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          ...activeSessions.map((session) {
+            final isGuest = session['user_id'] == null;
+            final date = DateTime.tryParse(session['last_seen']?.toString() ?? '')?.toLocal();
+            final time = date == null
+                ? 'الآن'
+                : '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+            return Card(
+              color: adminPanel,
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: adminGold.withOpacity(0.14),
+                  child: Icon(isGuest ? Icons.person_outline : Icons.account_circle, color: adminGold),
+                ),
+                title: Text(
+                  isGuest ? 'زائر بدون حساب' : (session['display_name']?.toString().isNotEmpty == true ? session['display_name'].toString() : 'مستخدم مسجل'),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(isGuest ? 'دخل التطبيق دون تسجيل حساب' : 'حساب مسجل',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                trailing: Text(time, style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   // التنقل بين الأقسام
   // =========================
 
@@ -269,6 +378,8 @@ class _AdminPageState extends State<AdminPage> {
       loadCatalog(section);
     } else if (section == 'users') {
       loadUsers();
+    } else if (section == 'presence') {
+      loadPresence();
     } else if (section == 'settings') {
       loadCategoryBadgeSetting();
     }
@@ -301,6 +412,7 @@ class _AdminPageState extends State<AdminPage> {
         currentSection == 'series' ||
         currentSection == 'channels' ||
         currentSection == 'users' ||
+        currentSection == 'presence' ||
         currentSection == 'settings') {
       setState(() {
         currentSection = 'home';
@@ -320,6 +432,8 @@ class _AdminPageState extends State<AdminPage> {
         return 'إدارة القنوات';
       case 'users':
         return 'إدارة المستخدمين';
+      case 'presence':
+        return 'المتصلون الآن';
       case 'settings':
         return 'إعدادات التطبيق';
       case 'userList':
@@ -3167,6 +3281,12 @@ class _AdminPageState extends State<AdminPage> {
           onTap: () => navigateTo('channels'),
         ),
         _homeCard(
+          title: 'المتصلون الآن',
+          subtitle: 'عرض الزوار والمستخدمين حتى دون حساب',
+          icon: Icons.wifi_tethering,
+          onTap: () => navigateTo('presence'),
+        ),
+        _homeCard(
           title: 'المستخدمون',
           subtitle: 'إدارة المستخدمين والمدراء والمحظورين',
           icon: Icons.people_outline,
@@ -3296,6 +3416,7 @@ class _AdminPageState extends State<AdminPage> {
     final isChannels = currentSection == 'channels';
     final isCatalog = isSeries || isChannels;
     final isUsers = currentSection == 'users';
+    final isPresence = currentSection == 'presence';
     final isUserList = currentSection == 'userList';
     final isSettings = currentSection == 'settings';
 
@@ -3330,10 +3451,12 @@ class _AdminPageState extends State<AdminPage> {
             if (isUsers || isUserList)
               IconButton(
                 onPressed: loadUsers,
-                icon: const Icon(
-                  Icons.refresh,
-                  color: adminGold,
-                ),
+                icon: const Icon(Icons.refresh, color: adminGold),
+              ),
+            if (isPresence)
+              IconButton(
+                onPressed: loadPresence,
+                icon: const Icon(Icons.refresh, color: adminGold),
               ),
           ],
         ),
@@ -3368,7 +3491,9 @@ class _AdminPageState extends State<AdminPage> {
                     Icon(
                       isMovies
                           ? Icons.movie_creation_outlined
-                          : isSeries
+                          : isPresence
+                              ? Icons.wifi_tethering
+                              : isSeries
                               ? Icons.live_tv_outlined
                               : isChannels
                                   ? Icons.tv
@@ -3390,7 +3515,9 @@ class _AdminPageState extends State<AdminPage> {
                     Text(
                       isMovies
                           ? '${movies.length} فيلم'
-                          : isSeries
+                          : isPresence
+                              ? '${activeSessions.length} متصل'
+                              : isSeries
                               ? '${series.length} مسلسل'
                               : isChannels
                                   ? '${channels.length} قناة'
@@ -3412,6 +3539,8 @@ class _AdminPageState extends State<AdminPage> {
                       ? moviesSection()
                       : isCatalog
                           ? catalogSection(currentSection)
+                          : isPresence
+                          ? presenceSection()
                           : isUsers
                           ? usersLoading
                               ? const Center(
@@ -3556,3 +3685,5 @@ class _AdminPageState extends State<AdminPage> {
 // مع الحفاظ على نسخة saveCatalogItem الحالية.
 // ==========================================
 // ShamFlix - آخر تحديث: 21-11-2026: ربط إدارة المحتوى بالباقات مع دعم إسناد العنصر لأكثر من باقة.
+
+// ShamFlix - آخر تحديث: 21-11-2026: لوحة المتصلين تعرض الزوار والمستخدمين المسجلين.
