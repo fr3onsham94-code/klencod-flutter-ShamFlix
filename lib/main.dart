@@ -1096,7 +1096,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   String? error;
   String? selectedPackageId;
   List<Map<String, dynamic>> packages = [];
-  List<Map<String, dynamic>> items = [];
+  final Map<String, List<Map<String, dynamic>>> packageContents = {};
 
   String get tableName => widget.contentType == 'movie' ? 'movies' : 'series';
 
@@ -1107,10 +1107,13 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   }
 
   Future<void> _loadPackages() async {
-    setState(() {
-      loading = true;
-      error = null;
-    });
+    if (mounted) {
+      setState(() {
+        loading = true;
+        error = null;
+        selectedPackageId = null;
+      });
+    }
     try {
       final rows = await AuthService.client
           .from('content_packages')
@@ -1118,71 +1121,359 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           .eq('content_type', widget.contentType)
           .order('sort_order')
           .order('created_at');
-      packages = rows.map((row) => Map<String, dynamic>.from(row)).toList();
-      selectedPackageId = packages.isEmpty ? null : packages.first['id'].toString();
-      await _loadItems();
+
+      final loadedPackages =
+          rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      packageContents.clear();
+
+      await Future.wait(loadedPackages.map((package) async {
+        final packageId = package['id'].toString();
+        final links = await AuthService.client
+            .from('content_package_items')
+            .select('content_id')
+            .eq('package_id', packageId)
+            .eq('content_type', widget.contentType);
+
+        final ids = links.map((row) => row['content_id'].toString()).toList();
+        if (ids.isEmpty) {
+          packageContents[packageId] = [];
+          return;
+        }
+
+        final contentRows = await AuthService.client
+            .from(tableName)
+            .select()
+            .inFilter('id', ids)
+            .eq('is_published', true)
+            .order('created_at', ascending: false);
+
+        packageContents[packageId] = contentRows
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+      }));
+
+      packages = loadedPackages;
     } catch (e) {
       error = e.toString();
     }
     if (mounted) setState(() => loading = false);
   }
 
-  Future<void> _loadItems() async {
-    if (selectedPackageId == null) {
-      final rows = await AuthService.client.from(tableName)
-          .select().eq('is_published', true).order('created_at', ascending: false);
-      items = rows.map((row) => Map<String, dynamic>.from(row)).toList();
-      return;
-    }
-    final links = await AuthService.client
-        .from('content_package_items')
-        .select('content_id')
-        .eq('package_id', selectedPackageId!)
-        .eq('content_type', widget.contentType);
-    final ids = links.map((row) => row['content_id'].toString()).toList();
-    if (ids.isEmpty) {
-      items = [];
-      return;
-    }
-    final rows = await AuthService.client.from(tableName)
-        .select().inFilter('id', ids)
-        .eq('is_published', true)
-        .order('created_at', ascending: false);
-    items = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  List<Map<String, dynamic>> get selectedItems =>
+      selectedPackageId == null
+          ? []
+          : packageContents[selectedPackageId!] ?? [];
+
+  void _openPackage(String id) {
+    setState(() => selectedPackageId = id);
   }
 
-  Future<void> _selectPackage(String id) async {
-    setState(() {
-      selectedPackageId = id;
-      loading = true;
-      error = null;
-    });
-    try {
-      await _loadItems();
-    } catch (e) {
-      error = e.toString();
-    }
-    if (mounted) setState(() => loading = false);
-  }
-
-  Widget _poster(Map<String, dynamic> item) {
+  Widget _poster(Map<String, dynamic> item, {double width = 66}) {
     final url = valueOf(item['poster_url']);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: AspectRatio(
-        aspectRatio: 0.68,
-        child: url.isEmpty
-            ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 38))
-            : Image.network(url, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 38))),
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: width,
+        child: AspectRatio(
+          aspectRatio: 0.68,
+          child: url.isEmpty
+              ? Container(
+                  color: panel,
+                  child: const Icon(Icons.movie, color: gold, size: 28),
+                )
+              : Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: panel,
+                    child: const Icon(Icons.movie, color: gold, size: 28),
+                  ),
+                ),
+        ),
       ),
+    );
+  }
+
+  Widget _packageShelf(Map<String, dynamic> package, double cardWidth) {
+    final id = package['id'].toString();
+    final contents = packageContents[id] ?? [];
+    final name = package['name']?.toString() ?? 'باقة';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                '${contents.length} ${appText('عنصر', 'items', 'içerik')}',
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+              ),
+              TextButton(
+                onPressed: () => _openPackage(id),
+                child: Text(
+                  appText('عرض الكل', 'See all', 'Tümünü gör'),
+                  style: const TextStyle(color: gold, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          if (contents.isEmpty)
+            Container(
+              height: 82,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: panel,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                appText('لا يوجد محتوى في هذه الباقة حالياً',
+                    'No content in this package yet',
+                    'Bu pakette henüz içerik yok'),
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+            )
+          else
+            SizedBox(
+              height: cardWidth * 1.58 + 25,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: contents.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 7),
+                itemBuilder: (context, index) {
+                  final item = contents[index];
+                  return SizedBox(
+                    width: cardWidth,
+                    child: GestureDetector(
+                      onTap: () => widget.onSelect(item),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _poster(item, width: cardWidth),
+                          const SizedBox(height: 4),
+                          Text(
+                            valueOf(item['title'],
+                                appText('بدون عنوان', 'Untitled', 'Başlıksız')),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 5),
+          const Divider(color: Color(0xFF303030), height: 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _sidebar() {
+    return SizedBox(
+      width: 104,
+      child: Container(
+        color: const Color(0xFF101010),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(7, 8, 7, 12),
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Text(
+                appText('الباقات', 'Packages', 'Paketler'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: gold,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ...packages.map((package) {
+              final id = package['id'].toString();
+              final active = selectedPackageId == id;
+              final count = (packageContents[id] ?? []).length;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 7),
+                child: Material(
+                  color: active ? const Color(0xFF493B25) : panel,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => _openPackage(id),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 11,
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            package['name']?.toString() ?? 'باقة',
+                            textAlign: TextAlign.center,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: active ? gold : Colors.white70,
+                              fontSize: 10,
+                              fontWeight:
+                                  active ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$count',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _allShelves() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // أربع إلى خمس بطاقات تقريباً ضمن عرض الرف، مع إمكانية السحب لبقية المحتوى.
+        final cardWidth =
+            ((constraints.maxWidth - 30) / 4.4).clamp(48.0, 82.0);
+        return ListView.builder(
+          padding: EdgeInsets.zero,
+          itemCount: packages.length,
+          itemBuilder: (context, index) =>
+              _packageShelf(packages[index], cardWidth),
+        );
+      },
+    );
+  }
+
+  Widget _packageDetails() {
+    final package = packages.firstWhere(
+      (entry) => entry['id'].toString() == selectedPackageId,
+      orElse: () => <String, dynamic>{},
+    );
+    final contents = selectedItems;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: () => setState(() => selectedPackageId = null),
+                icon: const Icon(Icons.arrow_back, color: gold),
+              ),
+              Expanded(
+                child: Text(
+                  package['name']?.toString() ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                '${contents.length}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: contents.isEmpty
+              ? Center(
+                  child: Text(
+                    appText('لا يوجد محتوى في هذه الباقة حالياً',
+                        'No content in this package yet',
+                        'Bu pakette henüz içerik yok'),
+                    style: const TextStyle(color: Colors.white54),
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.54,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: contents.length,
+                  itemBuilder: (context, index) {
+                    final item = contents[index];
+                    return GestureDetector(
+                      onTap: () => widget.onSelect(item),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _poster(item, width: double.infinity)),
+                          const SizedBox(height: 6),
+                          Text(
+                            valueOf(item['title'],
+                                appText('بدون عنوان', 'Untitled', 'Başlıksız')),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            valueOf(item['release_year'], ''),
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar'
+          ? TextDirection.rtl
+          : TextDirection.ltr,
       child: Column(
         children: [
           Padding(
@@ -1191,97 +1482,57 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               children: [
                 Container(width: 4, height: 22, color: gold),
                 const SizedBox(width: 9),
-                Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+                Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const Spacer(),
-                IconButton(onPressed: _loadPackages, icon: const Icon(Icons.refresh, color: gold)),
+                IconButton(
+                  onPressed: _loadPackages,
+                  icon: const Icon(Icons.refresh, color: gold),
+                ),
               ],
             ),
           ),
           Expanded(
             child: loading
-                ? const Center(child: CircularProgressIndicator(color: gold))
+                ? const Center(
+                    child: CircularProgressIndicator(color: gold),
+                  )
                 : error != null
-                    ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(
-                            width: 112,
-                            child: ListView(
-                              padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
-                              children: [
-                                if (packages.isEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(appText('كل المحتوى', 'All Content', 'Tüm İçerik'), textAlign: TextAlign.center, style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
-                                  ),
-                                ...packages.map((package) {
-                                  final id = package['id'].toString();
-                                  final active = id == selectedPackageId;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 7),
-                                    child: Material(
-                                      color: active ? const Color(0xFF493B25) : panel,
-                                      borderRadius: BorderRadius.circular(9),
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(9),
-                                        onTap: () => _selectPackage(id),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 13),
-                                          child: Text(
-                                            package['name']?.toString() ?? 'باقة',
-                                            textAlign: TextAlign.center,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: active ? gold : Colors.white70,
-                                              fontSize: 12,
-                                              fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ],
+                    ? Center(
+                        child: Text(
+                          error!,
+                          style: const TextStyle(color: Colors.redAccent),
+                        ),
+                      )
+                    : packages.isEmpty
+                        ? Center(
+                            child: Text(
+                              appText('لا توجد باقات حالياً',
+                                  'No packages yet', 'Henüz paket yok'),
+                              style: const TextStyle(color: Colors.white54),
                             ),
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _sidebar(),
+                              const VerticalDivider(
+                                width: 1,
+                                color: Color(0xFF333333),
+                              ),
+                              Expanded(
+                                child: selectedPackageId == null
+                                    ? _allShelves()
+                                    : _packageDetails(),
+                              ),
+                            ],
                           ),
-                          const VerticalDivider(width: 1, color: Color(0xFF333333)),
-                          Expanded(
-                            child: items.isEmpty
-                                ? Center(child: Text(appText('لا يوجد محتوى في هذه الباقة حالياً', 'No content in this package yet', 'Bu pakette henüz içerik yok'), style: TextStyle(color: Colors.white54)))
-                                : GridView.builder(
-                                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
-                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 3,
-                                      childAspectRatio: 0.54,
-                                      crossAxisSpacing: 10,
-                                      mainAxisSpacing: 12,
-                                    ),
-                                    itemCount: items.length,
-                                    itemBuilder: (context, index) {
-                                      final item = items[index];
-                                      return GestureDetector(
-                                        onTap: () => widget.onSelect(item),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                                          children: [
-                                            Expanded(child: _poster(item)),
-                                            const SizedBox(height: 6),
-                                            Text(valueOf(item['title'], appText('بدون عنوان', 'Untitled', 'Başlıksız')),
-                                                maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                                            Text(valueOf(item['release_year'], ''),
-                                                style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                          ),
-                        ],
-                      ),
           ),
         ],
       ),
@@ -1289,7 +1540,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   }
 }
 
-// ShamFlix - آخر تحديث: 21-11-2026: قوائم الأفلام والمسلسلات مرتبطة بالباقات مع اختيار جانبي ومحتوى متعدد الباقات.
+// ShamFlix - آخر تحديث: 21-11-2026: تحويل قسمي الأفلام والمسلسلات إلى رفوف أفقية لكل باقة مع قائمة جانبية ومعاينة المحتوى وفتح الباقة كاملة.
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
