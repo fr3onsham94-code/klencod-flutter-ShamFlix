@@ -1346,7 +1346,12 @@ class _DetailsPageState extends State<DetailsPage> {
           action: SnackBarAction(
             label: 'داخلي',
             onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => ShamFlixPlayerPage(url: url, title: title),
+              builder: (_) => ShamFlixPlayerPage(
+                url: url,
+                title: title,
+                servers: servers,
+                initialServerIndex: initialServerIndex,
+              ),
             )),
           ),
         ));
