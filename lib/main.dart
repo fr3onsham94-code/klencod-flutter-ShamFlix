@@ -1183,12 +1183,6 @@ class _HomePageState extends State<HomePage> {
               fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.normal,
             );
           }),
-          iconTheme: WidgetStateProperty.resolveWith<IconThemeData>((states) {
-            return IconThemeData(
-              size: 19,
-              color: states.contains(WidgetState.selected) ? gold : Colors.white60,
-            );
-          }),
           selectedIndex: selectedTab,
           onDestinationSelected: (index) {
             setState(() {
@@ -1197,29 +1191,29 @@ class _HomePageState extends State<HomePage> {
           },
           destinations: [
             NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home, color: gold),
+              icon: Icon(Icons.home_outlined, color: Colors.white60, size: 19),
+              selectedIcon: Icon(Icons.home, color: gold, size: 19),
               label: appText('الرئيسية', 'Home', 'Ana Sayfa'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.movie_outlined),
+              icon: Icon(Icons.movie_outlined, color: Colors.white60, size: 19),
               label: appText('الأفلام', 'Movies', 'Filmler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.video_library_outlined),
+              icon: Icon(Icons.video_library_outlined, color: Colors.white60, size: 19),
               label: appText('المسلسلات', 'Series', 'Diziler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.live_tv_outlined),
+              icon: Icon(Icons.live_tv_outlined, color: Colors.white60, size: 19),
               label: appText('مباشر', 'Live TV', 'Canlı TV'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.favorite_outline),
+              icon: Icon(Icons.favorite_outline, color: Colors.white60, size: 19),
               label: appText('المفضلة', 'Favorites', 'Favoriler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person, color: gold),
+              icon: Icon(Icons.person_outline, color: Colors.white60, size: 19),
+              selectedIcon: Icon(Icons.person, color: gold, size: 19),
               label: appText('حسابي', 'My Account', 'Hesabım'),
             ),
           ],
@@ -4794,8 +4788,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-
-
-// آخر تعديل: اعتماد ألوان Netflix الحمراء، تصغير شريط التنقل، وتحديث اسم التطبيق إلى SHAM FLIX | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
-
-// آخر تعديل: جعل كتابة ليبل التصنيف باللون الأبيض فوق الخلفية الحمراء | التاريخ: 2026-11-21 | الوقت: 20:08:00 بتوقيت تركيا
+// آخر تعديل: إصلاح توافق شريط التنقل مع Flutter بإزالة iconTheme وتحديد أحجام وألوان الأيقونات مباشرة | التاريخ: 2026-11-21 | الوقت: 20:10:00 بتوقيت تركيا
