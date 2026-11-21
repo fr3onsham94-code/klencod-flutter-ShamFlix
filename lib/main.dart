@@ -2407,6 +2407,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
   final List<Map<String, dynamic>> servers;
   final int initialServerIndex;
   final String progressKey;
+  final bool embedded;
 
   const ShamFlixPlayerPage({
     super.key,
@@ -2415,6 +2416,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
     this.servers = const [],
     this.initialServerIndex = 0,
     this.progressKey = '',
+    this.embedded = false,
   });
 
   @override
@@ -2884,6 +2886,17 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Future<void> _toggleFullscreen() async {
+    if (widget.embedded) {
+      await player.pause();
+      if (!mounted) return;
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(
+        url: widget.url, title: widget.title, servers: widget.servers,
+        initialServerIndex: currentServerIndex, progressKey: widget.progressKey,
+      )));
+      if (mounted) await player.play();
+      _showControls();
+      return;
+    }
     await _setLandscape(!landscape);
     if (mounted) setState(() {});
     _showControls();
@@ -2957,13 +2970,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     _saveProgressAtPosition(player.state.position);
     _savePlayerSetting('rate', player.state.rate);
     _savePlayerSetting('fit', videoFitMode);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    if (!widget.embedded) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
     player.dispose();
     super.dispose();
   }
@@ -3751,3 +3766,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تطبيق الترجمة على رسائل الباقات وقسم القنوات وعناوين تفاصيل المحتوى.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// دعم تشغيل المشغل الكامل داخل أعلى صفحة القنوات مع زر للانتقال إلى وضع ملء الشاشة.
