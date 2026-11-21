@@ -506,9 +506,40 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
       title: 'ShamFlix',
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: bg,
+        canvasColor: bg,
+        dividerColor: Colors.white12,
         colorScheme: const ColorScheme.dark(
           primary: gold,
+          secondary: gold,
           surface: panel,
+          onPrimary: Colors.black,
+          onSecondary: Colors.black,
+          onSurface: Colors.white,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: bg,
+          foregroundColor: gold,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
+        iconTheme: const IconThemeData(color: gold),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: gold,
+          linearTrackColor: panel,
+        ),
+        textSelectionTheme: const TextSelectionThemeData(
+          cursorColor: gold,
+          selectionColor: Color(0x55D6AC55),
+          selectionHandleColor: gold,
+        ),
+        snackBarTheme: const SnackBarThemeData(
+          backgroundColor: panel,
+          contentTextStyle: TextStyle(color: Colors.white),
+          behavior: SnackBarBehavior.floating,
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: gold,
+          foregroundColor: Colors.black,
         ),
       ),
       home: const HomePage(),
@@ -985,7 +1016,7 @@ class _HomePageState extends State<HomePage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE50914),
+                    color: const gold,
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: const Text(
@@ -1019,7 +1050,7 @@ class _HomePageState extends State<HomePage> {
                           ElevatedButton.icon(
                             onPressed: () => openDetails(featured, isSeries: false),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE50914),
+                              backgroundColor: const gold,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
@@ -1056,7 +1087,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget homeContent() {
     return RefreshIndicator(
-      color: const Color(0xFFE50914),
+      color: const gold,
       backgroundColor: panel,
       onRefresh: refreshData,
       child: ListView(
@@ -1071,7 +1102,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const Text(
                   'FLIX',
-                  style: TextStyle(color: Color(0xFFE50914), fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  style: TextStyle(color: gold, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 const Spacer(),
                 IconButton(
@@ -4715,50 +4746,5 @@ class ShamFlixSearch extends SearchDelegate {
 // تمت إضافة تبديل نسبة عرض الفيديو بين الاحتواء والملء والتمديد من داخل المشغّل.
 // ==========================================
 
-// ==========================================
-// ShamFlix - آخر تحديث: 21-11-2026
-// تمت إعادة تنظيم واجهة المشغّل بطابع سينمائي مع شريط أدوات سفلي واضح.
-// أضيف قفل اللمس مع زر فتح مستقل، مع الحفاظ على التشغيل والسيرفرات ومسارات الصوت والترجمة.
-// ==========================================
 
-// تم تعديل واجهة المشغل والسيرفرات وتسميات الصوت والترجمة والسرعة بتاريخ 21-11-2026.
-// إصلاح تنسيق الوقت أسفل شريط التقدم لمنع ظهور تعبيرات Dart كنص بتاريخ 21-11-2026.
-
-// تصغير خط الوقت الحالي والمدة أسفل شريط التقدم إلى 9px بتاريخ 21-11-2026.
-
-// تصغير خطوط قوائم السرعة والصوت والترجمة وتسميات أدوات المشغّل بتاريخ 21-11-2026.
-// جعل قائمة سرعات التشغيل قابلة للتمرير وملائمة للشاشة العمودية والأفقية بتاريخ 21-11-2026.
-
-// توحيد حدود ارتفاع وعرض قوائم السرعة والصوت والترجمة والسيرفرات لتناسب الوضعين العمودي والأفقي بتاريخ 21-11-2026.
-
-// تصغير ارتفاع جميع قوائم المشغّل إلى 30%، وجعل قائمة السرعة بعرض صغير وإظهار السرعات فقط بتاريخ 21-11-2026.
-
-// توحيد عرض قوائم السيرفرات والصوت والترجمة ليكون مدمجاً مثل قائمة السرعة بتاريخ 21-11-2026.
-// توحيد عرض قوائم السيرفرات والصوت والترجمة مع قائمة السرعة (112 بكسل) بتاريخ 21-11-2026.
-// اعتماد مصدر واحد لقيم سرعات التشغيل في الوضعين العمودي والأفقي بتاريخ 21-11-2026.
-// تصغير قوائم السرعة والصوت والترجمة لتلتف حول الخيارات بدل تمددها على كامل الشاشة بتاريخ 21-11-2026.
-// تطبيق التصميم المدمج نفسه على قائمة اختيار سيرفر التشغيل بتاريخ 21-11-2026.
-// إضافة التبديل التلقائي بين السيرفرات وحفظ إعدادات المشغّل وموضع المشاهدة ومؤشر حالة الاتصال بتاريخ 21-11-2026.
-
-// ShamFlix - آخر تحديث: 21-11-2026
-// إضافة متابعة المشاهدة والمفضلة وسجل المشاهدة والبحث المتقدم.
-// تطوير صفحة التفاصيل بتصميم سينمائي مع الحفاظ على منطق التشغيل والسيرفرات.
-
-
-
-// تحسين استكمال الروابط غير المباشرة ودعم التصفية دون كتابة اسم، بتاريخ 21-11-2026.
-
-// ضمان استكمال موضع المشاهدة من المشغل الداخلي وتصحيح تمييز نتائج المسلسلات في البحث بتاريخ 21-11-2026.
-
-// إضافة مسار احتياطي لاستكمال المشاهدة عند تعذر جلب قائمة السيرفرات بتاريخ 21-11-2026.
-// ShamFlix - آخر تحديث: 21-11-2026
-// إضافة مزامنة سحابية للملفات والمفضلة وسجل المشاهدة، تقييمات وتوصيات ومركز إشعارات داخل التطبيق.
-
-// ShamFlix - آخر تحديث: 21-11-2026
-// إضافة التنزيل المحلي للملفات المباشرة، تفضيل آخر سيرفر ناجح، وتحسين ذاكرة تخزين الصور.
-
-// ShamFlix - آخر تحديث: 21-11-2026
-// تحديث 21-11-2026: إعادة تنظيم الرئيسية وإعدادات الزائر وإزالة واجهات التنزيل.
-// إضافة خيار Wi-Fi فقط والتحقق من التحديثات وتحديث القنوات وحقوق التطبيق.
-
-// آخر تعديل: اعتماد واجهة رئيسية بأسلوب Netflix مع بانر فيلم مميز وقسم تابع المشاهدة | التاريخ: 2026-11-21 | الوقت: 18:56:15 بتوقيت تركيا
+// آخر تعديل: توحيد الهوية البصرية للتطبيق بالأسود والذهبي وتطبيق ألوان الهوية على الرئيسية والثيم العام | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
