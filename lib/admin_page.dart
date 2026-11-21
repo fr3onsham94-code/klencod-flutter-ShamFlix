@@ -1438,9 +1438,11 @@ class _AdminPageState extends State<AdminPage> {
                       IconButton(
                         tooltip: 'حذف السيرفر',
                         onPressed: () => setDialogState(() {
-                          drafts.removeAt(index);
-                          name.dispose();
-                          url.dispose();
+                          final removed = drafts.removeAt(index);
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            (removed['name'] as TextEditingController).dispose();
+                            (removed['url'] as TextEditingController).dispose();
+                          });
                         }),
                         icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                       ),
