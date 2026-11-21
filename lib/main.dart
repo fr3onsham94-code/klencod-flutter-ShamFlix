@@ -1638,7 +1638,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     super.initState();
     currentServerIndex = widget.servers.isEmpty
         ? 0
-        : widget.initialServerIndex.clamp(0, widget.servers.length - 1);
+        : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
     player = Player();
     controller = VideoController(player);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
