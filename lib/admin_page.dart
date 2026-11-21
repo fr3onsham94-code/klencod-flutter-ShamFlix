@@ -1,4 +1,5 @@
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -30,6 +31,7 @@ class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> activeSessions = [];
   bool presenceLoading = false;
   String? presenceError;
+  Timer? _presenceTimer;
 
   bool catalogLoading = false;
   String? catalogError;
@@ -97,6 +99,7 @@ class _AdminPageState extends State<AdminPage> {
 
   @override
   void dispose() {
+    _presenceTimer?.cancel();
     searchController.dispose();
     inviteLinkController.dispose();
     updateVersionController.dispose();
@@ -381,7 +384,7 @@ class _AdminPageState extends State<AdminPage> {
 
   // =========================
   Future<void> loadPresence() async {
-    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin || presenceLoading) return;
     setState(() {
       presenceLoading = true;
       presenceError = null;
@@ -508,6 +511,9 @@ class _AdminPageState extends State<AdminPage> {
       loadUsers();
     } else if (section == 'presence') {
       loadPresence();
+      _presenceTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted && currentSection == 'presence') loadPresence();
+      });
     } else if (section == 'settings') {
       loadCategoryBadgeSetting();
     }
@@ -527,6 +533,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   void goBack() {
+    _presenceTimer?.cancel();
     if (currentSection == 'userList') {
       setState(() {
         currentSection = 'users';
