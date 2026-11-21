@@ -105,3 +105,5 @@ on conflict (setting_key) do nothing;
 insert into public.app_settings(setting_key, setting_value)
 values ('app_update', '{"version":"1.0.0","apk_url":""}'::jsonb)
 on conflict (setting_key) do nothing;
+
+-- ShamFlix - آخر تحديث: 21-11-2026: إنشاء جداول الباقات وحقول تفاصيل الأفلام والمسلسلات.
