@@ -177,12 +177,6 @@ class ShamFlixLocalStore {
     await prefs.setString(_keyForProfile(profileId, collection), jsonEncode(items));
   }
 
-  static Future<void> setProfiles(List<Map<String, dynamic>> profiles) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
-    activeProfileId = 'main';
-  }
-
   static String playerPrefix(String progressKey, String title) {
     final base = progressKey.isEmpty ? title.hashCode : progressKey;
     return activeProfileId == 'main' ? 'shamflix_player_$base' : 'shamflix_player_${activeProfileId}_$base';
@@ -3731,3 +3725,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // توضيح استخدام معرّف جلسة الزائر وعرض بيانات الاتصال بشكل محدود ضمن سياسة الخصوصية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إزالة وظائف إنشاء وتبديل وحذف الملفات الشخصية بعد دمج البيانات في المكتبة الرئيسية.
