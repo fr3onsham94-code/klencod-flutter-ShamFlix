@@ -3469,20 +3469,102 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   Widget _channelTile(Map<String, dynamic> channel) {
     final active = selectedChannel?['id']?.toString() == channel['id']?.toString();
     final logo = valueOf(channel['logo_url']);
-    return Card(
-      color: active ? const Color(0xFF302719) : panel,
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: bg,
-          backgroundImage: logo.isNotEmpty ? NetworkImage(logo) : null,
-          child: logo.isEmpty ? Icon(Icons.live_tv, color: gold) : null,
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _playChannel(channel),
+      child: Container(
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF302719) : panel,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: active ? gold : Colors.white10, width: active ? 1.4 : 0.7),
         ),
-        title: Text(valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
-            style: TextStyle(color: active ? gold : AppTheme.text, fontWeight: FontWeight.bold)),
-        subtitle: Text(valueOf(channel['category'], 'بث مباشر'),
-            style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
-        trailing: Icon(active ? Icons.graphic_eq : Icons.play_circle_outline, color: gold),
-        onTap: () => _playChannel(channel),
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Center(
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.all(5),
+                      child: logo.isEmpty
+                          ? Icon(Icons.live_tv, color: gold, size: 30)
+                          : Image.network(logo, fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: gold, size: 30)),
+                    ),
+                  ),
+                  Positioned(
+                    top: 4, right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(color: const Color(0xFFE50914), borderRadius: BorderRadius.circular(4)),
+                      child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  if (active)
+                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: gold, size: 16)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              valueOf(channel['name'], appText('قناة', 'Channel', 'Kanal')),
+              maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
+              style: TextStyle(color: active ? gold : AppTheme.text, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _packageSidebar() {
+    return Container(
+      width: 126,
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(7, 4, 7, 10),
+            child: Text(appText('الباقات', 'PACKAGES', 'PAKETLER'),
+              style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+          ...packages.map((package) {
+            final id = package['id'].toString();
+            final active = id == selectedPackageId;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Material(
+                color: active ? const Color(0xFFE50914) : panel,
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _selectPackage(id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    child: Row(children: [
+                      Icon(Icons.live_tv, color: active ? Colors.white : AppTheme.secondaryText, size: 17),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(package['name']?.toString() ?? 'باقة',
+                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: active ? Colors.white : AppTheme.text, fontSize: 11,
+                            fontWeight: active ? FontWeight.bold : FontWeight.normal)),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -3498,7 +3580,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             child: Row(children: [
               Container(width: 4, height: 22, color: gold),
               const SizedBox(width: 9),
-              Text(appText('البث المباشر', 'Live TV', 'Canlı TV'), style: TextStyle(color: AppTheme.text, fontSize: 19, fontWeight: FontWeight.bold)),
+              Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
+                style: TextStyle(color: AppTheme.text, fontSize: 19, fontWeight: FontWeight.bold)),
               const Spacer(),
               IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: gold)),
             ]),
@@ -3515,8 +3598,10 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                         child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                           Icon(Icons.live_tv, color: gold, size: 48),
                           const SizedBox(height: 8),
-                          Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'), style: TextStyle(color: AppTheme.secondaryText)),
-                          if (starting) Padding(padding: EdgeInsets.only(top: 8), child: CircularProgressIndicator(color: gold)),
+                          Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'),
+                            style: TextStyle(color: AppTheme.secondaryText)),
+                          if (starting) Padding(padding: const EdgeInsets.only(top: 8),
+                            child: CircularProgressIndicator(color: gold)),
                         ])),
                       )
                     : ShamFlixPlayerPage(
@@ -3535,47 +3620,57 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
               ),
             ),
           ),
-          const SizedBox(height: 10),
-          if (packages.isNotEmpty)
-            SizedBox(
-              height: 42,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                reverse: true,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: packages.map((package) {
-                  final id = package['id'].toString();
-                  final active = id == selectedPackageId;
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 7),
-                    child: ChoiceChip(
-                      label: Text(package['name']?.toString() ?? 'باقة'),
-                      selected: active,
-                      selectedColor: const Color(0xFF493B25),
-                      backgroundColor: panel,
-                      labelStyle: TextStyle(color: active ? gold : AppTheme.secondaryText, fontSize: 12),
-                      onSelected: (_) => _selectPackage(id),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
+          const SizedBox(height: 8),
           Expanded(
-            child: loading
-                ? Center(child: CircularProgressIndicator(color: gold))
-                : error != null
-                    ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
-                    : channels.isEmpty
-                        ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'), style: TextStyle(color: AppTheme.secondaryText)))
-                        : RefreshIndicator(
-                            color: gold,
-                            onRefresh: _load,
-                            child: ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
-                              itemCount: channels.length,
-                              itemBuilder: (context, index) => _channelTile(channels[index]),
+            child: Row(
+              textDirection: TextDirection.ltr,
+              children: [
+                if (packages.isNotEmpty) _packageSidebar(),
+                Expanded(
+                  child: Directionality(
+                    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+                    child: Column(children: [
+                      if (selectedPackageId != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
+                                orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
+                              style: TextStyle(color: AppTheme.text, fontSize: 14, fontWeight: FontWeight.bold),
                             ),
                           ),
+                        ),
+                      Expanded(
+                        child: loading
+                            ? Center(child: CircularProgressIndicator(color: gold))
+                            : error != null
+                                ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
+                                : channels.isEmpty
+                                    ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
+                                        style: TextStyle(color: AppTheme.secondaryText)))
+                                    : RefreshIndicator(
+                                        color: gold,
+                                        onRefresh: _load,
+                                        child: GridView.builder(
+                                          padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
+                                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: 5,
+                                            crossAxisSpacing: 7,
+                                            mainAxisSpacing: 7,
+                                            childAspectRatio: 0.88,
+                                          ),
+                                          itemCount: channels.length,
+                                          itemBuilder: (context, index) => _channelTile(channels[index]),
+                                        ),
+                                      ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -4782,4 +4877,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: ربط ألوان النصوص والأزرار والواجهات بإعدادات لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 22:05:00 بتوقيت تركيا
+// آخر تعديل: تحويل صفحة القنوات إلى Sidebar يسار وشبكة من 5 قنوات مع شارة LIVE | التاريخ: 2026-11-21 | الوقت: 22:12:00 بتوقيت تركيا
