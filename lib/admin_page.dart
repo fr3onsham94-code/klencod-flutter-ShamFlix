@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin_auth_service.dart';
 import 'supabase_service.dart';
@@ -26,6 +27,8 @@ class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> series = [];
   List<Map<String, dynamic>> channels = [];
   List<Map<String, dynamic>> users = [];
+  List<Map<String, dynamic>> onlineUsers = [];
+  RealtimeChannel? onlineChannel;
 
   bool catalogLoading = false;
   String? catalogError;
@@ -82,6 +85,8 @@ class _AdminPageState extends State<AdminPage> {
   @override
   void dispose() {
     searchController.dispose();
+    final channel = onlineChannel;
+    if (channel != null) AuthService.client.removeChannel(channel);
     super.dispose();
   }
 
@@ -243,6 +248,57 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
+  void _startOnlineUsers() {
+    if (onlineChannel != null) { _syncOnlineUsers(onlineChannel!); return; }
+    final channel = AuthService.client.channel('shamflix:online-users');
+    onlineChannel = channel;
+    channel.onPresenceSync((_) => _syncOnlineUsers(channel));
+    channel.subscribe((status, error) {
+      if (status == RealtimeSubscribeStatus.subscribed) _syncOnlineUsers(channel);
+    });
+  }
+
+  void _syncOnlineUsers(RealtimeChannel channel) {
+    final result = <Map<String, dynamic>>[];
+    for (final dynamic state in channel.presenceState()) {
+      for (final dynamic presence in state.presences) {
+        final dynamic payload = presence.payload;
+        if (payload is Map) result.add(Map<String, dynamic>.from(payload));
+      }
+    }
+    final unique = <String, Map<String, dynamic>>{};
+    for (final user in result) {
+      final key = user['session_id']?.toString() ?? user['user_id']?.toString() ?? user['display_name']?.toString() ?? unique.length.toString();
+      unique[key] = user;
+    }
+    if (mounted) setState(() => onlineUsers = unique.values.toList());
+  }
+
+  Widget onlineUsersSection() {
+    final guests = onlineUsers.where((user) => user['account_type'] == 'guest').length;
+    final members = onlineUsers.length - guests;
+    return Column(children: [
+      Padding(padding: const EdgeInsets.all(14), child: Row(children: [
+        Expanded(child: _statusChip('المتصلون: ${onlineUsers.length}', adminGold)),
+        const SizedBox(width: 8), Expanded(child: _statusChip('زوار: $guests', Colors.lightBlue)),
+        const SizedBox(width: 8), Expanded(child: _statusChip('حسابات: $members', Colors.green)),
+      ])),
+      Expanded(child: onlineUsers.isEmpty
+        ? const Center(child: Text('لا يوجد متصلون حالياً', style: TextStyle(color: Colors.white54)))
+        : ListView.builder(itemCount: onlineUsers.length, itemBuilder: (context, index) {
+            final user = onlineUsers[index];
+            final guest = user['account_type'] == 'guest';
+            final admin = user['account_type'] == 'admin';
+            return Card(color: adminPanel, margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              child: ListTile(
+                leading: CircleAvatar(backgroundColor: adminGold.withOpacity(0.15), child: Icon(guest ? Icons.person_outline : admin ? Icons.admin_panel_settings : Icons.person, color: adminGold)),
+                title: Text(user['display_name']?.toString() ?? (guest ? 'زائر بدون حساب' : 'مستخدم'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text([guest ? 'زائر' : admin ? 'مدير / أدمن' : 'حساب مسجل', user['online_at']?.toString() ?? ''].where((v) => v.isNotEmpty).join(' • '), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                trailing: const Icon(Icons.circle, color: Colors.green, size: 11),
+              ));
+          })),
+    ]);
+  }
   // =========================
   // التنقل بين الأقسام
   // =========================
@@ -262,6 +318,8 @@ class _AdminPageState extends State<AdminPage> {
       loadUsers();
     } else if (section == 'settings') {
       loadCategoryBadgeSetting();
+    } else if (section == 'online') {
+      _startOnlineUsers();
     }
   }
 
@@ -292,7 +350,8 @@ class _AdminPageState extends State<AdminPage> {
         currentSection == 'series' ||
         currentSection == 'channels' ||
         currentSection == 'users' ||
-        currentSection == 'settings') {
+        currentSection == 'settings' ||
+        currentSection == 'online') {
       setState(() {
         currentSection = 'home';
         searchQuery = '';
@@ -313,6 +372,8 @@ class _AdminPageState extends State<AdminPage> {
         return 'إدارة المستخدمين';
       case 'settings':
         return 'إعدادات التطبيق';
+      case 'online':
+        return 'المتصلون الآن';
       case 'userList':
         switch (userCategory) {
           case 'admins':
@@ -3096,6 +3157,12 @@ class _AdminPageState extends State<AdminPage> {
           onTap: () => navigateTo('channels'),
         ),
         _homeCard(
+          title: 'المتصلون الآن',
+          subtitle: 'عرض الحسابات المسجلة والزوار بدون حساب',
+          icon: Icons.wifi_tethering,
+          onTap: () => navigateTo('online'),
+        ),
+        _homeCard(
           title: 'المستخدمون',
           subtitle: 'إدارة المستخدمين والمدراء والمحظورين',
           icon: Icons.people_outline,
@@ -3227,6 +3294,7 @@ class _AdminPageState extends State<AdminPage> {
     final isUsers = currentSection == 'users';
     final isUserList = currentSection == 'userList';
     final isSettings = currentSection == 'settings';
+    final isOnline = currentSection == 'online';
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -3256,6 +3324,8 @@ class _AdminPageState extends State<AdminPage> {
                 onPressed: () => loadCatalog(currentSection),
                 icon: const Icon(Icons.refresh, color: adminGold),
               ),
+            if (isOnline)
+              IconButton(onPressed: () => onlineChannel == null ? _startOnlineUsers() : _syncOnlineUsers(onlineChannel!), icon: const Icon(Icons.refresh, color: adminGold)),
             if (isUsers || isUserList)
               IconButton(
                 onPressed: loadUsers,
@@ -3358,7 +3428,9 @@ class _AdminPageState extends State<AdminPage> {
                               ? userListSection()
                               : isSettings
                                   ? settingsSection()
-                                  : const SizedBox.shrink(),
+                                  : isOnline
+                                      ? onlineUsersSection()
+                                      : const SizedBox.shrink(),
             ),
           ],
         ),
@@ -3483,3 +3555,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة زر إدارة الباقات داخل أقسام إدارة الأفلام والمسلسلات والقنوات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة شاشة المتصلين لحظياً عبر Realtime Presence لعرض الزوار والحسابات المسجلة.
