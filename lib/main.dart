@@ -1802,14 +1802,16 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       final request = await client.getUrl(uri);
       final response = await request.close();
       if (response.statusCode != 200) throw Exception('فشل تنزيل التحديث (${response.statusCode})');
-      final bytes = await response.fold<List<int>>(<int>[], (all, chunk) => all..addAll(chunk));
-      if (bytes.length < 1024 || bytes[0] != 0x50 || bytes[1] != 0x4B) {
-        throw Exception('الملف الذي تم تنزيله ليس ملف APK صالحاً');
-      }
       final directory = await getTemporaryDirectory();
       final apkFile = File('${directory.path}/shamflix-update.apk');
       if (await apkFile.exists()) await apkFile.delete();
-      await apkFile.writeAsBytes(bytes, flush: true);
+      await response.pipe(apkFile.openWrite());
+      final fileLength = await apkFile.length();
+      final header = await apkFile.openRead(0, 2).fold<List<int>>(<int>[], (all, chunk) => all..addAll(chunk));
+      if (fileLength < 1024 || header.length < 2 || header[0] != 0x50 || header[1] != 0x4B) {
+        await apkFile.delete();
+        throw Exception('الملف الذي تم تنزيله ليس ملف APK صالحاً');
+      }
       await OpenFilex.open(
         apkFile.path,
         type: 'application/vnd.android.package-archive',
