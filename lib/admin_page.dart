@@ -250,6 +250,13 @@ class _AdminPageState extends State<AdminPage> {
       showMessage('أدخل رقم الإصدار ورقم البناء ورابط APK معاً', isError: true);
       return;
     }
+    if (inviteLink.isNotEmpty) {
+      final inviteUri = Uri.tryParse(inviteLink);
+      if (inviteUri == null || inviteUri.scheme != 'https') {
+        showMessage('يجب أن يكون رابط الدعوة آمناً ويبدأ بـ HTTPS', isError: true);
+        return;
+      }
+    }
     if (apkUrl.isNotEmpty) {
       final uri = Uri.tryParse(apkUrl);
       if (uri == null || uri.scheme != 'https') {
