@@ -44,6 +44,7 @@ class _AdminPageState extends State<AdminPage> {
   String? badgeSettingError;
   final TextEditingController inviteLinkController = TextEditingController();
   final TextEditingController updateVersionController = TextEditingController();
+  final TextEditingController updateBuildController = TextEditingController();
   final TextEditingController updateApkController = TextEditingController();
   final TextEditingController updateNotesController = TextEditingController();
   bool appSettingsLoading = false;
@@ -99,6 +100,7 @@ class _AdminPageState extends State<AdminPage> {
     searchController.dispose();
     inviteLinkController.dispose();
     updateVersionController.dispose();
+    updateBuildController.dispose();
     updateApkController.dispose();
     updateNotesController.dispose();
     super.dispose();
@@ -223,6 +225,7 @@ class _AdminPageState extends State<AdminPage> {
               : value?.toString() ?? '';
         } else if (key == 'app_update' && value is Map) {
           updateVersionController.text = value['version']?.toString() ?? '';
+          updateBuildController.text = value['build_number']?.toString() ?? '';
           updateApkController.text = value['apk_url']?.toString() ?? '';
           updateNotesController.text = value['release_notes']?.toString() ?? '';
         }
@@ -237,10 +240,11 @@ class _AdminPageState extends State<AdminPage> {
   Future<void> saveAppLinksAndUpdateSettings() async {
     final inviteLink = inviteLinkController.text.trim();
     final version = updateVersionController.text.trim();
+    final buildNumber = int.tryParse(updateBuildController.text.trim()) ?? 0;
     final apkUrl = updateApkController.text.trim();
     final notes = updateNotesController.text.trim();
-    if ((version.isEmpty) != (apkUrl.isEmpty)) {
-      showMessage('أدخل رقم الإصدار ورابط APK معاً', isError: true);
+    if ((version.isEmpty) != (apkUrl.isEmpty) || (version.isNotEmpty && buildNumber < 1)) {
+      showMessage('أدخل رقم الإصدار ورقم البناء ورابط APK معاً', isError: true);
       return;
     }
     if (apkUrl.isNotEmpty) {
@@ -261,6 +265,7 @@ class _AdminPageState extends State<AdminPage> {
           'setting_key': 'app_update',
           'setting_value': {
             'version': version,
+            'build_number': buildNumber,
             'apk_url': apkUrl,
             'release_notes': notes,
           },
@@ -347,10 +352,11 @@ class _AdminPageState extends State<AdminPage> {
                 const Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
                 adminField(updateVersionController, 'رقم الإصدار الجديد', required: false),
+                adminField(updateBuildController, 'رقم البناء Android versionCode', required: false, keyboard: TextInputType.number),
                 adminField(updateApkController, 'رابط ملف APK الآمن HTTPS', required: false),
                 adminField(updateNotesController, 'ملاحظات التحديث', maxLines: 3, required: false),
                 const SizedBox(height: 8),
-                const Text('بعد حفظ الرابط والإصدار، يستطيع الزائر البحث عن التحديث وتنزيل ملف APK وتثبيته من داخل التطبيق.',
+                const Text('قبل رفع APK جديد، ارفع رقم versionCode في pubspec.yaml (مثلاً 1.0.1+2) ليكون أكبر من الإصدار المثبت. بعد حفظ الرابط والإصدار والبناء يستطيع الزائر تنزيل APK وتثبيته من داخل التطبيق.',
                     style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5)),
                 FilledButton.icon(
                   onPressed: appSettingsSaving ? null : saveAppLinksAndUpdateSettings,
