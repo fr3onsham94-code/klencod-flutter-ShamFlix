@@ -181,49 +181,6 @@ class ShamFlixLocalStore {
     }
   }
 
-  static Future<bool> addProfile(String name) async {
-    final clean = name.trim();
-    if (clean.isEmpty) return false;
-    final profiles = await getProfiles();
-    if (profiles.length >= 5) return false;
-    profiles.add({'id': DateTime.now().microsecondsSinceEpoch.toString(), 'name': clean});
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profilesKey, jsonEncode(profiles));
-    localProfileRefreshNotifier.value++;
-    unawaited(syncShamFlixCloudData());
-    return true;
-  }
-
-  static Future<void> setActiveProfile(String id) async {
-    final profiles = await getProfiles();
-    if (!profiles.any((p) => p['id'] == id)) return;
-    activeProfileId = id;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_activeProfileKey, id);
-    localProfileRefreshNotifier.value++;
-    unawaited(syncShamFlixCloudData());
-  }
-
-  static Future<void> removeProfile(String id) async {
-    if (id == 'main') return;
-    final profiles = await getProfiles();
-    profiles.removeWhere((p) => p['id'] == id);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profilesKey, jsonEncode(profiles));
-    unawaited(ShamFlixCloudService.removeProfile(id).catchError((_) {}));
-    for (final key in prefs.getKeys().toList()) {
-      if (key.startsWith('shamflix_profile_${id}_') ||
-          key.startsWith('shamflix_player_${id}_')) {
-        await prefs.remove(key);
-      }
-    }
-    if (activeProfileId == id) {
-      activeProfileId = 'main';
-      await prefs.setString(_activeProfileKey, 'main');
-    }
-    localProfileRefreshNotifier.value++;
-  }
-
   static Future<List<Map<String, dynamic>>> _readList(String key) async {
     final prefs = await SharedPreferences.getInstance();
     try {
@@ -4322,7 +4279,7 @@ class ShamFlixSearch extends SearchDelegate {
 // إضافة التنزيل المحلي للملفات المباشرة، تفضيل آخر سيرفر ناجح، وتحسين ذاكرة تخزين الصور.
 
 // ShamFlix - آخر تحديث: 21-11-2026
-// تحديث 21-11-2026: إعادة تنظيم الرئيسية وإعدادات الزائر وإزالة واجهات التنزيل والملفات الشخصية.
+// تحديث 21-11-2026: إعادة تنظيم الرئيسية وإعدادات الزائر وإزالة واجهات التنزيل.
 // إضافة خيار Wi-Fi فقط والتحقق من التحديثات وتحديث القنوات وحقوق التطبيق.
 
 // ShamFlix - آخر تحديث: 21-11-2026
