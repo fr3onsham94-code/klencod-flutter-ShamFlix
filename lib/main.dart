@@ -1220,6 +1220,17 @@ class _DetailsPageState extends State<DetailsPage> {
       return;
     }
 
+    final prefs = await SharedPreferences.getInstance();
+    final selectedPlayer = prefs.getString(_playerPreferenceKey) ?? 'internal';
+    if (selectedPlayer == 'internal') {
+      await _startPlayback(
+        servers.first['stream_url'].toString(),
+        title,
+        servers: servers,
+      );
+      return;
+    }
+
     if (servers.length == 1) {
       await _startPlayback(servers.first['stream_url'].toString(), title);
       return;
@@ -1251,7 +1262,13 @@ class _DetailsPageState extends State<DetailsPage> {
       ),
     );
     if (selected == null || !mounted) return;
-    await _startPlayback(selected['stream_url'].toString(), title);
+    final selectedIndex = servers.indexOf(selected);
+    await _startPlayback(
+      selected['stream_url'].toString(),
+      title,
+      servers: servers,
+      initialServerIndex: selectedIndex < 0 ? 0 : selectedIndex,
+    );
   }
 
   bool _isDirectMediaUrl(String value) {
@@ -1264,7 +1281,12 @@ class _DetailsPageState extends State<DetailsPage> {
     ).hasMatch(uri.path);
   }
 
-  Future<void> _startPlayback(String url, String title) async {
+  Future<void> _startPlayback(
+    String url,
+    String title, {
+    List<Map<String, dynamic>> servers = const [],
+    int initialServerIndex = 0,
+  }) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.hasScheme) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -1289,7 +1311,12 @@ class _DetailsPageState extends State<DetailsPage> {
     if (!mounted) return;
     if (selectedPlayer == 'internal') {
       Navigator.push(context, MaterialPageRoute(
-        builder: (_) => ShamFlixPlayerPage(url: url, title: title),
+        builder: (_) => ShamFlixPlayerPage(
+          url: url,
+          title: title,
+          servers: servers,
+          initialServerIndex: initialServerIndex,
+        ),
       ));
       return;
     }
@@ -1577,7 +1604,16 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
 class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
   final String title;
-  const ShamFlixPlayerPage({super.key, required this.url, required this.title});
+  final List<Map<String, dynamic>> servers;
+  final int initialServerIndex;
+
+  const ShamFlixPlayerPage({
+    super.key,
+    required this.url,
+    required this.title,
+    this.servers = const [],
+    this.initialServerIndex = 0,
+  });
 
   @override
   State<ShamFlixPlayerPage> createState() => _ShamFlixPlayerPageState();
@@ -1595,10 +1631,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   bool landscape = true;
   bool controlsLocked = false;
   int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
+  late int currentServerIndex;
 
   @override
   void initState() {
     super.initState();
+    currentServerIndex = widget.servers.isEmpty
+        ? 0
+        : widget.initialServerIndex.clamp(0, widget.servers.length - 1);
     player = Player();
     controller = VideoController(player);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -1628,9 +1668,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     );
   }
 
-  Future<void> _open() async {
+  Future<void> _open([String? url]) async {
     try {
-      await player.open(Media(widget.url));
+      await player.open(Media(url ?? widget.url));
       if (mounted) {
         setState(() => opening = false);
         _showControls();
@@ -1694,12 +1734,24 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               child: Text('سرعة التشغيل',
                   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             ),
-            for (final rate in [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0])
+            for (final option in <MapEntry<double, String>>[
+              const MapEntry(0.5, 'نصف السرعة'),
+              const MapEntry(0.75, 'سرعة بطيئة'),
+              const MapEntry(1.0, 'السرعة العادية'),
+              const MapEntry(1.25, 'أسرع قليلاً'),
+              const MapEntry(1.5, 'سرعة 1.5'),
+              const MapEntry(1.75, 'سرعة 1.75'),
+              const MapEntry(2.0, 'ضعف السرعة'),
+            ])
               ListTile(
-                title: Text('\${rate}x',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: player.state.rate == rate ? gold : Colors.white)),
-                onTap: () => Navigator.pop(sheetContext, rate),
+                title: Text(
+                  '\${option.key}x',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: player.state.rate == option.key ? gold : Colors.white),
+                ),
+                subtitle: Text(option.value, textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                onTap: () => Navigator.pop(sheetContext, option.key),
               ),
           ],
         ),
@@ -1709,6 +1761,31 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       await player.setRate(selected);
       _showControls();
     }
+  }
+
+  String _friendlyTrackLabel(dynamic track, int index) {
+    final language = (track.language ?? '').toString().trim().toLowerCase();
+    final title = (track.title ?? '').toString().trim();
+    const languages = <String, String>{
+      'ar': 'العربية', 'ara': 'العربية', 'arabic': 'العربية',
+      'en': 'الإنجليزية', 'eng': 'الإنجليزية', 'english': 'الإنجليزية',
+      'tr': 'التركية', 'tur': 'التركية', 'turkish': 'التركية',
+      'fr': 'الفرنسية', 'fra': 'الفرنسية', 'fre': 'الفرنسية',
+      'de': 'الألمانية', 'deu': 'الألمانية', 'ger': 'الألمانية',
+      'es': 'الإسبانية', 'spa': 'الإسبانية',
+      'ru': 'الروسية', 'rus': 'الروسية',
+      'ku': 'الكردية', 'kur': 'الكردية',
+      'und': 'غير محدد', 'unknown': 'غير محدد',
+    };
+    final readableLanguage = languages[language] ??
+        (language.isEmpty ? '' : language.toUpperCase());
+    if (readableLanguage.isNotEmpty && title.isNotEmpty &&
+        title.toLowerCase() != language) {
+      return '$readableLanguage - $title';
+    }
+    if (readableLanguage.isNotEmpty) return readableLanguage;
+    if (title.isNotEmpty) return title;
+    return 'مسار \${index + 1}';
   }
 
   Future<void> _pickAudioTrack() async {
@@ -1726,11 +1803,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           children: [
             const ListTile(title: Text('مسار الصوت', textAlign: TextAlign.center,
                 style: TextStyle(color: gold, fontWeight: FontWeight.bold))),
-            for (final track in tracks)
+            for (int index = 0; index < tracks.length; index++)
               ListTile(
-                title: Text(track.toString(), textAlign: TextAlign.center,
+                title: Text(_friendlyTrackLabel(tracks[index], index),
+                    textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(sheetContext, track),
+                onTap: () => Navigator.pop(sheetContext, tracks[index]),
               ),
           ],
         ),
@@ -1758,11 +1836,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   style: TextStyle(color: Colors.white)),
               onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
             ),
-            for (final track in tracks)
+            for (int index = 0; index < tracks.length; index++)
               ListTile(
-                title: Text(track.toString(), textAlign: TextAlign.center,
+                title: Text(_friendlyTrackLabel(tracks[index], index),
+                    textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(sheetContext, track),
+                onTap: () => Navigator.pop(sheetContext, tracks[index]),
               ),
           ],
         ),
@@ -1777,6 +1856,56 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   void _message(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: const Color(0xFF292929)),
+    );
+  }
+
+  Future<void> _switchServer(int index) async {
+    if (index < 0 || index >= widget.servers.length ||
+        index == currentServerIndex) return;
+    final url = valueOf(widget.servers[index]['stream_url']).trim();
+    if (url.isEmpty) {
+      _message('رابط هذا السيرفر غير متوفر');
+      return;
+    }
+    controlsTimer?.cancel();
+    setState(() {
+      currentServerIndex = index;
+      opening = true;
+      error = null;
+      controlsVisible = true;
+    });
+    await _open(url);
+  }
+
+  Widget _serverButton(int index) {
+    final active = index == currentServerIndex;
+    final name = valueOf(widget.servers[index]['server_name'], 'السيرفر \${index + 1}');
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      child: Tooltip(
+        message: name,
+        child: Material(
+          color: active ? gold : Colors.black.withOpacity(0.62),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => _switchServer(index),
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Text('S\${index + 1}',
+                  style: TextStyle(
+                    color: active ? Colors.black : Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1912,16 +2041,20 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                       ),
                     if (controlsLocked)
                       Positioned(
-                        top: 18,
-                        right: 18,
+                        bottom: 20,
+                        left: 0,
+                        right: 0,
                         child: SafeArea(
-                          child: Material(
-                            color: Colors.black.withOpacity(0.62),
-                            shape: const CircleBorder(),
-                            child: IconButton(
-                              tooltip: 'فتح قفل الشاشة',
-                              onPressed: _toggleControlsLock,
-                              icon: const Icon(Icons.lock_open_rounded, color: gold, size: 25),
+                          child: Center(
+                            child: Material(
+                              color: Colors.black.withOpacity(0.78),
+                              shape: const StadiumBorder(),
+                              child: TextButton.icon(
+                                onPressed: _toggleControlsLock,
+                                icon: const Icon(Icons.lock_open_rounded, color: gold),
+                                label: const Text('فتح القفل',
+                                    style: TextStyle(color: Colors.white)),
+                              ),
                             ),
                           ),
                         ),
@@ -1986,24 +2119,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                             ],
                                           ),
                                         ),
-                                        IconButton(
-                                          tooltip: 'قفل اللمس',
-                                          onPressed: _toggleControlsLock,
-                                          icon: const Icon(Icons.lock_outline_rounded, color: Colors.white),
-                                        ),
-                                        IconButton(
-                                          tooltip: _videoFitTooltip,
-                                          onPressed: _cycleVideoFit,
-                                          icon: const Icon(Icons.aspect_ratio_rounded, color: Colors.white),
-                                        ),
-                                        IconButton(
-                                          tooltip: 'تبديل اتجاه الشاشة',
-                                          onPressed: _toggleFullscreen,
-                                          icon: Icon(
-                                            landscape ? Icons.screen_lock_landscape_rounded : Icons.screen_lock_portrait_rounded,
-                                            color: Colors.white,
+                                        if (widget.servers.length > 1)
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              for (int index = 0; index < widget.servers.length; index++)
+                                                _serverButton(index),
+                                            ],
                                           ),
-                                        ),
                                       ],
                                     ),
                                   ),
@@ -2138,6 +2261,18 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                         icon: Icons.fit_screen_rounded,
                                                         label: 'حجم الصورة',
                                                         onTap: _cycleVideoFit,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: Icons.screen_rotation_alt_rounded,
+                                                        label: 'تدوير',
+                                                        onTap: _toggleFullscreen,
+                                                      ),
+                                                      _toolButton(
+                                                        icon: controlsLocked
+                                                            ? Icons.lock_open_rounded
+                                                            : Icons.lock_outline_rounded,
+                                                        label: controlsLocked ? 'فتح القفل' : 'قفل اللمس',
+                                                        onTap: _toggleControlsLock,
                                                       ),
                                                     ],
                                                   ),
@@ -2444,3 +2579,5 @@ class ShamFlixSearch extends SearchDelegate {
 // تمت إعادة تنظيم واجهة المشغّل بطابع سينمائي مع شريط أدوات سفلي واضح.
 // أضيف قفل اللمس مع زر فتح مستقل، مع الحفاظ على التشغيل والسيرفرات ومسارات الصوت والترجمة.
 // ==========================================
+
+// تم تعديل واجهة المشغل والسيرفرات وتسميات الصوت والترجمة والسرعة بتاريخ 21-11-2026.
