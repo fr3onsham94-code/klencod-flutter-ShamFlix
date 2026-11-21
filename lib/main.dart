@@ -864,7 +864,10 @@ class _HomePageState extends State<HomePage> {
   Widget moviesPage() => const ShamFlixCatalogPage(contentType: 'movie');
   Widget tvPage() => const ShamFlixCatalogPage(contentType: 'series');
 
-  Widget channelsPage() {
+  Widget channelsPage() => ShamFlixChannelCatalogPage(channelsFuture: channels);
+
+  /* Legacy channel list retained only as a reference during migration.
+  Widget channelsPageLegacy() {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: channels,
       builder: (context, snapshot) {
@@ -951,6 +954,7 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
+  */
 
   @override
   Widget build(BuildContext context) {
@@ -1015,6 +1019,87 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+class ShamFlixChannelCatalogPage extends StatefulWidget {
+  final Future<List<Map<String, dynamic>>> channelsFuture;
+  const ShamFlixChannelCatalogPage({super.key, required this.channelsFuture});
+  @override
+  State<ShamFlixChannelCatalogPage> createState() => _ShamFlixChannelCatalogPageState();
+}
+
+class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage> {
+  late Future<List<Map<String, dynamic>>> packagesFuture;
+  String? selectedPackageId;
+  Map<String, dynamic>? selectedChannel;
+  @override
+  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages('channel'); }
+  Future<List<Map<String, dynamic>>> _filter(List<Map<String, dynamic>> all) async {
+    if (selectedPackageId == null) return all;
+    final ids = await SupabaseService.getPackageContentIds(selectedPackageId!);
+    return all.where((item) => ids.contains(item['id']?.toString())).toList();
+  }
+  void _play(Map<String, dynamic> channel) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(item: channel, isChannel: true, autoPlay: true)));
+  }
+  @override
+  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('القنوات التلفزيونية')),
+    body: FutureBuilder<List<Map<String, dynamic>>>(future: widget.channelsFuture, builder: (context, channelSnapshot) {
+      if (channelSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+      if (channelSnapshot.hasError) return const Center(child: Text('تعذر تحميل القنوات', style: TextStyle(color: Colors.white54)));
+      final all = channelSnapshot.data ?? [];
+      if (selectedChannel == null && all.isNotEmpty) selectedChannel = all.first;
+      return Column(children: [
+        Container(height: 205, margin: const EdgeInsets.fromLTRB(12, 10, 12, 12), decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: gold.withOpacity(0.4))),
+          child: Stack(fit: StackFit.expand, children: [
+            if (selectedChannel != null && valueOf(selectedChannel!['logo_url']).isNotEmpty)
+              Opacity(opacity: 0.20, child: Image.network(valueOf(selectedChannel!['logo_url']), fit: BoxFit.contain)),
+            Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.live_tv, color: gold, size: 35),
+              const SizedBox(height: 8),
+              Text(selectedChannel == null ? 'اختر قناة للمشاهدة' : valueOf(selectedChannel!['name'], 'قناة'),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                onPressed: selectedChannel == null ? null : () => _play(selectedChannel!),
+                icon: const Icon(Icons.play_arrow), label: const Text('تشغيل القناة')),
+            ]),
+          ]),
+        ),
+        Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(future: packagesFuture, builder: (context, packageSnapshot) {
+          final packages = packageSnapshot.data ?? [];
+          return FutureBuilder<List<Map<String, dynamic>>>(future: _filter(all), builder: (context, filteredSnapshot) {
+            if (filteredSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+            final items = filteredSnapshot.data ?? [];
+            return Row(children: [
+              SizedBox(width: 112, child: Container(color: panel, child: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
+                _packageTile('الكل', null),
+                ...packages.map((p) => _packageTile(valueOf(p['name']), p['id']?.toString())),
+              ]))),
+              Expanded(child: items.isEmpty ? const Center(child: Text('لا توجد قنوات في هذه الباقة', style: TextStyle(color: Colors.white54))) :
+                ListView.builder(itemCount: items.length, itemBuilder: (context, index) {
+                  final channel = items[index]; final selected = selectedChannel?['id']?.toString() == channel['id']?.toString();
+                  return Card(color: selected ? const Color(0xFF352B1C) : panel, margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: ListTile(onTap: () => setState(() => selectedChannel = channel),
+                      leading: CircleAvatar(backgroundColor: bg, backgroundImage: valueOf(channel['logo_url']).isEmpty ? null : NetworkImage(valueOf(channel['logo_url'])),
+                        child: valueOf(channel['logo_url']).isEmpty ? const Icon(Icons.live_tv, color: gold) : null),
+                      title: Text(valueOf(channel['name'], 'قناة'), style: const TextStyle(color: Colors.white)),
+                      subtitle: Text(valueOf(channel['category'], 'بث مباشر'), style: const TextStyle(color: Colors.white54)),
+                      trailing: Icon(selected ? Icons.radio_button_checked : Icons.play_circle_outline, color: gold)));
+                })),
+            ]);
+          });
+        })),
+      ]);
+    }),
+  ));
+  Widget _packageTile(String name, String? id) => InkWell(onTap: () => setState(() => selectedPackageId = id),
+    child: Container(margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+      decoration: BoxDecoration(color: selectedPackageId == id ? const Color(0xFF493B25) : Colors.transparent, borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: selectedPackageId == id ? gold : Colors.white10)),
+      child: Text(name, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: selectedPackageId == id ? gold : Colors.white70, fontSize: 12))));
+}
 class ShamFlixCatalogPage extends StatefulWidget {
   final String contentType;
   const ShamFlixCatalogPage({super.key, required this.contentType});
@@ -1488,12 +1573,14 @@ class DetailsPage extends StatefulWidget {
   final Map<String, dynamic> item;
   final bool isSeries;
   final bool isChannel;
+  final bool autoPlay;
 
   const DetailsPage({
     super.key,
     required this.item,
     this.isSeries = false,
     this.isChannel = false,
+    this.autoPlay = false,
   });
 
   @override
@@ -1515,6 +1602,12 @@ class _DetailsPageState extends State<DetailsPage> {
     _loadFavoriteState();
     _loadEngagement();
     if (widget.isSeries) _loadSeasons();
+    if (widget.autoPlay) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _chooseAndPlay(contentType: 'channel', contentId: widget.item['id'].toString(),
+          title: valueOf(widget.item['name'], 'قناة'), legacyUrl: widget.item['stream_url']?.toString());
+      });
+    }
   }
 
   Future<void> _loadFavoriteState() async {
@@ -3565,3 +3658,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تطوير صفحة تفاصيل الفيلم والمسلسل بخلفية عريضة وبوستر ومعلومات المخرج والممثلين والمدة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// قائمة القنوات تعرض باقات جانبية وشريط تشغيل علوي يفتح المشغل الكامل بميزاته الحالية.
