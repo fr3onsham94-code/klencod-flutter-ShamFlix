@@ -1997,6 +1997,126 @@ class _DetailsPageState extends State<DetailsPage> {
 
 const String _playerPreferenceKey = 'shamflix_player_preference';
 
+class ShamFlixAppSettingsPage extends StatefulWidget {
+  const ShamFlixAppSettingsPage({super.key});
+  @override
+  State<ShamFlixAppSettingsPage> createState() => _ShamFlixAppSettingsPageState();
+}
+
+class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
+  bool loading = true;
+  bool wifiOnly = false;
+  bool working = false;
+  String language = 'ar';
+  @override
+  void initState() { super.initState(); _load(); }
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() { wifiOnly = prefs.getBool('shamflix_wifi_only') ?? false; language = prefs.getString('shamflix_language') ?? 'ar'; loading = false; });
+  }
+  Future<void> _setWifiOnly(bool value) async { await ShamFlixAppPreferences.setWifiOnly(value); if (mounted) setState(() => wifiOnly = value); }
+  Future<void> _setLanguage(String? value) async { if (value == null) return; await ShamFlixAppPreferences.setLanguage(value); if (mounted) setState(() => language = value); }
+  Future<void> _clearCache() async {
+    setState(() => working = true);
+    try {
+      final directory = await getTemporaryDirectory();
+      if (await directory.exists()) { await for (final entity in directory.list(recursive: false)) { try { await entity.delete(recursive: true); } catch (_) {} } }
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم مسح الملفات المؤقتة بنجاح')));
+    } catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر مسح التخزين المؤقت'))); }
+    finally { if (mounted) setState(() => working = false); }
+  }
+  Future<void> _clearHistory() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      backgroundColor: panel, title: const Text('مسح سجل المشاهدة بالكامل', style: TextStyle(color: gold)),
+      content: const Text('سيتم حذف سجل المشاهدة من هذا الجهاز ومن المزامنة السحابية للحساب الحالي.', style: TextStyle(color: Colors.white70)),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('مسح السجل'))]));
+    if (confirmed != true) return;
+    await ShamFlixLocalStore.clearHistory();
+    if (mounted) { contentRefreshNotifier.value++; ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم مسح سجل المشاهدة بالكامل'))); }
+  }
+  Future<void> _refreshChannels() async {
+    setState(() => working = true);
+    try { await SupabaseService.getChannels(); contentRefreshNotifier.value++; if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث قائمة القنوات'))); }
+    catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر تحديث قائمة القنوات'))); }
+    finally { if (mounted) setState(() => working = false); }
+  }
+  Future<void> _checkForUpdate() async {
+    setState(() => working = true);
+    try {
+      final row = await AuthService.client.from('app_settings').select('setting_value').eq('setting_key', 'app_update').maybeSingle();
+      final config = row?['setting_value'];
+      if (config is! Map) throw Exception('لم يضف المدير بيانات التحديث بعد');
+      final latest = config['version']?.toString() ?? '';
+      final apkUrl = config['apk_url']?.toString() ?? '';
+      if (latest.isEmpty || apkUrl.isEmpty) throw Exception('بيانات التحديث غير مكتملة');
+      final info = await PackageInfo.fromPlatform();
+      int compareVersions(String a, String b) {
+        final aa = a.split('.').map((v) => int.tryParse(v) ?? 0).toList();
+        final bb = b.split('.').map((v) => int.tryParse(v) ?? 0).toList();
+        for (var i = 0; i < (aa.length > bb.length ? aa.length : bb.length); i++) {
+          final x = i < aa.length ? aa[i] : 0; final y = i < bb.length ? bb[i] : 0;
+          if (x != y) return x.compareTo(y);
+        }
+        return 0;
+      }
+      if (compareVersions(latest, info.version) <= 0) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('أنت تستخدم أحدث إصدار من ShamFlix'))); return; }
+      final uri = Uri.tryParse(apkUrl);
+      if (uri == null || !uri.hasScheme || (uri.scheme != 'https' && uri.scheme != 'http')) throw Exception('رابط ملف التحديث غير صالح');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('يتوفر تحديث $latest، جارٍ تنزيله')));
+      final response = await http.get(uri).timeout(const Duration(minutes: 5));
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) throw Exception('فشل تنزيل ملف التحديث');
+      final directory = await getTemporaryDirectory();
+      final apk = File('${directory.path}/ShamFlix-update.apk');
+      await apk.writeAsBytes(response.bodyBytes, flush: true);
+      final result = await OpenFilex.open(apk.path, type: 'application/vnd.android.package-archive');
+      if (result.type != ResultType.done) throw Exception('تعذر فتح مثبت التحديث: ${result.message}');
+    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')))); }
+    finally { if (mounted) setState(() => working = false); }
+  }
+  Widget _tile({required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) => Card(
+    color: panel, child: ListTile(leading: Icon(icon, color: gold), title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)), trailing: const Icon(Icons.chevron_left, color: gold), onTap: working ? null : onTap));
+  @override
+  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('إعدادات التطبيق')),
+    body: loading ? const Center(child: CircularProgressIndicator(color: gold)) : ListView(padding: const EdgeInsets.all(14), children: [
+      Card(color: panel, child: ListTile(leading: const Icon(Icons.video_settings_outlined, color: gold),
+        title: const Text('إعدادات المشغل', style: TextStyle(color: Colors.white)),
+        subtitle: const Text('اختيار المشغل الداخلي أو VLC أو MX Player', style: TextStyle(color: Colors.white54)),
+        trailing: const Icon(Icons.chevron_left, color: gold), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage())))),
+      Card(color: panel, child: ListTile(leading: const Icon(Icons.language, color: gold),
+        title: const Text('لغة التطبيق', style: TextStyle(color: Colors.white)),
+        subtitle: const Text('العربية أو English أو Türkçe', style: TextStyle(color: Colors.white54)),
+        trailing: DropdownButton<String>(value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
+          items: const [DropdownMenuItem(value: 'ar', child: Text('العربية')), DropdownMenuItem(value: 'en', child: Text('English')), DropdownMenuItem(value: 'tr', child: Text('Türkçe'))], onChanged: _setLanguage))),
+      Card(color: panel, child: SwitchListTile(value: wifiOnly, onChanged: _setWifiOnly, activeColor: gold, secondary: const Icon(Icons.wifi, color: gold),
+        title: const Text('التشغيل عبر Wi-Fi فقط', style: TextStyle(color: Colors.white)), subtitle: const Text('منع تشغيل الفيديو عبر بيانات الهاتف لتوفير الباقة', style: TextStyle(color: Colors.white54)))),
+      _tile(icon: Icons.cleaning_services_outlined, title: 'مسح التخزين المؤقت', subtitle: 'حذف الملفات المؤقتة دون حذف إعدادات التطبيق', onTap: _clearCache),
+      _tile(icon: Icons.history_toggle_off, title: 'مسح السجل بالكامل', subtitle: 'حذف سجل المشاهدة كاملاً', onTap: _clearHistory),
+      _tile(icon: Icons.refresh, title: 'تحديث قائمة القنوات', subtitle: 'جلب أحدث القنوات المنشورة', onTap: _refreshChannels),
+      _tile(icon: Icons.system_update_alt, title: 'البحث عن تحديث للتطبيق', subtitle: 'تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix', onTap: _checkForUpdate),
+      if (working) const Padding(padding: EdgeInsets.all(14), child: Center(child: CircularProgressIndicator(color: gold))),
+    ]),
+  ));
+}
+
+class ShamFlixLegalPage extends StatelessWidget {
+  const ShamFlixLegalPage({super.key});
+  @override
+  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('حقوق النشر والخصوصية')),
+    body: ListView(padding: const EdgeInsets.all(18), children: const [
+      Text('حقوق النشر', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)), SizedBox(height: 8),
+      Text('جميع الحقوق محفوظة لتطبيق ShamFlix. أسماء وشعارات ومحتويات الجهات المالكة تبقى ملكاً لأصحابها.', style: TextStyle(color: Colors.white70, height: 1.7)),
+      SizedBox(height: 22), Text('سياسة الخصوصية', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)), SizedBox(height: 8),
+      Text('يستخدم التطبيق بيانات الحساب عند تسجيل الدخول، ويحفظ المفضلة وسجل المشاهدة لتحسين تجربة الاستخدام. لا يطلب التطبيق إنشاء حساب لمشاهدة المحتوى العام.', style: TextStyle(color: Colors.white70, height: 1.7)),
+    ]),
+  ));
+}
 class ShamFlixPlayerSettingsPage extends StatefulWidget {
   const ShamFlixPlayerSettingsPage({super.key});
 
@@ -3336,3 +3456,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إعادة ترتيب قائمة الزائر وإزالة صفحات الملفات الشخصية والتنزيلات وأزرار تنزيل الحلقات والأفلام.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة إعدادات المشغل واللغة والشبكة ومسح التخزين والسجل وتحديث التطبيق وسياسة الخصوصية.
