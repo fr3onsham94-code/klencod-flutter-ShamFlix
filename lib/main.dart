@@ -1041,7 +1041,7 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.channelsFuture != widget.channelsFuture) { selectedChannel = null; selectedServersFuture = null; filteredFuture = _loadFiltered(); }
   }
-  void _refreshChannelContent() { if (mounted) setState(() { selectedChannel = null; selectedServersFuture = null; filteredFuture = _loadFiltered(); }); }
+  void _refreshChannelContent() { if (mounted) setState(() { selectedChannel = null; selectedServersFuture = null; packagesFuture = SupabaseService.getPackages('channel'); filteredFuture = _loadFiltered(); }); }
   @override
   void dispose() { contentRefreshNotifier.removeListener(_refreshChannelContent); super.dispose(); }
   Future<List<Map<String, dynamic>>> _loadFiltered() async {
@@ -1068,7 +1068,9 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
   }
   @override
   Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
-    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('مباشر'))),
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('مباشر')), actions: [
+      IconButton(icon: const Icon(Icons.refresh, color: gold), onPressed: () => setState(() { selectedChannel = null; selectedServersFuture = null; packagesFuture = SupabaseService.getPackages('channel'); filteredFuture = _loadFiltered(); })),
+    ]),
     body: FutureBuilder<List<Map<String, dynamic>>>(future: widget.channelsFuture, builder: (context, channelSnapshot) {
       if (channelSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
       if (channelSnapshot.hasError) return const Center(child: Text('تعذر تحميل القنوات', style: TextStyle(color: Colors.white54)));
@@ -1151,7 +1153,7 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
   late Future<List<Map<String, dynamic>>> filteredFuture;
   @override
   void initState() { super.initState(); packagesFuture = SupabaseService.getPackages(widget.contentType); contentFuture = _loadContent(); filteredFuture = _loadFiltered(); contentRefreshNotifier.addListener(_refreshCatalogContent); }
-  void _refreshCatalogContent() { if (mounted) setState(() { contentFuture = _loadContent(); filteredFuture = _loadFiltered(); }); }
+  void _refreshCatalogContent() { if (mounted) setState(() { packagesFuture = SupabaseService.getPackages(widget.contentType); contentFuture = _loadContent(); filteredFuture = _loadFiltered(); }); }
   @override
   void dispose() { contentRefreshNotifier.removeListener(_refreshCatalogContent); super.dispose(); }
   Future<List<Map<String, dynamic>>> _loadContent() => widget.contentType == 'movie' ? SupabaseService.getMovies() : SupabaseService.getSeries();
@@ -1165,6 +1167,7 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
   @override
   Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
     backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr(pageTitle)), actions: [
+      IconButton(icon: const Icon(Icons.refresh, color: gold), onPressed: () => setState(() { packagesFuture = SupabaseService.getPackages(widget.contentType); contentFuture = _loadContent(); filteredFuture = _loadFiltered(); })),
       IconButton(icon: const Icon(Icons.search, color: gold), onPressed: () async {
         final controller = TextEditingController(text: search);
         final value = await showDialog<String>(context: context, builder: (context) => AlertDialog(backgroundColor: panel,
@@ -3832,3 +3835,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // استخدام علامات اقتباس واضحة حول معرّف القناة في مفاتيح Flutter.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة تحديث يدوي للباقات والمحتوى مع إعادة تحميل الباقات عند تحديث بيانات التطبيق.
