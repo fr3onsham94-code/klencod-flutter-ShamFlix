@@ -893,6 +893,7 @@ class _AdminPageState extends State<AdminPage> {
         builder: (context, setDialogState) => Directionality(
           textDirection: TextDirection.rtl,
           child: AlertDialog(
+            insetPadding: const EdgeInsets.all(8),
             backgroundColor: adminPanel,
             title: Text(
               '${existing == null ? 'إضافة' : 'تعديل'} ${isSeries ? 'مسلسل' : 'قناة'}',
@@ -900,6 +901,7 @@ class _AdminPageState extends State<AdminPage> {
             ),
             content: SizedBox(
               width: 500,
+              height: MediaQuery.of(context).size.height * 0.72,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -3032,6 +3034,7 @@ class _AdminPageState extends State<AdminPage> {
             return Directionality(
               textDirection: TextDirection.rtl,
               child: AlertDialog(
+                insetPadding: const EdgeInsets.all(8),
                 backgroundColor: adminPanel,
                 title: Text(
                   existing == null
@@ -3043,6 +3046,7 @@ class _AdminPageState extends State<AdminPage> {
                 ),
                 content: SizedBox(
                   width: 500,
+                  height: MediaQuery.of(context).size.height * 0.72,
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
