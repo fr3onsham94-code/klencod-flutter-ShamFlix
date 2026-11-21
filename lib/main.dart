@@ -2925,8 +2925,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     if (widget.embedded) {
       await player.pause();
       if (!mounted) return;
+      final selectedUrl = widget.servers.isNotEmpty && currentServerIndex < widget.servers.length
+          ? valueOf(widget.servers[currentServerIndex]['stream_url'], widget.url)
+          : widget.url;
       await Navigator.push(context, MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(
-        url: widget.url, title: widget.title, servers: widget.servers,
+        url: selectedUrl, title: widget.title, servers: widget.servers,
         initialServerIndex: currentServerIndex, progressKey: widget.progressKey,
       )));
       if (mounted) await player.play();
@@ -3817,3 +3820,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تسجيل القناة المختارة في سجل المشاهدة لعرضها ضمن آخر القنوات مشاهدة على الرئيسية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// الحفاظ على السيرفر المحدد عند فتح المشغل المضمن بوضع ملء الشاشة.
