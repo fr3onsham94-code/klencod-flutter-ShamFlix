@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'admin_auth_service.dart';
 
 const Color packageBg = Color(0xFF090909);
-const Color packageGold = Color(0xFFD6AC55);
+const Color packageGold = Color(0xFFE50914);
 const Color packagePanel = Color(0xFF191919);
 
 class AdminPackagesPage extends StatefulWidget {
@@ -239,4 +239,5 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
   }
 }
 
-// ShamFlix - آخر تحديث: 21-11-2026: صفحة مستقلة لإدارة باقات الأفلام والمسلسلات والقنوات.
+
+// آخر تعديل: اعتماد اللون الأحمر بهوية SHAM FLIX في إدارة الباقات | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
