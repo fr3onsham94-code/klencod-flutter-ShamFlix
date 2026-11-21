@@ -874,6 +874,12 @@ class _AdminPageState extends State<AdminPage> {
                           if (checked == true) { selectedPackageIds.add(packageId); } else { selectedPackageIds.remove(packageId); }
                         }),
                       )),
+                      if (isSeries && existing?['id'] != null)
+                        OutlinedButton.icon(
+                          onPressed: () => _openSeriesSeasons(existing!),
+                          icon: const Icon(Icons.video_library_outlined), label: const Text('إدارة المواسم والحلقات'),
+                          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                        ),
                       if (!isSeries && existing?['id'] != null)
                         OutlinedButton.icon(
                           onPressed: () => _managePlaybackServers(type: 'channel', contentId: existing!['id'].toString(), legacyUrl: streamController.text.trim()),
@@ -1738,6 +1744,12 @@ class _AdminPageState extends State<AdminPage> {
                     adminField(description, 'وصف الحلقة', maxLines: 3),
                     adminField(poster, 'رابط صورة الحلقة'),
                     adminField(stream, 'رابط التشغيل القديم (اختياري)'),
+                    if (existing?['id'] != null)
+                      OutlinedButton.icon(
+                        onPressed: () => _managePlaybackServers(type: 'episode', contentId: existing!['id'].toString(), legacyUrl: stream.text.trim()),
+                        icon: const Icon(Icons.dns_outlined), label: const Text('إدارة سيرفرات الحلقة'),
+                        style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                      ),
                     SwitchListTile(
                       value: published,
                       activeColor: adminGold,
@@ -3731,3 +3743,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // لوحة المدير تتحكم برابط دعوة الأصدقاء وإصدار APK ورابط التحديث الداخلي.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة إدارة سيرفرات الحلقة مباشرة من نموذج التعديل وإدارة المواسم من نموذج المسلسل.
