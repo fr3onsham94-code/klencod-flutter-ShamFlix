@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -57,6 +58,17 @@ String valueOf(dynamic value, [String fallback = '']) {
     return fallback;
   }
   return value.toString();
+}
+
+String appText(String arabic, String english, String turkish) {
+  switch (appLocaleNotifier.value.languageCode) {
+    case 'en':
+      return english;
+    case 'tr':
+      return turkish;
+    default:
+      return arabic;
+  }
 }
 
 
@@ -509,6 +521,11 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
       builder: (context, locale, _) => MaterialApp(
       locale: locale,
       supportedLocales: const [Locale('ar'), Locale('en'), Locale('tr')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       title: 'ShamFlix',
@@ -800,7 +817,7 @@ class _HomePageState extends State<HomePage> {
               }
 
               final sourceItems = snapshot.data ?? [];
-              final items = title == 'أحدث الأنمي'
+              final items = title == appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler')
                   ? sourceItems.where((item) {
                       final category = valueOf(item['category']).toLowerCase();
                       return category.contains('أنمي') || category.contains('انمي') || category.contains('anime');
@@ -847,13 +864,13 @@ class _HomePageState extends State<HomePage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            sectionTitle('آخر القنوات مشاهدة'),
+            sectionTitle(appText('آخر القنوات مشاهدة', 'Recently Watched Channels', 'Son İzlenen Kanallar')),
             SizedBox(
               height: 112,
               child: snapshot.connectionState == ConnectionState.waiting
                   ? const Center(child: CircularProgressIndicator(color: gold))
                   : records.isEmpty
-                      ? const Center(child: Text('لا توجد قنوات تمت مشاهدتها بعد', style: TextStyle(color: Colors.white54)))
+                      ? const Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: Colors.white54)))
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
                           reverse: true,
@@ -975,16 +992,16 @@ class _HomePageState extends State<HomePage> {
                   icon: const Icon(Icons.search, color: Colors.white),
                 ),
                 IconButton(
-                  tooltip: 'الإشعارات',
+                  tooltip: appText('الإشعارات', 'Notifications', 'Bildirimler'),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
                   icon: const Icon(Icons.notifications_none, color: gold),
                 ),
               ],
             ),
           ),
-          mediaSection('أحدث الأفلام', movies, isSeries: false),
-          mediaSection('أحدث المسلسلات', series, isSeries: true),
-          mediaSection('أحدث الأنمي', series, isSeries: true),
+          mediaSection(appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'), movies, isSeries: false),
+          mediaSection(appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'), series, isSeries: true),
+          mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), series, isSeries: true),
           recentChannelsSection(),
           const SizedBox(height: 30),
         ],
@@ -995,7 +1012,7 @@ class _HomePageState extends State<HomePage> {
   Widget moviesPage() {
     return PackageCatalogPage(
       contentType: 'movie',
-      title: 'الأفلام',
+      title: appText('الأفلام', 'Movies', 'Filmler'),
       onSelect: (item) => openDetails(item, isSeries: false),
     );
   }
@@ -1003,7 +1020,7 @@ class _HomePageState extends State<HomePage> {
   Widget tvPage() {
     return PackageCatalogPage(
       contentType: 'series',
-      title: 'المسلسلات',
+      title: appText('المسلسلات', 'Series', 'Diziler'),
       onSelect: (item) => openDetails(item, isSeries: true),
     );
   }
@@ -1024,7 +1041,7 @@ class _HomePageState extends State<HomePage> {
     ];
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         body: SafeArea(
           child: IndexedStack(
@@ -1045,28 +1062,28 @@ class _HomePageState extends State<HomePage> {
             NavigationDestination(
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home, color: gold),
-              label: 'الرئيسية',
+              label: appText('الرئيسية', 'Home', 'Ana Sayfa'),
             ),
             NavigationDestination(
               icon: Icon(Icons.movie_outlined),
-              label: 'الأفلام',
+              label: appText('الأفلام', 'Movies', 'Filmler'),
             ),
             NavigationDestination(
               icon: Icon(Icons.video_library_outlined),
-              label: 'المسلسلات',
+              label: appText('المسلسلات', 'Series', 'Diziler'),
             ),
             NavigationDestination(
               icon: Icon(Icons.live_tv_outlined),
-              label: 'مباشر',
+              label: appText('مباشر', 'Live TV', 'Canlı TV'),
             ),
             NavigationDestination(
               icon: Icon(Icons.favorite_outline),
-              label: 'المفضلة',
+              label: appText('المفضلة', 'Favorites', 'Favoriler'),
             ),
             NavigationDestination(
               icon: Icon(Icons.person_outline),
               selectedIcon: Icon(Icons.person, color: gold),
-              label: 'حسابي',
+              label: appText('حسابي', 'My Account', 'Hesabım'),
             ),
           ],
         ),
@@ -1511,7 +1528,7 @@ class _AccountPageState extends State<AccountPage> {
         const SizedBox(height: 12),
         const Center(
           child: Text(
-            'حسابي',
+            appText('حسابي', 'My Account', 'Hesabım'),
             style: TextStyle(
               color: Colors.white,
               fontSize: 25,
@@ -1524,7 +1541,7 @@ class _AccountPageState extends State<AccountPage> {
         if (!loggedIn) ...[
           const Center(
             child: Text(
-              'أهلاً بك في ShamFlix',
+              appText('أهلاً بك في ShamFlix', 'Welcome to ShamFlix', 'ShamFlix\'e hoş geldiniz'),
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 16,
@@ -1542,21 +1559,21 @@ class _AccountPageState extends State<AccountPage> {
               onPressed: openLogin,
               icon: const Icon(Icons.login),
               label: const Text(
-                'تسجيل الدخول أو إنشاء حساب',
+                appText('تسجيل الدخول أو إنشاء حساب', 'Sign in or create an account', 'Giriş yap veya hesap oluştur'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ),
           const SizedBox(height: 15),
-          accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'أفلامك ومسلسلاتك المحفوظة',
+          accountTile(icon: Icons.favorite_outline, title: appText('المفضلة', 'Favorites', 'Favoriler'), subtitle: appText('أفلامك ومسلسلاتك المحفوظة', 'Your saved movies and series', 'Kaydettiğiniz film ve diziler'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-          accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'آخر ما شاهدته',
+          accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
-          accountTile(icon: Icons.settings_outlined, title: 'إعدادات التطبيق', subtitle: 'المشغل واللغة والشبكة والتخزين',
+          accountTile(icon: Icons.settings_outlined, title: appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'), subtitle: appText('المشغل واللغة والشبكة والتخزين', 'Player, language, network and storage', 'Oynatıcı, dil, ağ ve depolama'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppSettingsPage()))),
-          accountTile(icon: Icons.person_add_alt_1, title: 'دعوة صديق', subtitle: 'مشاركة رابط ShamFlix',
+          accountTile(icon: Icons.person_add_alt_1, title: appText('دعوة صديق', 'Invite a Friend', 'Arkadaşını Davet Et'), subtitle: appText('مشاركة رابط ShamFlix', 'Share the ShamFlix link', 'ShamFlix bağlantısını paylaş'),
             onTap: inviteFriend),
-          accountTile(icon: Icons.policy_outlined, title: 'حقوق التطبيق والخصوصية',
+          accountTile(icon: Icons.policy_outlined, title: appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPage()))),
         ] else ...[
           Card(
@@ -1590,7 +1607,7 @@ class _AccountPageState extends State<AccountPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      AuthService.isAdmin ? 'مدير' : 'مستخدم',
+                      AuthService.isAdmin ? appText('مدير', 'Admin', 'Yönetici') : appText('مستخدم', 'User', 'Kullanıcı'),
                       style: const TextStyle(
                         color: gold,
                         fontWeight: FontWeight.bold,
@@ -1607,8 +1624,8 @@ class _AccountPageState extends State<AccountPage> {
           if (AuthService.isAdmin)
             accountTile(
               icon: Icons.admin_panel_settings,
-              title: 'إدارة ShamFlix',
-              subtitle: 'إعدادات وأدوات الإدارة',
+              title: appText('إدارة ShamFlix', 'ShamFlix Admin', 'ShamFlix Yönetimi'),
+              subtitle: appText('إعدادات وأدوات الإدارة', 'Administration settings and tools', 'Yönetim ayarları ve araçları'),
               onTap: () {
                 Navigator.push(
                   context,
@@ -1619,15 +1636,15 @@ class _AccountPageState extends State<AccountPage> {
               },
             ),
 
-          accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'أفلامك ومسلسلاتك المحفوظة',
+          accountTile(icon: Icons.favorite_outline, title: appText('المفضلة', 'Favorites', 'Favoriler'), subtitle: appText('أفلامك ومسلسلاتك المحفوظة', 'Your saved movies and series', 'Kaydettiğiniz film ve diziler'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-          accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'آخر ما شاهدته',
+          accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
-          accountTile(icon: Icons.settings_outlined, title: 'إعدادات التطبيق', subtitle: 'المشغل واللغة والشبكة والتخزين',
+          accountTile(icon: Icons.settings_outlined, title: appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'), subtitle: appText('المشغل واللغة والشبكة والتخزين', 'Player, language, network and storage', 'Oynatıcı, dil, ağ ve depolama'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppSettingsPage()))),
-          accountTile(icon: Icons.person_add_alt_1, title: 'دعوة صديق', subtitle: 'مشاركة رابط ShamFlix',
+          accountTile(icon: Icons.person_add_alt_1, title: appText('دعوة صديق', 'Invite a Friend', 'Arkadaşını Davet Et'), subtitle: appText('مشاركة رابط ShamFlix', 'Share the ShamFlix link', 'ShamFlix bağlantısını paylaş'),
             onTap: inviteFriend),
-          accountTile(icon: Icons.policy_outlined, title: 'حقوق التطبيق والخصوصية',
+          accountTile(icon: Icons.policy_outlined, title: appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPage()))),
 
           const SizedBox(height: 15),
@@ -1650,7 +1667,7 @@ class _AccountPageState extends State<AccountPage> {
                       ),
                     )
                   : const Icon(Icons.logout),
-              label: const Text('تسجيل الخروج'),
+              label: const Text(appText('تسجيل الخروج', 'Sign out', 'Çıkış yap')),
             ),
           ),
         ],
@@ -1882,9 +1899,9 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: const Text('إعدادات التطبيق')),
+        appBar: AppBar(backgroundColor: bg, title: const Text(appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'))),
         body: ListView(padding: const EdgeInsets.all(16), children: [
-          _tile(Icons.tune, 'إعدادات ضبط المشغل', 'اختيار المشغل الداخلي أو VLC أو MX Player', () {
+          _tile(Icons.tune, appText('إعدادات ضبط المشغل', 'Player Settings', 'Oynatıcı Ayarları'), 'اختيار المشغل الداخلي أو VLC أو MX Player', () {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage()));
           }),
           Card(
@@ -1894,7 +1911,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
               child: Row(children: [
                 const Icon(Icons.language, color: gold),
                 const SizedBox(width: 12),
-                const Expanded(child: Text('لغة التطبيق', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+                const Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
                 DropdownButton<String>(
                   value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
                   style: const TextStyle(color: Colors.white),
@@ -1912,15 +1929,15 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             color: panel,
             child: SwitchListTile(
               value: wifiOnly, activeColor: gold, secondary: const Icon(Icons.wifi, color: gold),
-              title: const Text('التشغيل عبر Wi-Fi فقط', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('منع تشغيل الفيديو باستخدام بيانات الهاتف', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              title: const Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: Colors.white)),
+              subtitle: const Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: Colors.white54, fontSize: 12)),
               onChanged: _setWifiOnly,
             ),
           ),
-          _tile(Icons.cleaning_services_outlined, 'مسح التخزين المؤقت', 'مسح الملفات المؤقتة وذاكرة الصور فقط', _clearStorage),
-          _tile(Icons.history, 'مسح السجل بالكامل', 'حذف سجل المشاهدة من الجهاز والحساب', _clearHistory),
-          _tile(Icons.refresh, 'تحديث قائمة القنوات', 'جلب أحدث القنوات المنشورة', _refreshChannels),
-          _tile(Icons.system_update_alt, 'البحث عن تحديث للتطبيق', 'التحقق من وجود إصدار جديد', _checkForUpdate),
+          _tile(Icons.cleaning_services_outlined, appText('مسح التخزين المؤقت', 'Clear Cache', 'Önbelleği Temizle'), appText('مسح الملفات المؤقتة وذاكرة الصور فقط', 'Clear temporary files and image cache only', 'Yalnızca geçici dosyaları ve görsel önbelleğini temizle'), _clearStorage),
+          _tile(Icons.history, appText('مسح السجل بالكامل', 'Clear Watch History', 'İzleme Geçmişini Temizle'), appText('حذف سجل المشاهدة من الجهاز والحساب', 'Delete watch history from this device and account', 'İzleme geçmişini cihazdan ve hesaptan sil'), _clearHistory),
+          _tile(Icons.refresh, appText('تحديث قائمة القنوات', 'Refresh Channel List', 'Kanal Listesini Yenile'), appText('جلب أحدث القنوات المنشورة', 'Fetch the latest published channels', 'En yeni yayınlanan kanalları getir'), _refreshChannels),
+          _tile(Icons.system_update_alt, appText('البحث عن تحديث للتطبيق', 'Check for App Updates', 'Uygulama Güncellemelerini Kontrol Et'), appText('التحقق من وجود إصدار جديد', 'Check whether a new version is available', 'Yeni sürüm olup olmadığını kontrol et'), _checkForUpdate),
           if (busy) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: gold))),
         ]),
       ),
@@ -1935,15 +1952,15 @@ class PrivacyPage extends StatelessWidget {
     textDirection: TextDirection.rtl,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text('حقوق التطبيق والخصوصية')),
+      appBar: AppBar(backgroundColor: bg, title: const Text(appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'))),
       body: ListView(padding: const EdgeInsets.all(20), children: const [
         Text('SHAMFLIX', style: TextStyle(color: gold, fontSize: 25, fontWeight: FontWeight.bold)),
         SizedBox(height: 14),
-        Text('حقوق النشر', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
         Text('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', style: TextStyle(color: Colors.white70, height: 1.7)),
         SizedBox(height: 20),
-        Text('الخصوصية', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(appText('الخصوصية', 'Privacy', 'Gizlilik'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
         Text('يستخدم التطبيق بيانات أساسية لتشغيل الحسابات وحفظ المفضلة وسجل المشاهدة وتحسين الخدمة.', style: TextStyle(color: Colors.white70, height: 1.7)),
       ]),
@@ -2027,7 +2044,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget build(BuildContext context) => Directionality(
     textDirection: TextDirection.rtl,
     child: Scaffold(
-      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('المفضلة')),
+      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
@@ -2076,7 +2093,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
     textDirection: TextDirection.rtl,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text('سجل المشاهدة'),
+      appBar: AppBar(backgroundColor: bg, title: const Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
         actions: [IconButton(tooltip: 'مسح السجل', icon: const Icon(Icons.delete_sweep_outlined, color: gold),
           onPressed: () async => ShamFlixLocalStore.clearHistory())]),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
@@ -2933,7 +2950,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             child: Row(children: [
               Container(width: 4, height: 22, color: gold),
               const SizedBox(width: 9),
-              const Text('البث المباشر', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+              const Text(appText('البث المباشر', 'Live TV', 'Canlı TV'), style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
               const Spacer(),
               IconButton(onPressed: _load, icon: const Icon(Icons.refresh, color: gold)),
             ]),
@@ -2950,7 +2967,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                         child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                           const Icon(Icons.live_tv, color: gold, size: 48),
                           const SizedBox(height: 8),
-                          const Text('اختر قناة لبدء المشاهدة', style: TextStyle(color: Colors.white70)),
+                          const Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'), style: TextStyle(color: Colors.white70)),
                           if (starting) const Padding(padding: EdgeInsets.only(top: 8), child: CircularProgressIndicator(color: gold)),
                         ])),
                       )
@@ -3001,7 +3018,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                 : error != null
                     ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
                     : channels.isEmpty
-                        ? const Center(child: Text('لا توجد قنوات في هذه الباقة', style: TextStyle(color: Colors.white54)))
+                        ? const Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'), style: TextStyle(color: Colors.white54)))
                         : RefreshIndicator(
                             color: gold,
                             onRefresh: _load,
