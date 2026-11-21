@@ -583,6 +583,7 @@ class _HomePageState extends State<HomePage> {
       channels.then((_) {}).catchError((_) {}),
       loadCategoryBadgeSetting(),
     ]);
+    contentRefreshNotifier.value++;
   }
 
   Widget sectionTitle(String title) {
@@ -1067,7 +1068,15 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
   String? selectedPackageId;
   Map<String, dynamic>? selectedChannel;
   @override
-  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages('channel'); filteredFuture = _loadFiltered(); }
+  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages('channel'); filteredFuture = _loadFiltered(); contentRefreshNotifier.addListener(_refreshChannelContent); }
+  @override
+  void didUpdateWidget(covariant ShamFlixChannelCatalogPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.channelsFuture != widget.channelsFuture) { selectedChannel = null; filteredFuture = _loadFiltered(); }
+  }
+  void _refreshChannelContent() { if (mounted) setState(() { selectedChannel = null; filteredFuture = _loadFiltered(); }); }
+  @override
+  void dispose() { contentRefreshNotifier.removeListener(_refreshChannelContent); super.dispose(); }
   Future<List<Map<String, dynamic>>> _loadFiltered() async {
     final all = await widget.channelsFuture;
     if (selectedPackageId == null) return all;
@@ -1150,7 +1159,10 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
   late Future<List<Map<String, dynamic>>> contentFuture;
   late Future<List<Map<String, dynamic>>> filteredFuture;
   @override
-  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages(widget.contentType); contentFuture = _loadContent(); filteredFuture = _loadFiltered(); }
+  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages(widget.contentType); contentFuture = _loadContent(); filteredFuture = _loadFiltered(); contentRefreshNotifier.addListener(_refreshCatalogContent); }
+  void _refreshCatalogContent() { if (mounted) setState(() { contentFuture = _loadContent(); filteredFuture = _loadFiltered(); }); }
+  @override
+  void dispose() { contentRefreshNotifier.removeListener(_refreshCatalogContent); super.dispose(); }
   Future<List<Map<String, dynamic>>> _loadContent() => widget.contentType == 'movie' ? SupabaseService.getMovies() : SupabaseService.getSeries();
   String get pageTitle => widget.contentType == 'movie' ? 'الأفلام' : 'المسلسلات';
   Future<List<Map<String, dynamic>>> _loadFiltered() async {
@@ -3730,3 +3742,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تنزيل ملفات APK بالبث المباشر إلى التخزين المؤقت لتقليل استهلاك الذاكرة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// مزامنة قوائم الباقات مع تحديث القنوات والمحتوى من الإعدادات أو السحب للتحديث.
