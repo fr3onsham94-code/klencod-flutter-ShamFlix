@@ -321,6 +321,16 @@ Future<void> openWatchRecord(BuildContext context, Map<String, dynamic> record) 
   final title = record['title']?.toString() ?? 'ShamFlix';
   final progressKey = record['progressKey']?.toString() ?? '$type-$id';
   try {
+    final networkPrefs = await SharedPreferences.getInstance();
+    if (networkPrefs.getBool('shamflix_wifi_only') == true) {
+      final connections = await Connectivity().checkConnectivity();
+      if (!connections.contains(ConnectivityResult.wifi)) {
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('التشغيل مسموح عبر Wi-Fi فقط.')),
+        );
+        return;
+      }
+    }
     var servers = <Map<String, dynamic>>[];
     if (id.isNotEmpty) {
       try {
