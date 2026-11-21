@@ -614,7 +614,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   void onChannelsChanged() {
-    if (mounted) setState(() => channels = SupabaseService.getChannels());
+    if (mounted) setState(() {
+      channels = SupabaseService.getChannels();
+    });
   }
 
   @override
