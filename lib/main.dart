@@ -2071,7 +2071,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
-        if (items.isEmpty) return const Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: Colors.white54)));
+        if (items.isEmpty) return Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: Colors.white54)));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index]; final poster = valueOf(record['poster_url']);
           return Card(color: panel, child: ListTile(
@@ -2210,7 +2210,7 @@ class _DetailsPageState extends State<DetailsPage> {
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'like'),
               icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? gold : Colors.white54), label: Text(appText('إعجاب', 'Like', 'Beğen'))),
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'dislike'),
-              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : Colors.white54), label: const Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
+              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : Colors.white54), label: Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
           ]),
         ]),
       ),
@@ -2235,7 +2235,7 @@ class _DetailsPageState extends State<DetailsPage> {
         if (items.isEmpty) return const SizedBox.shrink();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const SizedBox(height: 22),
-          const Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           SizedBox(height: 195, child: ListView.builder(
             reverse: true, scrollDirection: Axis.horizontal, itemCount: items.length,
@@ -2375,7 +2375,7 @@ class _DetailsPageState extends State<DetailsPage> {
                     shrinkWrap: true,
                     padding: const EdgeInsets.all(12),
                     children: [
-                      const Text(appText('اختر سيرفر التشغيل', 'Choose a Server', 'Sunucu Seçin'), textAlign: TextAlign.center,
+                      Text(appText('اختر سيرفر التشغيل', 'Choose a Server', 'Sunucu Seçin'), textAlign: TextAlign.center,
                         style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       ...servers.map((server) => ListTile(
@@ -2437,7 +2437,7 @@ class _DetailsPageState extends State<DetailsPage> {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.hasScheme) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(appText('رابط التشغيل غير صالح', 'Invalid playback link', 'Geçersiz oynatma bağlantısı'))),
+        SnackBar(content: Text(appText('رابط التشغيل غير صالح', 'Invalid playback link', 'Geçersiz oynatma bağlantısı'))),
       );
       return;
     }
@@ -2448,7 +2448,7 @@ class _DetailsPageState extends State<DetailsPage> {
         ));
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(appText('نوع الرابط غير مدعوم داخل التطبيق', 'This link type is not supported in the app', 'Bu bağlantı türü uygulamada desteklenmiyor'))),
+          SnackBar(content: Text(appText('نوع الرابط غير مدعوم داخل التطبيق', 'This link type is not supported in the app', 'Bu bağlantı türü uygulamada desteklenmiyor'))),
         );
       }
       return;
@@ -2612,7 +2612,7 @@ class _DetailsPageState extends State<DetailsPage> {
                       ],
                     ),
                     const SizedBox(height: 25),
-                    const Text(appText('القصة والوصف', 'Story & Description', 'Hikâye ve Açıklama'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(appText('القصة والوصف', 'Story & Description', 'Hikâye ve Açıklama'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
                     const SizedBox(height: 18),
@@ -2631,7 +2631,7 @@ class _DetailsPageState extends State<DetailsPage> {
                             legacyUrl: item['stream_url']?.toString(),
                           ),
                           icon: const Icon(Icons.play_arrow),
-                          label: const Text(appText('تشغيل الآن', 'Play Now', 'Şimdi Oynat'), style: TextStyle(fontWeight: FontWeight.bold)),
+                          label: Text(appText('تشغيل الآن', 'Play Now', 'Şimdi Oynat'), style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                     if (valueOf(item['stream_url']).isNotEmpty) ...[
@@ -2641,20 +2641,20 @@ class _DetailsPageState extends State<DetailsPage> {
                         child: TextButton.icon(
                           onPressed: () => copyStreamUrl(valueOf(item['stream_url'])),
                           icon: const Icon(Icons.copy, color: gold),
-                          label: const Text(appText('نسخ رابط التشغيل', 'Copy Playback Link', 'Oynatma Bağlantısını Kopyala'), style: TextStyle(color: gold)),
+                          label: Text(appText('نسخ رابط التشغيل', 'Copy Playback Link', 'Oynatma Bağlantısını Kopyala'), style: TextStyle(color: gold)),
                         ),
                       ),
                     ],
                     if (isSeries) ...[
                       const SizedBox(height: 22),
-                      const Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'), style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
+                      Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'), style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       if (seasonsLoading)
                         const Center(child: CircularProgressIndicator(color: gold))
                       else if (seasonsError != null)
                         Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
                       else if (seasons.isEmpty)
-                        const Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'), style: TextStyle(color: Colors.white54))
+                        Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'), style: TextStyle(color: Colors.white54))
                       else
                         ...seasons.map((season) => Card(
                               color: panel,
@@ -2745,7 +2745,7 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  const Text(appText('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', 'Choose the default player for movies, episodes and channels', 'Film, bölüm ve kanallar için varsayılan oynatıcıyı seçin'), style: TextStyle(color: Colors.white70)),
+                  Text(appText('اختر المشغل الافتراضي لجميع الأفلام والحلقات والقنوات', 'Choose the default player for movies, episodes and channels', 'Film, bölüm ve kanallar için varsayılan oynatıcıyı seçin'), style: TextStyle(color: Colors.white70)),
                   const SizedBox(height: 14),
                   _playerOption('internal', 'المشغل الداخلي', 'تشغيل داخل تطبيق ShamFlix', Icons.smart_display),
                   _playerOption('vlc', 'VLC', 'يتطلب تثبيت تطبيق VLC', Icons.play_circle),
@@ -3416,12 +3416,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                 child: ListView(
                   shrinkWrap: true,
                   children: [
-                    const ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
+                    ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
                       style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
-                      title: const Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
+                      title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
                     ),
@@ -3685,7 +3685,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                               child: TextButton.icon(
                                 onPressed: _toggleControlsLock,
                                 icon: const Icon(Icons.lock_open_rounded, color: gold),
-                                label: const Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
+                                label: Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
                                     style: TextStyle(color: Colors.white)),
                               ),
                             ),
@@ -4067,7 +4067,7 @@ class ShamFlixSearch extends SearchDelegate {
     var selectedCategory = categoryFilter;
     await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setDialogState) => AlertDialog(
-        backgroundColor: panel, title: const Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: gold)),
+        backgroundColor: panel, title: Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: gold)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
             value: selectedCategory, dropdownColor: panel,
@@ -4083,7 +4083,7 @@ class ShamFlixSearch extends SearchDelegate {
           TextButton(onPressed: () { categoryFilter = 'الكل'; yearFilter = ''; Navigator.pop(dialogContext); }, child: Text(appText('مسح التصفية', 'Clear Filters', 'Filtreleri Temizle'))),
           FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
             onPressed: () { categoryFilter = selectedCategory; yearFilter = yearController.text; Navigator.pop(dialogContext); },
-            child: const Text(appText('تطبيق', 'Apply', 'Uygula'))),
+            child: Text(appText('تطبيق', 'Apply', 'Uygula'))),
         ],
       ),
     ));
