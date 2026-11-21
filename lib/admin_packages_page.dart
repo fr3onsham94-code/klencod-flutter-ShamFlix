@@ -68,20 +68,20 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
               TextField(
                 controller: name,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                style: TextStyle(color: AppTheme.text),
+                decoration: InputDecoration(
                   labelText: 'اسم الباقة',
-                  labelStyle: TextStyle(color: Colors.white60),
+                  labelStyle: TextStyle(color: AppTheme.secondaryText),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: order,
                 keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                style: TextStyle(color: AppTheme.text),
+                decoration: InputDecoration(
                   labelText: 'ترتيب الباقة',
-                  labelStyle: TextStyle(color: Colors.white60),
+                  labelStyle: TextStyle(color: AppTheme.secondaryText),
                 ),
               ),
             ],
@@ -89,10 +89,10 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('إلغاء', style: TextStyle(color: Colors.white70)),
+              child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText)),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: packageGold, foregroundColor: Colors.black),
+              style: FilledButton.styleFrom(backgroundColor: packageGold, foregroundColor: AppTheme.text),
               onPressed: () {
                 if (name.text.trim().isEmpty) return;
                 Navigator.pop(dialogContext, {
@@ -134,10 +134,10 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
         backgroundColor: packagePanel,
         title: Text('حذف الباقة؟', style: TextStyle(color: packageGold)),
         content: Text('سيتم حذف باقة «${item['name']}» وإزالة ربطها بالمحتوى.',
-            style: const TextStyle(color: Colors.white70)),
+            style: TextStyle(color: AppTheme.secondaryText)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('إلغاء', style: TextStyle(color: Colors.white70))),
+              child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText))),
           TextButton(onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('حذف', style: TextStyle(color: Colors.redAccent))),
         ],
@@ -166,7 +166,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
     if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
       return Scaffold(
         backgroundColor: packageBg,
-        body: Center(child: Text('ليس لديك صلاحية الوصول', style: TextStyle(color: Colors.white))),
+        body: Center(child: Text('ليس لديك صلاحية الوصول', style: TextStyle(color: AppTheme.text))),
       );
     }
     return Directionality(
@@ -180,7 +180,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
         ),
         floatingActionButton: FloatingActionButton.extended(
           backgroundColor: packageGold,
-          foregroundColor: Colors.black,
+          foregroundColor: AppTheme.text,
           onPressed: () => _editPackage(),
           icon: const Icon(Icons.add),
           label: const Text('إضافة باقة'),
@@ -200,7 +200,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
                     ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                         Icon(Icons.inventory_2_outlined, color: packageGold, size: 48),
                         const SizedBox(height: 12),
-                        const Text('لا توجد باقات بعد', style: TextStyle(color: Colors.white70)),
+                        Text('لا توجد باقات بعد', style: TextStyle(color: AppTheme.secondaryText)),
                         const SizedBox(height: 12),
                         OutlinedButton.icon(
                           onPressed: () => _editPackage(),
@@ -222,9 +222,9 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
                                 child: Icon(Icons.folder_open, color: packageGold),
                               ),
                               title: Text(item['name']?.toString() ?? 'باقة',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
                               subtitle: Text('الترتيب: ${item['sort_order'] ?? 0}',
-                                  style: const TextStyle(color: Colors.white54)),
+                                  style: TextStyle(color: AppTheme.secondaryText)),
                               trailing: Wrap(children: [
                                 IconButton(onPressed: () => _editPackage(existing: item),
                                     icon: Icon(Icons.edit_outlined, color: packageGold)),
@@ -241,4 +241,4 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
 }
 
 
-// آخر تعديل: ربط ألوان الواجهات الفعلية بإعدادات لوحة الإدارة لتطبيق التغييرات فوراً | التاريخ: 2026-11-21 | الوقت: 22:00:00 بتوقيت تركيا
+// آخر تعديل: ربط ألوان النصوص والأزرار والواجهات بإعدادات لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 22:05:00 بتوقيت تركيا
