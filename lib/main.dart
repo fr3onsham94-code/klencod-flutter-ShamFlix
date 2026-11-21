@@ -1247,7 +1247,7 @@ class _DetailsPageState extends State<DetailsPage> {
           child: SafeArea(
             child: Center(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 280, maxHeight: size.height * 0.30),
+                constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
                 child: ListView(
                   shrinkWrap: true,
                   padding: const EdgeInsets.all(16),
@@ -1258,10 +1258,10 @@ class _DetailsPageState extends State<DetailsPage> {
                     ...servers.map((server) => ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
-                      leading: const Icon(Icons.dns, color: gold),
+                      contentPadding: EdgeInsets.zero,
                       title: Text(valueOf(server['server_name'], 'سيرفر'),
+                        textAlign: TextAlign.center,
                         style: const TextStyle(color: Colors.white, fontSize: 12)),
-                      trailing: const Icon(Icons.play_arrow, color: gold),
                       onTap: () => Navigator.pop(sheetContext, server),
                     )),
                   ],
@@ -1814,7 +1814,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         return SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 280, maxHeight: size.height * 0.30),
+              constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
               child: ListView(
                 shrinkWrap: true,
                 children: [
@@ -1852,7 +1852,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         return SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 280, maxHeight: size.height * 0.30),
+              constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
               child: ListView(
                 shrinkWrap: true,
                 children: [
@@ -2626,3 +2626,4 @@ class ShamFlixSearch extends SearchDelegate {
 // تصغير ارتفاع جميع قوائم المشغّل إلى 30%، وجعل قائمة السرعة بعرض صغير وإظهار السرعات فقط بتاريخ 21-11-2026.
 
 // توحيد عرض قوائم السيرفرات والصوت والترجمة ليكون مدمجاً مثل قائمة السرعة بتاريخ 21-11-2026.
+// توحيد عرض قوائم السيرفرات والصوت والترجمة مع قائمة السرعة (112 بكسل) بتاريخ 21-11-2026.
