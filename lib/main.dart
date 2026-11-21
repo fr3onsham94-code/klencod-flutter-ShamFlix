@@ -2603,6 +2603,147 @@ class _DetailsPageState extends State<DetailsPage> {
     );
   }
 
+
+  Widget _detailsHero(String title, String poster, String backdrop, {required bool isChannel}) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    const posterWidth = 104.0;
+    const posterHeight = 148.0;
+    final heroHeight = isLandscape ? 220.0 : 292.0;
+    final heroImage = backdrop.isNotEmpty ? backdrop : (isChannel ? poster : '');
+    return SizedBox(
+      width: double.infinity,
+      height: heroHeight,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (heroImage.isNotEmpty)
+            Image.network(heroImage, fit: isChannel ? BoxFit.contain : BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(color: panel))
+          else
+            const DecoratedBox(decoration: BoxDecoration(
+              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Color(0xFF24201A), Color(0xFF090909)]))),
+          const DecoratedBox(decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [Color(0x22000000), Color(0xF5090909)], stops: [0.05, 1.0]))),
+          Positioned(
+            right: 18, left: 18, bottom: 16,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              if (!isChannel)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(9),
+                  child: SizedBox(
+                    width: posterWidth, height: posterHeight,
+                    child: poster.isEmpty
+                      ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 42))
+                      : Image.network(poster, width: posterWidth, height: posterHeight, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 42))),
+                  ),
+                ),
+              if (!isChannel) const SizedBox(width: 13),
+              Expanded(child: Text(title, maxLines: isLandscape ? 2 : 3, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
+                  shadows: [Shadow(color: Colors.black, blurRadius: 12)]))),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailsInformation(Map<String, dynamic> item, {required bool isSeries, required bool isChannel,
+    required String description, required String director, required String cast}) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 16, runSpacing: 8, children: [
+        if (valueOf(item['release_year']).isNotEmpty) _detailTag(Icons.calendar_today, valueOf(item['release_year'])),
+        if (valueOf(item['category']).isNotEmpty) _detailTag(Icons.category, valueOf(item['category'])),
+        if (valueOf(item['rating']).isNotEmpty) _detailTag(Icons.star, valueOf(item['rating'])),
+        _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie,
+          isChannel ? appText('قناة', 'Channel', 'Kanal') : isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film')),
+      ]),
+      const SizedBox(height: 22),
+      Text(appText('القصة والوصف', 'Story & Description', 'Hikâye ve Açıklama'),
+        style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 10),
+      Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
+      if (director.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+      ],
+      if (cast.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+      ],
+      const SizedBox(height: 18),
+      _engagementPanel(),
+      _recommendationsSection(),
+      if (valueOf(item['stream_url']).isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Align(alignment: Alignment.center,
+          child: TextButton.icon(onPressed: () => copyStreamUrl(valueOf(item['stream_url'])),
+            icon: const Icon(Icons.copy, color: gold),
+            label: Text(appText('نسخ رابط التشغيل', 'Copy Playback Link', 'Oynatma Bağlantısını Kopyala'),
+              style: const TextStyle(color: gold)))),
+      ],
+    ]);
+  }
+
+  Widget _moviePlaySection(Map<String, dynamic> item, String title, {required bool isChannel}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: gold.withOpacity(0.28))),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(isChannel ? Icons.live_tv_rounded : Icons.play_circle_fill_rounded, color: gold, size: 42),
+        const SizedBox(height: 10),
+        Text(isChannel ? appText('تشغيل القناة', 'Play Channel', 'Kanalı Oynat') : appText('مشاهدة الفيلم', 'Watch Movie', 'Filmi İzle'),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 12),
+        SizedBox(width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 14)),
+            onPressed: () => _chooseAndPlay(contentType: isChannel ? 'channel' : 'movie',
+              contentId: item['id'].toString(), title: title, legacyUrl: item['stream_url']?.toString()),
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: Text(appText('تشغيل الآن', 'Play Now', 'Şimdi Oynat'), style: const TextStyle(fontWeight: FontWeight.bold)),
+          )),
+      ]),
+    );
+  }
+
+  Widget _seriesEpisodesSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'),
+          style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        if (seasonsLoading)
+          const Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: gold)))
+        else if (seasonsError != null)
+          Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
+        else if (seasons.isEmpty)
+          Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'),
+            style: const TextStyle(color: Colors.white54))
+        else
+          ...seasons.map((season) => Card(
+            color: const Color(0xFF202020),
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ExpansionTile(
+              iconColor: gold, collapsedIconColor: gold,
+              title: Text(valueOf(season['name'], 'الموسم ${season['season_number']}'),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              children: [_episodeList(season)],
+            ),
+          )),
+      ]),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -2614,198 +2755,53 @@ class _DetailsPageState extends State<DetailsPage> {
     final director = valueOf(item['director']);
     final cast = valueOf(item['cast']);
     final description = valueOf(item['description'], appText('لا يوجد وصف لهذا المحتوى حالياً.', 'No description is available for this title yet.', 'Bu içerik için henüz açıklama yok.'));
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+    Widget information = _detailsInformation(item, isSeries: isSeries, isChannel: isChannel,
+      description: description, director: director, cast: cast);
 
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: bg,
         appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
-          IconButton(tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة', onPressed: _toggleFavorite,
+          IconButton(tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
+            onPressed: _toggleFavorite,
             icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : Colors.white)),
         ]),
-        body: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Builder(
-                builder: (context) {
-                  final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-                  // مقاس البوستر ثابت في الاتجاهين ولا يتأثر بعرض الشاشة.
-                  const posterWidth = 104.0;
-                  const posterHeight = 148.0;
-                  final heroHeight = isLandscape ? 220.0 : 292.0;
-                  final heroImage = backdrop.isNotEmpty ? backdrop : (isChannel ? poster : '');
-                  return SizedBox(
-                    width: double.infinity,
-                    height: heroHeight,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (heroImage.isNotEmpty)
-                          Image.network(
-                            heroImage,
-                            fit: isChannel ? BoxFit.contain : BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(color: panel),
-                          )
-                        else
-                          const DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Color(0xFF24201A), Color(0xFF090909)],
-                              ),
-                            ),
-                          ),
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Color(0x22000000), Color(0xF5090909)],
-                              stops: [0.05, 1.0],
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: 18,
-                          left: 18,
-                          bottom: 16,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              if (!isChannel)
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(9),
-                                  child: SizedBox(
-                                    width: posterWidth,
-                                    height: posterHeight,
-                                    child: poster.isEmpty
-                                        ? Container(
-                                            color: panel,
-                                            child: const Icon(Icons.movie, color: gold, size: 42),
-                                          )
-                                        : Image.network(
-                                            poster,
-                                            width: posterWidth,
-                                            height: posterHeight,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => Container(
-                                              color: panel,
-                                              child: const Icon(Icons.movie, color: gold, size: 42),
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                              if (!isChannel) const SizedBox(width: 13),
-                              Expanded(
-                                child: Text(
-                                  title,
-                                  maxLines: isLandscape ? 2 : 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 25,
-                                    fontWeight: FontWeight.bold,
-                                    shadows: [Shadow(color: Colors.black, blurRadius: 12)],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 8,
-                      children: [
-                        if (valueOf(item['release_year']).isNotEmpty) _detailTag(Icons.calendar_today, valueOf(item['release_year'])),
-                        if (valueOf(item['category']).isNotEmpty) _detailTag(Icons.category, valueOf(item['category'])),
-                        if (valueOf(item['rating']).isNotEmpty) _detailTag(Icons.star, valueOf(item['rating'])),
-                        _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie, isChannel ? appText('قناة', 'Channel', 'Kanal') : isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film')),
-                      ],
-                    ),
-                    const SizedBox(height: 25),
-                    Text(appText('القصة والوصف', 'Story & Description', 'Hikâye ve Açıklama'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
-                    if (director.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director',
-                          style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                    ],
-                    if (cast.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast',
-                          style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
-                    ],
-                    const SizedBox(height: 18),
-                    _engagementPanel(),
-                    _recommendationsSection(),
-                    const SizedBox(height: 25),
-                    if (!isSeries)
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black, padding: const EdgeInsets.all(15)),
-                          onPressed: () => _chooseAndPlay(
-                            contentType: isChannel ? 'channel' : 'movie',
-                            contentId: item['id'].toString(),
-                            title: title,
-                            legacyUrl: item['stream_url']?.toString(),
-                          ),
-                          icon: const Icon(Icons.play_arrow),
-                          label: Text(appText('تشغيل الآن', 'Play Now', 'Şimdi Oynat'), style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    if (valueOf(item['stream_url']).isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.center,
-                        child: TextButton.icon(
-                          onPressed: () => copyStreamUrl(valueOf(item['stream_url'])),
-                          icon: const Icon(Icons.copy, color: gold),
-                          label: Text(appText('نسخ رابط التشغيل', 'Copy Playback Link', 'Oynatma Bağlantısını Kopyala'), style: TextStyle(color: gold)),
-                        ),
-                      ),
-                    ],
+        body: (!isChannel && isLandscape)
+          ? SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 5, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  _detailsHero(title, poster, backdrop, isChannel: false),
+                  const SizedBox(height: 14),
+                  information,
+                ])),
+                const SizedBox(width: 16),
+                Expanded(flex: 6, child: isSeries
+                  ? _seriesEpisodesSection()
+                  : _moviePlaySection(item, title, isChannel: false)),
+              ]),
+            )
+          : SingleChildScrollView(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _detailsHero(title, poster, backdrop, isChannel: isChannel),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    information,
                     if (isSeries) ...[
+                      const SizedBox(height: 24),
+                      _seriesEpisodesSection(),
+                    ] else ...[
                       const SizedBox(height: 22),
-                      Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'), style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
-                      if (seasonsLoading)
-                        const Center(child: CircularProgressIndicator(color: gold))
-                      else if (seasonsError != null)
-                        Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
-                      else if (seasons.isEmpty)
-                        Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'), style: TextStyle(color: Colors.white54))
-                      else
-                        ...seasons.map((season) => Card(
-                              color: panel,
-                              child: ExpansionTile(
-                                iconColor: gold,
-                                collapsedIconColor: gold,
-                                title: Text(valueOf(season['name'], 'الموسم ${season['season_number']}'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                children: [_episodeList(season)],
-                              ),
-                            )),
+                      _moviePlaySection(item, title, isChannel: isChannel),
                     ],
-                  ],
+                  ]),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ]),
+            ),
       ),
     );
   }
@@ -3885,12 +3881,19 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                           ),
                                         ),
                                         if (widget.servers.length > 1)
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              for (int index = 0; index < widget.servers.length; index++)
-                                                _serverButton(index),
-                                            ],
+                                          SizedBox(
+                                            width: 150,
+                                            height: 42,
+                                            child: SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  for (int index = 0; index < widget.servers.length; index++)
+                                                    _serverButton(index),
+                                                ],
+                                              ),
+                                            ),
                                           ),
                                       ],
                                     ),
@@ -4424,3 +4427,5 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026: تثبيت مقاس بوستر تفاصيل الأفلام والمسلسلات على 104×148 بكسل في الوضعين العمودي والأفقي، ومنع استخدام البوستر كخلفية مكبرة عند غياب صورة الخلفية.
 // ShamFlix - آخر تحديث: تصغير بوسترات الصفحة الرئيسية وقوائم الأفلام والمسلسلات مع الحفاظ على بوسترات صفحات التفاصيل.
+
+// ShamFlix - آخر تحديث: تصميم تفاصيل متجاوب للأفلام والمسلسلات، عرض الحلقات بجانب التفاصيل أفقياً، وتحسين شريط السيرفرات الدائري داخل المشغل.
