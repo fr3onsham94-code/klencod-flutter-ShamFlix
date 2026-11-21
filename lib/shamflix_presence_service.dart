@@ -30,6 +30,7 @@ class ShamFlixPresenceService {
     if (email == null || !email.contains('@')) return 'مستخدم مسجل';
     final parts = email.split('@');
     final local = parts.first;
+    if (local.isEmpty) return 'مستخدم مسجل';
     final masked = local.length <= 2 ? '${local[0]}*' : '${local[0]}***${local[local.length - 1]}';
     return '$masked@${parts.last}';
   }
@@ -63,3 +64,6 @@ class ShamFlixPresenceService {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إخفاء البريد الكامل في حالة الحضور العامة لحماية خصوصية الحسابات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// معالجة البريد غير المكتمل قبل إخفائه.
