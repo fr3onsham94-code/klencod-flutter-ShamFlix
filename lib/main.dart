@@ -2314,15 +2314,6 @@ class _DetailsPageState extends State<DetailsPage> {
     }
   }
 
-  Future<void> copyStreamUrl(String url) async {
-    if (url.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: url));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم نسخ رابط التشغيل')),
-    );
-  }
-
   Future<void> _chooseAndPlay({
     required String contentType,
     required String contentId,
@@ -2677,14 +2668,6 @@ class _DetailsPageState extends State<DetailsPage> {
       const SizedBox(height: 18),
       _engagementPanel(),
       _recommendationsSection(),
-      if (valueOf(item['stream_url']).isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Align(alignment: Alignment.center,
-          child: TextButton.icon(onPressed: () => copyStreamUrl(valueOf(item['stream_url'])),
-            icon: const Icon(Icons.copy, color: gold),
-            label: Text(appText('نسخ رابط التشغيل', 'Copy Playback Link', 'Oynatma Bağlantısını Kopyala'),
-              style: const TextStyle(color: gold)))),
-      ],
     ]);
   }
 
@@ -4429,3 +4412,5 @@ class ShamFlixSearch extends SearchDelegate {
 // ShamFlix - آخر تحديث: تصغير بوسترات الصفحة الرئيسية وقوائم الأفلام والمسلسلات مع الحفاظ على بوسترات صفحات التفاصيل.
 
 // ShamFlix - آخر تحديث: تصميم تفاصيل متجاوب للأفلام والمسلسلات، عرض الحلقات بجانب التفاصيل أفقياً، وتحسين شريط السيرفرات الدائري داخل المشغل.
+
+// تم تحديث الملف: إزالة خيار نسخ روابط التشغيل من واجهات تفاصيل المحتوى.
