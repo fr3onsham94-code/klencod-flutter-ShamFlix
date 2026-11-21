@@ -1247,7 +1247,7 @@ class _DetailsPageState extends State<DetailsPage> {
           child: SafeArea(
             child: Center(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.30),
+                constraints: BoxConstraints(maxWidth: 280, maxHeight: size.height * 0.30),
                 child: ListView(
                   shrinkWrap: true,
                   padding: const EdgeInsets.all(16),
@@ -1814,7 +1814,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         return SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.30),
+              constraints: BoxConstraints(maxWidth: 280, maxHeight: size.height * 0.30),
               child: ListView(
                 shrinkWrap: true,
                 children: [
@@ -1852,7 +1852,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         return SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.30),
+              constraints: BoxConstraints(maxWidth: 280, maxHeight: size.height * 0.30),
               child: ListView(
                 shrinkWrap: true,
                 children: [
@@ -2624,3 +2624,5 @@ class ShamFlixSearch extends SearchDelegate {
 // توحيد حدود ارتفاع وعرض قوائم السرعة والصوت والترجمة والسيرفرات لتناسب الوضعين العمودي والأفقي بتاريخ 21-11-2026.
 
 // تصغير ارتفاع جميع قوائم المشغّل إلى 30%، وجعل قائمة السرعة بعرض صغير وإظهار السرعات فقط بتاريخ 21-11-2026.
+
+// توحيد عرض قوائم السيرفرات والصوت والترجمة ليكون مدمجاً مثل قائمة السرعة بتاريخ 21-11-2026.
