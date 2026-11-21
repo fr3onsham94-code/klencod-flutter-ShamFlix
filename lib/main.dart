@@ -2294,7 +2294,7 @@ class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
       }
       if (compareVersions(latest, info.version) <= 0) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('أنت تستخدم أحدث إصدار من ShamFlix'))); return; }
       final uri = Uri.tryParse(apkUrl);
-      if (uri == null || !uri.hasScheme || (uri.scheme != 'https' && uri.scheme != 'http')) throw Exception('رابط ملف التحديث غير صالح');
+      if (uri == null || uri.scheme != 'https') throw Exception('رابط ملف التحديث يجب أن يكون آمناً ويبدأ بـ HTTPS');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('يتوفر تحديث $latest، جارٍ تنزيله')));
       final directory = await getTemporaryDirectory();
       final apk = File('${directory.path}/ShamFlix-update.apk');
@@ -3823,3 +3823,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // الحفاظ على السيرفر المحدد عند فتح المشغل المضمن بوضع ملء الشاشة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// قصر روابط تثبيت التحديثات على HTTPS لحماية ملف APK من التلاعب أثناء التنزيل.
