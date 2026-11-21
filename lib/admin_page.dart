@@ -826,6 +826,26 @@ class _AdminPageState extends State<AdminPage> {
                         onChanged: (value) => setDialogState(() => isLive = value),
                       ),
                     ],
+                    if (!isSeries) ...[
+                      const SizedBox(height: 6),
+                      const Align(alignment: Alignment.centerRight, child: Text('إضافة القناة إلى الباقات', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                      if (packageOptions.isEmpty)
+                        const Padding(padding: EdgeInsets.all(8), child: Text('أنشئ باقة أولاً من زر إدارة باقات القنوات', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                      ...packageOptions.map((package) => CheckboxListTile(
+                        dense: true, value: selectedPackageIds.contains(package['id'].toString()), activeColor: adminGold,
+                        title: Text(package['name']?.toString() ?? '', style: const TextStyle(color: Colors.white)),
+                        onChanged: (checked) => setDialogState(() {
+                          final packageId = package['id'].toString();
+                          if (checked == true) { selectedPackageIds.add(packageId); } else { selectedPackageIds.remove(packageId); }
+                        }),
+                      )),
+                      if (existing?['id'] != null)
+                        OutlinedButton.icon(
+                          onPressed: () => _managePlaybackServers(type: 'channel', contentId: existing!['id'].toString(), legacyUrl: streamController.text.trim()),
+                          icon: const Icon(Icons.dns_outlined), label: const Text('إدارة سيرفرات التشغيل'),
+                          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                        ),
+                    ],
                     SwitchListTile(
                       value: published,
                       activeColor: adminGold,
@@ -3638,3 +3658,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // نماذج المسلسلات والقنوات تدعم ربط عدة باقات وبيانات تفاصيل إضافية وإدارة سيرفر القناة من صفحة الإضافة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تفعيل اختيار الباقات المتعددة للقنوات التلفزيونية داخل نموذج الإضافة والتعديل.
