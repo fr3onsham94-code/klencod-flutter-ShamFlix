@@ -19,7 +19,7 @@ class ShamFlixPresenceService {
     }
     final channel = Supabase.instance.client.channel('shamflix:online-users');
     _channel = channel;
-    channel.subscribe((status, error) async {
+    channel.subscribe((status, [error]) async {
       if (status == RealtimeSubscribeStatus.subscribed) {
         await refreshIdentity();
       }
@@ -69,3 +69,6 @@ class ShamFlixPresenceService {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // عدم بث معرفات الحسابات إلى قناة الحضور العامة؛ يكتفى باسم عرض مخفي جزئياً.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توافق توقيع متابعة Realtime مع إصدارات Supabase Flutter التي تجعل كائن الخطأ اختيارياً.
