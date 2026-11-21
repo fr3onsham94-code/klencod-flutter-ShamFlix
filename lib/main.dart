@@ -1743,27 +1743,37 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final selected = await showModalBottomSheet<double>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF171717),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
         return SafeArea(
           child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                children: [
-                  for (final speed in _playbackSpeeds)
-                    ListTile(
-                      dense: true,
-                      visualDensity: const VisualDensity(vertical: -3),
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('${speed}x', textAlign: TextAlign.center,
-                        style: TextStyle(color: player.state.rate == speed ? gold : Colors.white, fontSize: 13)),
-                      onTap: () => Navigator.pop(sheetContext, speed),
-                    ),
-                ],
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  children: [
+                    for (final speed in _playbackSpeeds)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -3),
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${speed}x', textAlign: TextAlign.center,
+                          style: TextStyle(color: player.state.rate == speed ? gold : Colors.white, fontSize: 13)),
+                        onTap: () => Navigator.pop(sheetContext, speed),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1810,27 +1820,37 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final selected = await showModalBottomSheet<AudioTrack>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF171717),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
         return SafeArea(
           child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  const ListTile(title: Text('مسار الصوت', textAlign: TextAlign.center,
-                    style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
-                  for (int index = 0; index < tracks.length; index++)
-                    ListTile(
-                      dense: true,
-                      visualDensity: const VisualDensity(vertical: -2),
-                      title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white, fontSize: 12)),
-                      onTap: () => Navigator.pop(sheetContext, tracks[index]),
-                    ),
-                ],
+              constraints: BoxConstraints(maxWidth: 220, maxHeight: size.height * 0.30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    const ListTile(title: Text('مسار الصوت', textAlign: TextAlign.center,
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                    for (int index = 0; index < tracks.length; index++)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        onTap: () => Navigator.pop(sheetContext, tracks[index]),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1848,34 +1868,44 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final selected = await showModalBottomSheet<SubtitleTrack>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF171717),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
         return SafeArea(
           child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  const ListTile(title: Text('الترجمة', textAlign: TextAlign.center,
-                    style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
-                  ListTile(
-                    dense: true,
-                    visualDensity: const VisualDensity(vertical: -2),
-                    title: const Text('إيقاف الترجمة', textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontSize: 12)),
-                    onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
-                  ),
-                  for (int index = 0; index < tracks.length; index++)
+              constraints: BoxConstraints(maxWidth: 220, maxHeight: size.height * 0.30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xF2171717),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    const ListTile(title: Text('الترجمة', textAlign: TextAlign.center,
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
-                      title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white, fontSize: 12)),
-                      onTap: () => Navigator.pop(sheetContext, tracks[index]),
+                      title: const Text('إيقاف الترجمة', textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
                     ),
-                ],
+                    for (int index = 0; index < tracks.length; index++)
+                      ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        onTap: () => Navigator.pop(sheetContext, tracks[index]),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -2630,3 +2660,4 @@ class ShamFlixSearch extends SearchDelegate {
 // توحيد عرض قوائم السيرفرات والصوت والترجمة ليكون مدمجاً مثل قائمة السرعة بتاريخ 21-11-2026.
 // توحيد عرض قوائم السيرفرات والصوت والترجمة مع قائمة السرعة (112 بكسل) بتاريخ 21-11-2026.
 // اعتماد مصدر واحد لقيم سرعات التشغيل في الوضعين العمودي والأفقي بتاريخ 21-11-2026.
+// تصغير قوائم السرعة والصوت والترجمة لتلتف حول الخيارات بدل تمددها على كامل الشاشة بتاريخ 21-11-2026.
