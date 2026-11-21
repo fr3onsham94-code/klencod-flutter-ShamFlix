@@ -234,7 +234,14 @@ Future<void> openWatchRecord(BuildContext context, Map<String, dynamic> record) 
   final title = record['title']?.toString() ?? 'ShamFlix';
   final progressKey = record['progressKey']?.toString() ?? '$type-$id';
   try {
-    final servers = id.isEmpty ? <Map<String, dynamic>>[] : await SupabaseService.getPlaybackServers(contentType: type, contentId: id);
+    var servers = <Map<String, dynamic>>[];
+    if (id.isNotEmpty) {
+      try {
+        servers = await SupabaseService.getPlaybackServers(contentType: type, contentId: id);
+      } catch (_) {
+        // إذا تعذر جلب السيرفرات نجرّب رابط التشغيل المحفوظ مع المحتوى.
+      }
+    }
     final serverUrl = servers.isNotEmpty ? valueOf(servers.first['stream_url']) : '';
     final url = serverUrl.isNotEmpty ? serverUrl : valueOf(item['stream_url']);
     final uri = Uri.tryParse(url);
@@ -3312,3 +3319,5 @@ class ShamFlixSearch extends SearchDelegate {
 // تحسين استكمال الروابط غير المباشرة ودعم التصفية دون كتابة اسم، بتاريخ 21-11-2026.
 
 // ضمان استكمال موضع المشاهدة من المشغل الداخلي وتصحيح تمييز نتائج المسلسلات في البحث بتاريخ 21-11-2026.
+
+// إضافة مسار احتياطي لاستكمال المشاهدة عند تعذر جلب قائمة السيرفرات بتاريخ 21-11-2026.
