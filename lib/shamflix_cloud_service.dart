@@ -10,39 +10,6 @@ class ShamFlixCloudService {
 
   static bool get isAvailable => _userId != null;
 
-  static Future<List<Map<String, dynamic>>> syncProfiles(
-    List<Map<String, dynamic>> localProfiles,
-  ) async {
-    final userId = _userId;
-    if (userId == null) return localProfiles;
-    final remote = await _client
-        .from('user_profiles')
-        .select('profile_id,name,updated_at')
-        .eq('user_id', userId);
-    final merged = <String, Map<String, dynamic>>{};
-    for (final row in remote) {
-      merged[row['profile_id'].toString()] = {
-        'id': row['profile_id'].toString(),
-        'name': row['name'].toString(),
-      };
-    }
-    for (final row in localProfiles) {
-      final id = row['id']?.toString() ?? '';
-      if (id.isNotEmpty) merged[id] = Map<String, dynamic>.from(row);
-    }
-    final result = merged.values.toList();
-    await _client.from('user_profiles').upsert(
-      result.map((profile) => {
-        'user_id': userId,
-        'profile_id': profile['id'],
-        'name': profile['name'] ?? 'ملف شخصي',
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).toList(),
-      onConflict: 'user_id,profile_id',
-    );
-    return result;
-  }
-
   static String _key(Map<String, dynamic> item) =>
       '${item['contentType'] ?? ''}:${item['contentId'] ?? ''}';
 
@@ -50,15 +17,6 @@ class ShamFlixCloudService {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return DateTime.tryParse(value?.toString() ?? '')?.millisecondsSinceEpoch ?? 0;
-  }
-
-  static Future<void> removeProfile(String profileId) async {
-    final userId = _userId;
-    if (userId == null) return;
-    await _client.from('user_library').delete()
-        .eq('user_id', userId).eq('profile_id', profileId);
-    await _client.from('user_profiles').delete()
-        .eq('user_id', userId).eq('profile_id', profileId);
   }
 
   static Future<List<Map<String, dynamic>>> syncCollection({
@@ -243,4 +201,6 @@ class ShamFlixCloudService {
 }
 
 // ShamFlix - آخر تحديث: 21-11-2026
-// خدمة مزامنة الملفات الشخصية والمفضلة وسجل المشاهدة والتقييمات والإشعارات مع Supabase.
+// خدمة مزامنة المفضلة وسجل المشاهدة والتقييمات والإشعارات مع Supabase.
+// ShamFlix - آخر تحديث: 21-11-2026
+// حذف مزامنة وإدارة الملفات الشخصية من التطبيق والاكتفاء بمكتبة المستخدم الرئيسية.

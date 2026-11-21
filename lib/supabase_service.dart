@@ -138,6 +138,33 @@ class SupabaseService {
   static Future<List<Map<String, dynamic>>> getChannels() {
     return _getData('channels');
   }
+
+  static Future<List<Map<String, dynamic>>> getPackages(String contentType) {
+    return _getRows('content_packages', {
+      'content_type': 'eq.$contentType',
+      'order': 'sort_order.asc,name.asc',
+    });
+  }
+
+  static Future<List<String>> getPackageContentIds(String packageId) async {
+    final rows = await _getRows('content_package_items', {
+      'package_id': 'eq.$packageId',
+    });
+    return rows.map((row) => row['content_id'].toString()).toList();
+  }
+
+  static Future<List<String>> getContentPackageIds({
+    required String contentType,
+    required String contentId,
+  }) async {
+    final rows = await _getRows('content_package_items', {
+      'content_type': 'eq.$contentType',
+      'content_id': 'eq.$contentId',
+    });
+    return rows.map((row) => row['package_id'].toString()).toList();
+  }
 }
 // ShamFlix - آخر تحديث: 21-11-2026
 // تمت إضافة جلب المواسم والحلقات وسيرفرات التشغيل من Supabase.
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة جلب الباقات ومحتوياتها وربط المحتوى بأكثر من باقة.

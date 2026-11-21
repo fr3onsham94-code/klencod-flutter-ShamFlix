@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin_auth_service.dart';
 import 'supabase_service.dart';
@@ -26,6 +27,8 @@ class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> series = [];
   List<Map<String, dynamic>> channels = [];
   List<Map<String, dynamic>> users = [];
+  List<Map<String, dynamic>> onlineUsers = [];
+  RealtimeChannel? onlineChannel;
 
   bool catalogLoading = false;
   String? catalogError;
@@ -38,6 +41,11 @@ class _AdminPageState extends State<AdminPage> {
   bool badgeSettingLoading = true;
   bool badgeSettingSaving = false;
   String? badgeSettingError;
+  final TextEditingController inviteLinkController = TextEditingController();
+  final TextEditingController updateVersionController = TextEditingController(text: '1.0.0');
+  final TextEditingController apkUrlController = TextEditingController();
+  bool appConfigLoading = true;
+  bool appConfigSaving = false;
 
   String currentSection = 'home';
   String userCategory = 'normal';
@@ -77,11 +85,17 @@ class _AdminPageState extends State<AdminPage> {
   void initState() {
     super.initState();
     loadCategoryBadgeSetting();
+    loadAppConfig();
   }
 
   @override
   void dispose() {
     searchController.dispose();
+    inviteLinkController.dispose();
+    updateVersionController.dispose();
+    apkUrlController.dispose();
+    final channel = onlineChannel;
+    if (channel != null) AuthService.client.removeChannel(channel);
     super.dispose();
   }
 
@@ -142,6 +156,42 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> loadAppConfig() async {
+    try {
+      final response = await http.get(appSettingsUrl.replace(queryParameters: {
+        'select': 'setting_key,setting_value',
+        'setting_key': 'in.(app_invite_link,app_update)',
+      }), headers: headers);
+      if (response.statusCode != 200) throw Exception(_readError(response));
+      final rows = jsonDecode(response.body) as List;
+      for (final row in rows) {
+        if (row['setting_key'] == 'app_invite_link') inviteLinkController.text = row['setting_value']?.toString() ?? '';
+        if (row['setting_key'] == 'app_update' && row['setting_value'] is Map) {
+          final value = row['setting_value'] as Map;
+          updateVersionController.text = value['version']?.toString() ?? '1.0.0';
+          apkUrlController.text = value['apk_url']?.toString() ?? '';
+        }
+      }
+    } catch (e) {
+      if (mounted) showMessage('تعذر تحميل إعدادات الدعوة والتحديث: $e', isError: true);
+    } finally { if (mounted) setState(() => appConfigLoading = false); }
+  }
+
+  Future<void> saveAppConfig() async {
+    if (appConfigSaving) return;
+    setState(() => appConfigSaving = true);
+    try {
+      final response = await http.post(appSettingsUrl.replace(queryParameters: {'on_conflict': 'setting_key'}),
+        headers: {...headers, 'Prefer': 'resolution=merge-duplicates,return=minimal'},
+        body: jsonEncode([
+          {'setting_key': 'app_invite_link', 'setting_value': inviteLinkController.text.trim()},
+          {'setting_key': 'app_update', 'setting_value': {'version': updateVersionController.text.trim(), 'apk_url': apkUrlController.text.trim()}},
+        ]));
+      if (response.statusCode != 200 && response.statusCode != 201 && response.statusCode != 204) throw Exception(_readError(response));
+      showMessage('تم حفظ رابط الدعوة وبيانات التحديث');
+    } catch (e) { showMessage(e.toString(), isError: true); }
+    finally { if (mounted) setState(() => appConfigSaving = false); }
+  }
   Future<void> saveCategoryBadgeSetting(bool enabled) async {
     if (badgeSettingSaving) return;
 
@@ -188,7 +238,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Widget settingsSection() {
-    if (badgeSettingLoading) {
+    if (badgeSettingLoading || appConfigLoading) {
       return const Center(
         child: CircularProgressIndicator(color: adminGold),
       );
@@ -232,6 +282,28 @@ class _AdminPageState extends State<AdminPage> {
               child: CircularProgressIndicator(color: adminGold),
             ),
           ),
+        Card(
+          color: adminPanel,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('رابط دعوة صديق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              adminField(inviteLinkController, 'رابط التطبيق المباشر'),
+              const SizedBox(height: 12),
+              const Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              adminField(updateVersionController, 'رقم الإصدار الجديد'),
+              adminField(apkUrlController, 'رابط ملف APK المباشر'),
+              const Text('ارفع ملف APK على رابط HTTPS مباشر، ثم ضع رقم الإصدار والرابط هنا ليتمكن الزائر من البحث عن التحديث وتثبيته.', style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5)),
+              const SizedBox(height: 12),
+              FilledButton.icon(onPressed: appConfigSaving ? null : saveAppConfig,
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
+                icon: appConfigSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save),
+                label: const Text('حفظ إعدادات التطبيق')),
+            ]),
+          ),
+        ),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Text(
@@ -243,6 +315,57 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
+  void _startOnlineUsers() {
+    if (onlineChannel != null) { _syncOnlineUsers(onlineChannel!); return; }
+    final channel = AuthService.client.channel('shamflix:online-users');
+    onlineChannel = channel;
+    channel.onPresenceSync((_) => _syncOnlineUsers(channel));
+    channel.subscribe((status, [error]) {
+      if (status == RealtimeSubscribeStatus.subscribed) _syncOnlineUsers(channel);
+    });
+  }
+
+  void _syncOnlineUsers(RealtimeChannel channel) {
+    final result = <Map<String, dynamic>>[];
+    for (final dynamic state in channel.presenceState()) {
+      for (final dynamic presence in state.presences) {
+        final dynamic payload = presence.payload;
+        if (payload is Map) result.add(Map<String, dynamic>.from(payload));
+      }
+    }
+    final unique = <String, Map<String, dynamic>>{};
+    for (final user in result) {
+      final key = user['session_id']?.toString() ?? user['user_id']?.toString() ?? user['display_name']?.toString() ?? unique.length.toString();
+      unique[key] = user;
+    }
+    if (mounted) setState(() => onlineUsers = unique.values.toList());
+  }
+
+  Widget onlineUsersSection() {
+    final guests = onlineUsers.where((user) => user['account_type'] == 'guest').length;
+    final members = onlineUsers.length - guests;
+    return Column(children: [
+      Padding(padding: const EdgeInsets.all(14), child: Row(children: [
+        Expanded(child: _statusChip('المتصلون: ${onlineUsers.length}', adminGold)),
+        const SizedBox(width: 8), Expanded(child: _statusChip('زوار: $guests', Colors.lightBlue)),
+        const SizedBox(width: 8), Expanded(child: _statusChip('حسابات: $members', Colors.green)),
+      ])),
+      Expanded(child: onlineUsers.isEmpty
+        ? const Center(child: Text('لا يوجد متصلون حالياً', style: TextStyle(color: Colors.white54)))
+        : ListView.builder(itemCount: onlineUsers.length, itemBuilder: (context, index) {
+            final user = onlineUsers[index];
+            final guest = user['account_type'] == 'guest';
+            final admin = user['account_type'] == 'admin';
+            return Card(color: adminPanel, margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              child: ListTile(
+                leading: CircleAvatar(backgroundColor: adminGold.withOpacity(0.15), child: Icon(guest ? Icons.person_outline : admin ? Icons.admin_panel_settings : Icons.person, color: adminGold)),
+                title: Text(user['display_name']?.toString() ?? (guest ? 'زائر بدون حساب' : 'مستخدم'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text([guest ? 'زائر' : admin ? 'مدير / أدمن' : 'حساب مسجل', user['online_at']?.toString() ?? ''].where((v) => v.isNotEmpty).join(' • '), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                trailing: const Icon(Icons.circle, color: Colors.green, size: 11),
+              ));
+          })),
+    ]);
+  }
   // =========================
   // التنقل بين الأقسام
   // =========================
@@ -262,6 +385,8 @@ class _AdminPageState extends State<AdminPage> {
       loadUsers();
     } else if (section == 'settings') {
       loadCategoryBadgeSetting();
+    } else if (section == 'online') {
+      _startOnlineUsers();
     }
   }
 
@@ -292,7 +417,8 @@ class _AdminPageState extends State<AdminPage> {
         currentSection == 'series' ||
         currentSection == 'channels' ||
         currentSection == 'users' ||
-        currentSection == 'settings') {
+        currentSection == 'settings' ||
+        currentSection == 'online') {
       setState(() {
         currentSection = 'home';
         searchQuery = '';
@@ -313,6 +439,8 @@ class _AdminPageState extends State<AdminPage> {
         return 'إدارة المستخدمين';
       case 'settings':
         return 'إعدادات التطبيق';
+      case 'online':
+        return 'المتصلون الآن';
       case 'userList':
         switch (userCategory) {
           case 'admins':
@@ -376,37 +504,31 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> saveMovie(
+  Future<String?> saveMovie(
     Map<String, dynamic> movie, {
     String? id,
   }) async {
     final isEditing = id != null;
-
-    final uri = isEditing
-        ? moviesUrl.replace(
-            queryParameters: {'id': 'eq.$id'},
-          )
-        : moviesUrl;
-
+    final uri = isEditing ? moviesUrl.replace(queryParameters: {'id': 'eq.$id'}) : moviesUrl;
     final response = isEditing
-        ? await http.patch(
-            uri,
-            headers: headers,
-            body: jsonEncode(movie),
-          )
-        : await http.post(
-            uri,
-            headers: headers,
-            body: jsonEncode(movie),
-          );
-
-    if (response.statusCode != 200 &&
-        response.statusCode != 201 &&
-        response.statusCode != 204) {
+        ? await http.patch(uri, headers: headers, body: jsonEncode(movie))
+        : await http.post(uri, headers: headers, body: jsonEncode(movie));
+    if (response.statusCode != 200 && response.statusCode != 201 && response.statusCode != 204) {
       throw Exception(_readError(response));
     }
-
+    String? savedId = id;
+    if (savedId == null && response.body.trim().isNotEmpty) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is List && decoded.isNotEmpty) savedId = decoded.first['id']?.toString();
+      if (decoded is Map) savedId = decoded['id']?.toString();
+    }
     await loadMovies();
+    if (savedId == null) {
+      final title = movie['title']?.toString();
+      final matches = movies.where((row) => row['title']?.toString() == title).toList();
+      if (matches.isNotEmpty) savedId = matches.first['id']?.toString();
+    }
+    return savedId;
   }
 
   Future<void> deleteMovie(String id) async {
@@ -501,24 +623,30 @@ class _AdminPageState extends State<AdminPage> {
     if (mounted) setState(() => catalogLoading = false);
   }
 
-  Future<void> saveCatalogItem(
+  Future<String?> saveCatalogItem(
     String section,
     Map<String, dynamic> item, {
     String? id,
   }) async {
     final table = section == 'series' ? 'series' : 'channels';
-    final uri = id == null
-        ? catalogUrl(table)
-        : catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'});
+    final uri = id == null ? catalogUrl(table) : catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'});
     final response = id == null
         ? await http.post(uri, headers: headers, body: jsonEncode(item))
         : await http.patch(uri, headers: headers, body: jsonEncode(item));
-    if (response.statusCode != 200 &&
-        response.statusCode != 201 &&
-        response.statusCode != 204) {
-      throw Exception(_readError(response));
+    if (response.statusCode != 200 && response.statusCode != 201 && response.statusCode != 204) throw Exception(_readError(response));
+    String? savedId = id;
+    if (savedId == null && response.body.trim().isNotEmpty) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is List && decoded.isNotEmpty) savedId = decoded.first['id']?.toString();
+      if (decoded is Map) savedId = decoded['id']?.toString();
     }
     await loadCatalog(section);
+    if (savedId == null) {
+      final key = section == 'series' ? 'title' : 'name';
+      final matches = (section == 'series' ? series : channels).where((row) => row[key]?.toString() == item[key]?.toString()).toList();
+      if (matches.isNotEmpty) savedId = matches.first['id']?.toString();
+    }
+    return savedId;
   }
 
     Future<void> deleteCatalogItem(String section, String id) async {
@@ -601,6 +729,13 @@ class _AdminPageState extends State<AdminPage> {
     );
     bool published = existing?['is_published'] == true;
     bool isLive = existing?['is_live'] != false;
+    final backdropController = TextEditingController(text: existing?['backdrop_url']?.toString() ?? '');
+    final directorController = TextEditingController(text: existing?['director']?.toString() ?? '');
+    final castController = TextEditingController(text: existing?['cast_names']?.toString() ?? '');
+    final packageType = isSeries ? 'series' : 'channel';
+    final packageOptions = await _loadPackages(packageType);
+    final selectedPackageIds = <String>{};
+    if (existing?['id'] != null) selectedPackageIds.addAll(await _loadSelectedPackages(packageType, existing!['id'].toString()));
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
 
@@ -612,12 +747,15 @@ class _AdminPageState extends State<AdminPage> {
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             backgroundColor: adminPanel,
+
+insetPadding: const EdgeInsets.all(8),
             title: Text(
               '${existing == null ? 'إضافة' : 'تعديل'} ${isSeries ? 'مسلسل' : 'قناة'}',
               style: const TextStyle(color: adminGold),
             ),
             content: SizedBox(
-              width: 500,
+              width: MediaQuery.of(context).size.width > 800 ? 760 : MediaQuery.of(context).size.width * 0.94,
+              height: MediaQuery.of(context).size.height * 0.78,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -649,6 +787,9 @@ class _AdminPageState extends State<AdminPage> {
                                       final fetchedTitle = data['title']?.toString() ?? '';
                                       if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                       posterController.text = data['poster_url']?.toString() ?? '';
+                                      backdropController.text = data['backdrop_url']?.toString() ?? '';
+                                      directorController.text = data['director']?.toString() ?? '';
+                                      castController.text = (data['cast'] as List? ?? []).map((person) => person['name']?.toString() ?? '').where((name) => name.isNotEmpty).join('، ');
                                       descriptionController.text = data['description']?.toString() ?? '';
                                       categoryController.text = data['category']?.toString() ?? '';
                                       yearController.text = data['release_year']?.toString() ?? '';
@@ -719,8 +860,36 @@ class _AdminPageState extends State<AdminPage> {
                       ],
                       adminField(posterController, 'رابط صورة البوستر'),
                       adminField(descriptionController, 'وصف المسلسل', maxLines: 4),
-                      adminField(categoryController, 'التصنيف'),
+                      adminField(categoryController, 'النوع / التصنيف'),
+                      adminField(backdropController, 'رابط صورة الخلفية العريضة'),
+                      adminField(directorController, 'المخرج'),
+                      adminField(castController, 'الممثلون', maxLines: 2),
                       adminField(yearController, 'سنة الإصدار', keyboard: TextInputType.number),
+                      const SizedBox(height: 6),
+                      Align(alignment: Alignment.centerRight, child: Text('إضافة المحتوى إلى الباقات', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                      if (packageOptions.isEmpty)
+                        const Padding(padding: EdgeInsets.all(8), child: Text('أنشئ باقة أولاً من زر إدارة الباقات', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                      ...packageOptions.map((package) => CheckboxListTile(
+                        dense: true, value: selectedPackageIds.contains(package['id'].toString()), activeColor: adminGold,
+                        title: Text(package['name']?.toString() ?? '', style: const TextStyle(color: Colors.white)),
+                        onChanged: (checked) => setDialogState(() {
+                          final packageId = package['id'].toString();
+                          if (checked == true) { selectedPackageIds.add(packageId); } else { selectedPackageIds.remove(packageId); }
+                        }),
+                      )),
+                      if (isSeries && existing?['id'] != null)
+                        OutlinedButton.icon(
+                          onPressed: () => _openSeriesSeasons(existing!),
+                          icon: const Icon(Icons.video_library_outlined), label: const Text('إدارة المواسم والحلقات'),
+                          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                        ),
+                      if (!isSeries && existing?['id'] != null)
+                        OutlinedButton.icon(
+                          onPressed: () => _managePlaybackServers(type: 'channel', contentId: existing!['id'].toString(), legacyUrl: streamController.text.trim()),
+                          icon: const Icon(Icons.dns_outlined), label: const Text('إدارة سيرفرات التشغيل'),
+                          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                        ),
+                      
                       adminField(ratingController, 'التقييم', keyboard: const TextInputType.numberWithOptions(decimal: true)),
                     ] else ...[
                       adminField(posterController, 'رابط شعار القناة'),
@@ -732,6 +901,26 @@ class _AdminPageState extends State<AdminPage> {
                         title: const Text('قناة بث مباشر', style: TextStyle(color: Colors.white)),
                         onChanged: (value) => setDialogState(() => isLive = value),
                       ),
+                    ],
+                    if (!isSeries) ...[
+                      const SizedBox(height: 6),
+                      const Align(alignment: Alignment.centerRight, child: Text('إضافة القناة إلى الباقات', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                      if (packageOptions.isEmpty)
+                        const Padding(padding: EdgeInsets.all(8), child: Text('أنشئ باقة أولاً من زر إدارة باقات القنوات', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                      ...packageOptions.map((package) => CheckboxListTile(
+                        dense: true, value: selectedPackageIds.contains(package['id'].toString()), activeColor: adminGold,
+                        title: Text(package['name']?.toString() ?? '', style: const TextStyle(color: Colors.white)),
+                        onChanged: (checked) => setDialogState(() {
+                          final packageId = package['id'].toString();
+                          if (checked == true) { selectedPackageIds.add(packageId); } else { selectedPackageIds.remove(packageId); }
+                        }),
+                      )),
+                      if (existing?['id'] != null)
+                        OutlinedButton.icon(
+                          onPressed: () => _managePlaybackServers(type: 'channel', contentId: existing!['id'].toString(), legacyUrl: streamController.text.trim()),
+                          icon: const Icon(Icons.dns_outlined), label: const Text('إدارة سيرفرات التشغيل'),
+                          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                        ),
                     ],
                     SwitchListTile(
                       value: published,
@@ -768,6 +957,9 @@ class _AdminPageState extends State<AdminPage> {
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
                       'release_year': int.tryParse(yearController.text.trim()),
                       'rating': double.tryParse(ratingController.text.trim()),
+                      if (isSeries) 'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
+                      if (isSeries) 'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                      if (isSeries) 'cast_names': castController.text.trim().isEmpty ? null : castController.text.trim(),
                     });
                   } else {
                     data.addAll({
@@ -793,9 +985,14 @@ class _AdminPageState extends State<AdminPage> {
     ratingController.dispose();
     streamController.dispose();
     tmdbController.dispose();
+    backdropController.dispose(); directorController.dispose(); castController.dispose();
     if (result == null) return;
     try {
-      await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      final savedId = await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      if (savedId != null) {
+        await _savePackageAssignments(packageType, savedId, selectedPackageIds);
+        if (!isSeries && existing == null) await _managePlaybackServers(type: 'channel', contentId: savedId, legacyUrl: result['stream_url']?.toString());
+      }
       showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
     } catch (e) {
       showMessage(e.toString(), isError: true);
@@ -901,6 +1098,10 @@ class _AdminPageState extends State<AdminPage> {
     final isSeries = section == 'series';
     return Column(
       children: [
+        Align(alignment: Alignment.centerRight, child: Padding(padding: const EdgeInsets.fromLTRB(14, 4, 14, 4), child: OutlinedButton.icon(
+          onPressed: () => _manageContentPackages(isSeries ? 'series' : 'channel'), icon: const Icon(Icons.folder_open, size: 18),
+          label: Text(isSeries ? 'إدارة باقات المسلسلات' : 'إدارة باقات القنوات'),
+          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold))))),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
           child: list.isEmpty
@@ -987,6 +1188,75 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<List<Map<String, dynamic>>> _loadPackages(String type) {
+    return _extraLoad('content_packages', {'content_type': 'eq.' + type}, order: 'sort_order.asc,name.asc');
+  }
+
+  Future<Set<String>> _loadSelectedPackages(String type, String contentId) async {
+    final rows = await _extraLoad('content_package_items', {'content_type': 'eq.' + type, 'content_id': 'eq.' + contentId});
+    return rows.map((row) => row['package_id'].toString()).toSet();
+  }
+
+  Future<void> _savePackageAssignments(String type, String contentId, Set<String> selected) async {
+    final old = await _extraLoad('content_package_items', {'content_type': 'eq.' + type, 'content_id': 'eq.' + contentId});
+    for (final row in old) { await _extraDelete('content_package_items', row['id'].toString()); }
+    for (final packageId in selected) {
+      await _extraSave('content_package_items', {'package_id': packageId, 'content_type': type, 'content_id': contentId});
+    }
+  }
+
+  Future<void> _manageContentPackages(String type) async {
+    late Future<List<Map<String, dynamic>>> packagesFuture;
+    packagesFuture = _loadPackages(type);
+    final typeLabel = type == 'movie' ? 'الأفلام' : type == 'series' ? 'المسلسلات' : 'القنوات';
+    await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => Directionality(textDirection: TextDirection.rtl, child: AlertDialog(
+        backgroundColor: adminPanel, title: Text('باقات ' + typeLabel, style: const TextStyle(color: adminGold)),
+        content: SizedBox(width: 480, child: FutureBuilder<List<Map<String, dynamic>>>(future: packagesFuture, builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
+          if (snapshot.hasError) return Text(snapshot.error.toString(), style: const TextStyle(color: Colors.redAccent));
+          final packages = snapshot.data ?? [];
+          return SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (packages.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('لا توجد باقات بعد. أضف أول باقة للبدء.', style: TextStyle(color: Colors.white60))),
+            ...packages.map((item) => Card(color: adminBg, child: ListTile(
+              title: Text(item['name']?.toString() ?? '', style: const TextStyle(color: Colors.white)),
+              subtitle: Text('ترتيب العرض: ' + (item['sort_order']?.toString() ?? '0'), style: const TextStyle(color: Colors.white54)),
+              trailing: Wrap(children: [
+                IconButton(icon: const Icon(Icons.edit, color: adminGold), onPressed: () async {
+                  final controller = TextEditingController(text: item['name']?.toString() ?? '');
+                  final value = await showDialog<String>(context: dialogContext, builder: (ctx) => AlertDialog(backgroundColor: adminPanel,
+                    title: const Text('تعديل اسم الباقة', style: TextStyle(color: adminGold)),
+                    content: TextField(controller: controller, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اسم الباقة')),
+                    actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')), FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('حفظ'))]));
+                  if (value != null && value.isNotEmpty) { await _extraSave('content_packages', {'name': value}, id: item['id'].toString()); packagesFuture = _loadPackages(type); setDialogState(() {}); }
+                  controller.dispose();
+                }),
+                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () async {
+                  final yes = await showDialog<bool>(context: dialogContext, builder: (ctx) => AlertDialog(backgroundColor: adminPanel,
+                    title: const Text('حذف الباقة', style: TextStyle(color: adminGold)), content: const Text('سيتم إزالة الباقة من المحتوى المرتبط بها. هل تريد المتابعة؟', style: TextStyle(color: Colors.white)),
+                    actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')), TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف'))]));
+                  if (yes == true) { await _extraDelete('content_packages', item['id'].toString()); packagesFuture = _loadPackages(type); setDialogState(() {}); }
+                }),
+              ]),
+            ))),
+          ]));
+        })),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق', style: TextStyle(color: Colors.white70))),
+          FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black), icon: const Icon(Icons.add), label: const Text('إضافة باقة'),
+            onPressed: () async {
+              final controller = TextEditingController();
+              final value = await showDialog<String>(context: dialogContext, builder: (ctx) => AlertDialog(backgroundColor: adminPanel,
+                title: const Text('إضافة باقة جديدة', style: TextStyle(color: adminGold)),
+                content: TextField(controller: controller, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اسم الباقة')),
+                actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')), FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('إضافة'))]));
+              if (value != null && value.isNotEmpty) { await _extraSave('content_packages', {'name': value, 'content_type': type}); packagesFuture = _loadPackages(type); setDialogState(() {}); }
+              controller.dispose();
+            }),
+        ],
+      )),
+    ));
+  }
   Future<void> _editPlaybackServer({
     required String type,
     required String contentId,
@@ -1465,9 +1735,11 @@ class _AdminPageState extends State<AdminPage> {
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             backgroundColor: adminPanel,
+                insetPadding: const EdgeInsets.all(8),
             title: Text(existing == null ? 'إضافة حلقة' : 'تعديل الحلقة', style: const TextStyle(color: adminGold)),
             content: SizedBox(
-              width: 500,
+              width: MediaQuery.of(context).size.width > 800 ? 760 : MediaQuery.of(context).size.width * 0.94,
+              height: MediaQuery.of(context).size.height * 0.78,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1477,6 +1749,12 @@ class _AdminPageState extends State<AdminPage> {
                     adminField(description, 'وصف الحلقة', maxLines: 3),
                     adminField(poster, 'رابط صورة الحلقة'),
                     adminField(stream, 'رابط التشغيل القديم (اختياري)'),
+                    if (existing?['id'] != null)
+                      OutlinedButton.icon(
+                        onPressed: () => _managePlaybackServers(type: 'episode', contentId: existing!['id'].toString(), legacyUrl: stream.text.trim()),
+                        icon: const Icon(Icons.dns_outlined), label: const Text('إدارة سيرفرات الحلقة'),
+                        style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                      ),
                     SwitchListTile(
                       value: published,
                       activeColor: adminGold,
@@ -2462,6 +2740,13 @@ class _AdminPageState extends State<AdminPage> {
     final streamController = TextEditingController(
       text: existing?['stream_url']?.toString() ?? '',
     );
+    final backdropController = TextEditingController(text: existing?['backdrop_url']?.toString() ?? '');
+    final directorController = TextEditingController(text: existing?['director']?.toString() ?? '');
+    final castController = TextEditingController(text: existing?['cast_names']?.toString() ?? '');
+    final runtimeController = TextEditingController(text: existing?['runtime_minutes']?.toString() ?? '');
+    final packageOptions = await _loadPackages('movie');
+    final selectedPackageIds = <String>{};
+    if (existing?['id'] != null) selectedPackageIds.addAll(await _loadSelectedPackages('movie', existing!['id'].toString()));
 
     bool published =
         existing?['is_published'] == true;
@@ -2478,6 +2763,7 @@ class _AdminPageState extends State<AdminPage> {
               textDirection: TextDirection.rtl,
               child: AlertDialog(
                 backgroundColor: adminPanel,
+                insetPadding: const EdgeInsets.all(8),
                 title: Text(
                   existing == null
                       ? 'إضافة فيلم جديد'
@@ -2487,7 +2773,8 @@ class _AdminPageState extends State<AdminPage> {
                   ),
                 ),
                 content: SizedBox(
-                  width: 500,
+                  width: MediaQuery.of(context).size.width > 800 ? 760 : MediaQuery.of(context).size.width * 0.94,
+                  height: MediaQuery.of(context).size.height * 0.78,
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -2523,6 +2810,9 @@ class _AdminPageState extends State<AdminPage> {
                                         final fetchedTitle = data['title']?.toString() ?? '';
                                         if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                         posterController.text = data['poster_url']?.toString() ?? '';
+                                        backdropController.text = data['backdrop_url']?.toString() ?? '';
+                                        directorController.text = data['director']?.toString() ?? '';
+                                        castController.text = (data['cast'] as List? ?? []).map((person) => person['name']?.toString() ?? '').where((name) => name.isNotEmpty).join('، ');
                                         descriptionController.text = data['description']?.toString() ?? '';
                                         categoryController.text = data['category']?.toString() ?? '';
                                         yearController.text = data['release_year']?.toString() ?? '';
@@ -2617,10 +2907,29 @@ class _AdminPageState extends State<AdminPage> {
                           'وصف الفيلم',
                           maxLines: 4,
                         ),
-                        adminField(
-                          categoryController,
-                          'التصنيف',
-                        ),
+                        adminField(categoryController, 'النوع / التصنيف'),
+                        adminField(backdropController, 'رابط صورة الخلفية العريضة'),
+                        adminField(directorController, 'المخرج'),
+                        adminField(castController, 'الممثلون', maxLines: 2),
+                        adminField(runtimeController, 'مدة الفيلم بالدقائق', keyboard: TextInputType.number),
+                        const SizedBox(height: 6),
+                        Align(alignment: Alignment.centerRight, child: Text('إضافة الفيلم إلى الباقات', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                        if (packageOptions.isEmpty)
+                          const Padding(padding: EdgeInsets.all(8), child: Text('أنشئ باقة أولاً من زر إدارة باقات الأفلام', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                        ...packageOptions.map((package) => CheckboxListTile(
+                          dense: true, value: selectedPackageIds.contains(package['id'].toString()), activeColor: adminGold,
+                          title: Text(package['name']?.toString() ?? '', style: const TextStyle(color: Colors.white)),
+                          onChanged: (checked) => setDialogState(() {
+                            final id = package['id'].toString();
+                            if (checked == true) { selectedPackageIds.add(id); } else { selectedPackageIds.remove(id); }
+                          }),
+                        )),
+                        if (existing?['id'] != null)
+                          OutlinedButton.icon(
+                            onPressed: () => _managePlaybackServers(type: 'movie', contentId: existing!['id'].toString(), legacyUrl: streamController.text.trim()),
+                            icon: const Icon(Icons.dns_outlined), label: const Text('إدارة سيرفرات التشغيل'),
+                            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                          ),
                         adminField(
                           yearController,
                           'سنة الإصدار',
@@ -2711,8 +3020,11 @@ class _AdminPageState extends State<AdminPage> {
                         'rating': double.tryParse(
                           ratingController.text.trim(),
                         ),
-                        'stream_url':
-                            streamController.text.trim(),
+                        'stream_url': streamController.text.trim(),
+                        'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
+                        'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                        'cast_names': castController.text.trim().isEmpty ? null : castController.text.trim(),
+                        'runtime_minutes': int.tryParse(runtimeController.text.trim()),
                         'is_published': published,
                       });
                     },
@@ -2734,6 +3046,7 @@ class _AdminPageState extends State<AdminPage> {
     yearController.dispose();
     ratingController.dispose();
     streamController.dispose();
+    backdropController.dispose(); directorController.dispose(); castController.dispose(); runtimeController.dispose();
 
     if (result == null) return;
 
@@ -2741,13 +3054,14 @@ class _AdminPageState extends State<AdminPage> {
       final rawId = existing?['id'];
       final String? id = rawId?.toString();
 
-      await saveMovie(result, id: id);
-
-      showMessage(
-        existing == null
-            ? 'تمت إضافة الفيلم بنجاح'
-            : 'تم تعديل الفيلم بنجاح',
-      );
+      final savedId = await saveMovie(result, id: id);
+      if (savedId != null) {
+        await _savePackageAssignments('movie', savedId, selectedPackageIds);
+        if (existing == null) {
+          await _managePlaybackServers(type: 'movie', contentId: savedId, legacyUrl: result['stream_url']?.toString());
+        }
+      }
+      showMessage(existing == null ? 'تمت إضافة الفيلم بنجاح' : 'تم تعديل الفيلم بنجاح');
     } catch (e) {
       showMessage(e.toString(), isError: true);
     }
@@ -3023,6 +3337,12 @@ class _AdminPageState extends State<AdminPage> {
           onTap: () => navigateTo('channels'),
         ),
         _homeCard(
+          title: 'المتصلون الآن',
+          subtitle: 'عرض الحسابات المسجلة والزوار بدون حساب',
+          icon: Icons.wifi_tethering,
+          onTap: () => navigateTo('online'),
+        ),
+        _homeCard(
           title: 'المستخدمون',
           subtitle: 'إدارة المستخدمين والمدراء والمحظورين',
           icon: Icons.people_outline,
@@ -3154,6 +3474,7 @@ class _AdminPageState extends State<AdminPage> {
     final isUsers = currentSection == 'users';
     final isUserList = currentSection == 'userList';
     final isSettings = currentSection == 'settings';
+    final isOnline = currentSection == 'online';
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -3183,6 +3504,8 @@ class _AdminPageState extends State<AdminPage> {
                 onPressed: () => loadCatalog(currentSection),
                 icon: const Icon(Icons.refresh, color: adminGold),
               ),
+            if (isOnline)
+              IconButton(onPressed: () => onlineChannel == null ? _startOnlineUsers() : _syncOnlineUsers(onlineChannel!), icon: const Icon(Icons.refresh, color: adminGold)),
             if (isUsers || isUserList)
               IconButton(
                 onPressed: loadUsers,
@@ -3228,7 +3551,9 @@ class _AdminPageState extends State<AdminPage> {
                               ? Icons.live_tv_outlined
                               : isChannels
                                   ? Icons.tv
-                                  : Icons.people_outline,
+                                  : isOnline
+                                      ? Icons.wifi_tethering
+                                      : Icons.people_outline,
                       color: adminGold,
                       size: 30,
                     ),
@@ -3252,7 +3577,9 @@ class _AdminPageState extends State<AdminPage> {
                                   ? '${channels.length} قناة'
                                   : isUsers
                                       ? '${users.length} مستخدم'
-                                      : '${filteredUsers.length} نتيجة',
+                                      : isOnline
+                                          ? '${onlineUsers.length} متصل'
+                                          : '${filteredUsers.length} نتيجة',
                       style: const TextStyle(
                         color: adminGold,
                         fontWeight: FontWeight.bold,
@@ -3285,7 +3612,9 @@ class _AdminPageState extends State<AdminPage> {
                               ? userListSection()
                               : isSettings
                                   ? settingsSection()
-                                  : const SizedBox.shrink(),
+                                  : isOnline
+                                      ? onlineUsersSection()
+                                      : const SizedBox.shrink(),
             ),
           ],
         ),
@@ -3314,6 +3643,9 @@ class _AdminPageState extends State<AdminPage> {
 
     return Column(
       children: [
+        Align(alignment: Alignment.centerRight, child: Padding(padding: const EdgeInsets.fromLTRB(14, 4, 14, 4), child: OutlinedButton.icon(
+          onPressed: () => _manageContentPackages('movie'), icon: const Icon(Icons.folder_open, size: 18), label: const Text('إدارة باقات الأفلام'),
+          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold))))),
         searchBox(
           hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
         ),
@@ -3402,3 +3734,44 @@ class _AdminPageState extends State<AdminPage> {
 // تم استعادة إدارة المواسم والحلقات والسيرفرات
 // مع الحفاظ على نسخة saveCatalogItem الحالية.
 // ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة إدارة باقات مستقلة للأفلام والمسلسلات والقنوات وربط المحتوى بعدة باقات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة زر إدارة الباقات داخل أقسام إدارة الأفلام والمسلسلات والقنوات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة شاشة المتصلين لحظياً عبر Realtime Presence لعرض الزوار والحسابات المسجلة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// نموذج الفيلم يدعم بيانات صفحة التفاصيل وربط الفيلم بأكثر من باقة وإدارة السيرفرات من نفس شاشة الإضافة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// نماذج المسلسلات والقنوات تدعم ربط عدة باقات وبيانات تفاصيل إضافية وإدارة سيرفر القناة من صفحة الإضافة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تفعيل اختيار الباقات المتعددة للقنوات التلفزيونية داخل نموذج الإضافة والتعديل.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// لوحة المدير تتحكم برابط دعوة الأصدقاء وإصدار APK ورابط التحديث الداخلي.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة إدارة سيرفرات الحلقة مباشرة من نموذج التعديل وإدارة المواسم من نموذج المسلسل.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// عرض عدد المتصلين وأيقونة مخصصة في رأس صفحة المتصلين.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توافق توقيع متابعة Realtime مع إصدارات Supabase Flutter التي تجعل كائن الخطأ اختيارياً.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إرسال حقول الخلفية والمخرج والممثلين للمسلسلات فقط وعدم إرسال أعمدة غير موجودة إلى جدول القنوات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تحويل نماذج إضافة وتعديل الأفلام والمسلسلات والقنوات والحلقات إلى نوافذ شبه كاملة الشاشة تشبه صفحات الإدارة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توحيد حجم نوافذ نماذج المحتوى لتكون شبه كاملة الشاشة على الهواتف والأجهزة اللوحية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// ضبط ارتفاع نموذج الفيلم ليطابق بقية صفحات الإضافة والتعديل.
