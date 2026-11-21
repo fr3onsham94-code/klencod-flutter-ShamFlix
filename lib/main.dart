@@ -3970,7 +3970,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         visualDensity: const VisualDensity(vertical: -3),
                         contentPadding: EdgeInsets.zero,
                         title: Text('${speed}x', textAlign: TextAlign.center,
-                          style: TextStyle(color: player.state.rate == speed ? gold : sectionText, fontSize: 13)),
+                          style: TextStyle(color: player.state.rate == speed ? gold : Colors.white, fontSize: 13)),
                         onTap: () => Navigator.pop(sheetContext, speed),
                       ),
                   ],
@@ -4042,13 +4042,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   shrinkWrap: true,
                   children: [
                     ListTile(title: Text(appText('مسار الصوت', 'Audio Track', 'Ses Parçası'), textAlign: TextAlign.center,
-                      style: TextStyle(color: sectionPrimary, fontSize: 14, fontWeight: FontWeight.bold))),
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
                     for (int index = 0; index < tracks.length; index++)
                       ListTile(
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                          style: TextStyle(color: sectionText, fontSize: 12)),
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, tracks[index]),
                       ),
                   ],
@@ -4091,12 +4091,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   shrinkWrap: true,
                   children: [
                     ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
-                      style: TextStyle(color: sectionPrimary, fontSize: 14, fontWeight: FontWeight.bold))),
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
                       title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
-                        style: TextStyle(color: sectionText, fontSize: 12)),
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
                     ),
                     for (int index = 0; index < tracks.length; index++)
@@ -4104,7 +4104,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                          style: TextStyle(color: sectionText, fontSize: 12)),
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, tracks[index]),
                       ),
                   ],
@@ -4157,7 +4157,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       child: Tooltip(
         message: name,
         child: Material(
-          color: active ? sectionPrimary : Colors.black.withOpacity(0.62),
+          color: active ? gold : Colors.black.withOpacity(0.62),
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
@@ -4168,7 +4168,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               child: Center(
                 child: Text('S${index + 1}',
                   style: TextStyle(
-                    color: active ? Colors.black : sectionText,
+                    color: active ? Colors.black : Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -4209,9 +4209,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: sectionText, size: 19),
+            Icon(icon, color: Colors.white, size: 19),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(color: sectionSecondaryText, fontSize: 9)),
+            Text(label, style: TextStyle(color: Colors.white70, fontSize: 9)),
           ],
         ),
       ),
@@ -4275,13 +4275,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.error_outline, color: sectionPrimary, size: 48),
+                        Icon(Icons.error_outline, color: gold, size: 48),
                         const SizedBox(height: 14),
                         Text(error!, textAlign: TextAlign.center,
-                            style: TextStyle(color: sectionSecondaryText)),
+                            style: TextStyle(color: Colors.white70)),
                         const SizedBox(height: 18),
                         FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: sectionText),
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
                           onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
                           child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
                         ),
@@ -4303,12 +4303,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         controls: NoVideoControls,
                       ),
                     if (opening)
-                      Center(child: CircularProgressIndicator(color: sectionPrimary)),
+                      Center(child: CircularProgressIndicator(color: gold)),
                     if (!opening)
                       StreamBuilder<bool>(
                         stream: player.stream.buffering,
                         builder: (context, snapshot) => snapshot.data == true
-                            ? Center(child: CircularProgressIndicator(color: sectionPrimary))
+                            ? Center(child: CircularProgressIndicator(color: gold))
                             : const SizedBox.shrink(),
                       ),
                     Positioned(
@@ -4333,7 +4333,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                     color: buffering ? gold : Colors.greenAccent),
                                   const SizedBox(width: 6),
                                   Text(buffering ? appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor') : appText('البث متصل', 'Stream Connected', 'Yayın Bağlandı'),
-                                    style: TextStyle(color: sectionText, fontSize: 10)),
+                                    style: TextStyle(color: Colors.white, fontSize: 10)),
                                 ],
                               ),
                             );
@@ -4353,9 +4353,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                               shape: const StadiumBorder(),
                               child: TextButton.icon(
                                 onPressed: _toggleControlsLock,
-                                icon: Icon(Icons.lock_open_rounded, color: sectionPrimary),
+                                icon: Icon(Icons.lock_open_rounded, color: gold),
                                 label: Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
-                                    style: TextStyle(color: sectionText)),
+                                    style: TextStyle(color: Colors.white)),
                               ),
                             ),
                           ),
@@ -4404,7 +4404,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                  color: sectionText,
+                                                  color: Colors.white,
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -4412,7 +4412,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                               Text(
                                                 'SHAM FLIX PLAYER',
                                                 style: TextStyle(
-                                                  color: sectionPrimary,
+                                                  color: gold,
                                                   fontSize: 9,
                                                   letterSpacing: 2,
                                                   fontWeight: FontWeight.w700,
@@ -4534,17 +4534,17 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 Row(
                                                   children: [
                                                     Text(_time(position),
-                                                        style: TextStyle(color: sectionSecondaryText, fontSize: 9)),
+                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
                                                     const Spacer(),
                                                     Text(_time(duration),
-                                                        style: TextStyle(color: sectionSecondaryText, fontSize: 9)),
+                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
                                                   ],
                                                 ),
                                                 const SizedBox(height: 8),
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                                   decoration: BoxDecoration(
-                                                    color: sectionText.withOpacity(0.07),
+                                                    color: Colors.white.withOpacity(0.07),
                                                     borderRadius: BorderRadius.circular(16),
                                                     border: Border.all(color: Colors.white12),
                                                   ),
@@ -4621,7 +4621,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: SizedBox(
           width: size + 12,
           height: size + 12,
-          child: Icon(icon, color: filled ? Colors.black : sectionText, size: size),
+          child: Icon(icon, color: filled ? Colors.black : Colors.white, size: size),
         ),
       ),
     );
@@ -4692,13 +4692,13 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
         ),
         body: Column(children: [
           if (progress < 100)
-            LinearProgressIndicator(value: progress / 100, color: sectionPrimary, backgroundColor: panel),
+            LinearProgressIndicator(value: progress / 100, color: gold, backgroundColor: panel),
           Expanded(
             child: pageError != null
                 ? Center(child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Text(pageError!, textAlign: TextAlign.center,
-                        style: TextStyle(color: sectionSecondaryText)),
+                        style: TextStyle(color: Colors.white70)),
                   ))
                 : WebViewWidget(controller: controller),
           ),
@@ -4743,21 +4743,21 @@ class ShamFlixSearch extends SearchDelegate {
     var selectedCategory = categoryFilter;
     await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setDialogState) => AlertDialog(
-        backgroundColor: panel, title: Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: sectionPrimary)),
+        backgroundColor: panel, title: Text(appText('تصفية البحث', 'Search Filters', 'Arama Filtreleri'), style: TextStyle(color: gold)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           DropdownButtonFormField<String>(
             value: selectedCategory, dropdownColor: panel,
-            decoration: InputDecoration(labelText: 'التصنيف', labelStyle: TextStyle(color: sectionSecondaryText)),
+            decoration: InputDecoration(labelText: 'التصنيف', labelStyle: TextStyle(color: Colors.white70)),
             items: const ['الكل', 'أكشن', 'دراما', 'كوميديا', 'رعب', 'خيال علمي']
-              .map((value) => DropdownMenuItem(value: value, child: Text(value, style: TextStyle(color: sectionText)))).toList(),
+              .map((value) => DropdownMenuItem(value: value, child: Text(value, style: TextStyle(color: Colors.white)))).toList(),
             onChanged: (value) => setDialogState(() => selectedCategory = value ?? 'الكل')),
           const SizedBox(height: 12),
-          TextField(controller: yearController, keyboardType: TextInputType.number, style: TextStyle(color: sectionText),
+          TextField(controller: yearController, keyboardType: TextInputType.number, style: TextStyle(color: Colors.white),
             decoration: const InputDecoration(labelText: 'سنة الإصدار', hintText: 'مثال: 2026')),
         ]),
         actions: [
           TextButton(onPressed: () { categoryFilter = 'الكل'; yearFilter = ''; Navigator.pop(dialogContext); }, child: Text(appText('مسح التصفية', 'Clear Filters', 'Filtreleri Temizle'))),
-          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: sectionText),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
             onPressed: () { categoryFilter = selectedCategory; yearFilter = yearController.text; Navigator.pop(dialogContext); },
             child: Text(appText('تطبيق', 'Apply', 'Uygula'))),
         ],
@@ -4770,7 +4770,7 @@ class ShamFlixSearch extends SearchDelegate {
   @override
   List<Widget> buildActions(BuildContext context) => [
     IconButton(tooltip: 'تصفية حسب التصنيف والسنة', onPressed: () => openFilters(context),
-      icon: Icon(Icons.tune, color: categoryFilter != 'الكل' || yearFilter.isNotEmpty ? gold : sectionText)),
+      icon: Icon(Icons.tune, color: categoryFilter != 'الكل' || yearFilter.isNotEmpty ? gold : Colors.white)),
     IconButton(onPressed: () { query = ''; showSuggestions(context); }, icon: const Icon(Icons.clear)),
   ];
 
@@ -4787,7 +4787,7 @@ class ShamFlixSearch extends SearchDelegate {
       return Center(
         child: Text(
           'اكتب اسم الفيلم أو المسلسل أو استخدم التصفية',
-          style: TextStyle(color: sectionSecondaryText),
+          style: TextStyle(color: Colors.white70),
         ),
       );
     }
@@ -4797,7 +4797,7 @@ class ShamFlixSearch extends SearchDelegate {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
-            child: CircularProgressIndicator(color: sectionPrimary),
+            child: CircularProgressIndicator(color: gold),
           );
         }
 
@@ -4805,7 +4805,7 @@ class ShamFlixSearch extends SearchDelegate {
           return Center(
             child: Text(
               'حدث خطأ أثناء البحث',
-              style: TextStyle(color: sectionSecondaryText),
+              style: TextStyle(color: Colors.white70),
             ),
           );
         }
@@ -4816,7 +4816,7 @@ class ShamFlixSearch extends SearchDelegate {
           return Center(
             child: Text(
               'لا توجد نتائج',
-              style: TextStyle(color: sectionSecondaryText),
+              style: TextStyle(color: Colors.white70),
             ),
           );
         }
@@ -4835,14 +4835,14 @@ class ShamFlixSearch extends SearchDelegate {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
                   child: poster.isEmpty
-                      ? Icon(Icons.movie, color: sectionPrimary)
+                      ? Icon(Icons.movie, color: gold)
                       : Image.network(
                           poster,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) {
                             return Icon(
                               Icons.movie,
-                              color: sectionPrimary,
+                              color: gold,
                             );
                           },
                         ),
@@ -4850,11 +4850,11 @@ class ShamFlixSearch extends SearchDelegate {
               ),
               title: Text(
                 valueOf(item['title'], appText('بدون عنوان', 'Untitled', 'Başlıksız')),
-                style: TextStyle(color: sectionText),
+                style: TextStyle(color: Colors.white),
               ),
               subtitle: Text(
                 isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film'),
-                style: TextStyle(color: sectionPrimary),
+                style: TextStyle(color: gold),
               ),
               onTap: () {
                 close(context, null);
@@ -4886,4 +4886,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: إزالة const من الفاصل العمودي ليقبل لون القسم المتغير | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
+// آخر تعديل: إصلاح مراجع ألوان المشغّل وصفحة الويب والبحث غير المعرّفة مع الإبقاء على ألوانها العامة | التاريخ: 2026-11-21 | الوقت: 23:55:00 بتوقيت تركيا
