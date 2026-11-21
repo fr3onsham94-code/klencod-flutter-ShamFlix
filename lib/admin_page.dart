@@ -954,9 +954,9 @@ class _AdminPageState extends State<AdminPage> {
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
                       'release_year': int.tryParse(yearController.text.trim()),
                       'rating': double.tryParse(ratingController.text.trim()),
-                      'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
-                      'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
-                      'cast_names': castController.text.trim().isEmpty ? null : castController.text.trim(),
+                      if (isSeries) 'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
+                      if (isSeries) 'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                      if (isSeries) 'cast_names': castController.text.trim().isEmpty ? null : castController.text.trim(),
                     });
                   } else {
                     data.addAll({
@@ -3756,3 +3756,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // توافق توقيع متابعة Realtime مع إصدارات Supabase Flutter التي تجعل كائن الخطأ اختيارياً.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إرسال حقول الخلفية والمخرج والممثلين للمسلسلات فقط وعدم إرسال أعمدة غير موجودة إلى جدول القنوات.
