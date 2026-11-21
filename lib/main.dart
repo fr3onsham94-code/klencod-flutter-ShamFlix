@@ -1072,7 +1072,7 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
   }
   @override
   Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
-    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('القنوات التلفزيونية')),
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('مباشر'))),
     body: FutureBuilder<List<Map<String, dynamic>>>(future: widget.channelsFuture, builder: (context, channelSnapshot) {
       if (channelSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
       if (channelSnapshot.hasError) return const Center(child: Text('تعذر تحميل القنوات', style: TextStyle(color: Colors.white54)));
@@ -1153,7 +1153,7 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
   }
   @override
   Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
-    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(pageTitle), actions: [
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr(pageTitle)), actions: [
       IconButton(icon: const Icon(Icons.search, color: gold), onPressed: () async {
         final controller = TextEditingController(text: search);
         final value = await showDialog<String>(context: context, builder: (context) => AlertDialog(backgroundColor: panel,
@@ -1413,7 +1413,7 @@ class _AccountPageState extends State<AccountPage> {
       const SizedBox(height: 18),
       const Icon(Icons.account_circle, color: gold, size: 76),
       const SizedBox(height: 8),
-      const Center(child: Text('حسابي', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
+      Center(child: Text(ShamFlixAppPreferences.tr('حسابي'), style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
       const SizedBox(height: 16),
       if (loggedIn)
         Card(color: panel, child: ListTile(leading: const Icon(Icons.verified_user_outlined, color: gold),
@@ -1428,14 +1428,14 @@ class _AccountPageState extends State<AccountPage> {
       if (AuthService.isAdmin)
         accountTile(icon: Icons.admin_panel_settings, title: 'إدارة ShamFlix', subtitle: 'لوحة المدير والأدمن',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPage()))),
-      accountTile(icon: Icons.settings_outlined, title: 'إعدادات التطبيق', subtitle: 'المشغل واللغة والشبكة والتخزين',
+      accountTile(icon: Icons.settings_outlined, title: ShamFlixAppPreferences.tr('إعدادات التطبيق'), subtitle: ShamFlixAppPreferences.tr('المشغل واللغة والشبكة والتخزين'),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixAppSettingsPage()))),
-      accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'الأفلام والمسلسلات والقنوات المحفوظة',
+      accountTile(icon: Icons.favorite_outline, title: ShamFlixAppPreferences.tr('المفضلة'), subtitle: ShamFlixAppPreferences.tr('الأفلام والمسلسلات والقنوات المحفوظة'),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-      accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'كل ما شاهدته مؤخراً',
+      accountTile(icon: Icons.history, title: ShamFlixAppPreferences.tr('سجل المشاهدة'), subtitle: ShamFlixAppPreferences.tr('كل ما شاهدته مؤخراً'),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
-      accountTile(icon: Icons.person_add_alt_1_outlined, title: 'دعوة صديق', subtitle: 'إرسال رابط التطبيق مباشرة', onTap: inviteFriend),
-      accountTile(icon: Icons.policy_outlined, title: 'حقوق النشر والخصوصية', subtitle: 'حقوق تطبيق ShamFlix وسياسة الخصوصية',
+      accountTile(icon: Icons.person_add_alt_1_outlined, title: ShamFlixAppPreferences.tr('دعوة صديق'), subtitle: ShamFlixAppPreferences.tr('إرسال رابط التطبيق مباشرة'), onTap: inviteFriend),
+      accountTile(icon: Icons.policy_outlined, title: ShamFlixAppPreferences.tr('حقوق النشر والخصوصية'), subtitle: ShamFlixAppPreferences.tr('حقوق النشر والخصوصية'),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixLegalPage()))),
       if (loggedIn) ...[
         const SizedBox(height: 14),
@@ -2299,23 +2299,23 @@ class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
       subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)), trailing: const Icon(Icons.chevron_left, color: gold), onTap: working ? null : onTap));
   @override
   Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
-    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('إعدادات التطبيق')),
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('إعدادات التطبيق'))),
     body: loading ? const Center(child: CircularProgressIndicator(color: gold)) : ListView(padding: const EdgeInsets.all(14), children: [
       Card(color: panel, child: ListTile(leading: const Icon(Icons.video_settings_outlined, color: gold),
-        title: const Text('إعدادات المشغل', style: TextStyle(color: Colors.white)),
+        title: Text(ShamFlixAppPreferences.tr('إعدادات المشغل'), style: const TextStyle(color: Colors.white)),
         subtitle: const Text('اختيار المشغل الداخلي أو VLC أو MX Player', style: TextStyle(color: Colors.white54)),
         trailing: const Icon(Icons.chevron_left, color: gold), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage())))),
       Card(color: panel, child: ListTile(leading: const Icon(Icons.language, color: gold),
-        title: const Text('لغة التطبيق', style: TextStyle(color: Colors.white)),
-        subtitle: const Text('العربية أو English أو Türkçe', style: TextStyle(color: Colors.white54)),
+        title: Text(ShamFlixAppPreferences.tr('لغة التطبيق'), style: const TextStyle(color: Colors.white)),
+        subtitle: Text(ShamFlixAppPreferences.tr('العربية أو English أو Türkçe'), style: const TextStyle(color: Colors.white54)),
         trailing: DropdownButton<String>(value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
           items: const [DropdownMenuItem(value: 'ar', child: Text('العربية')), DropdownMenuItem(value: 'en', child: Text('English')), DropdownMenuItem(value: 'tr', child: Text('Türkçe'))], onChanged: _setLanguage))),
       Card(color: panel, child: SwitchListTile(value: wifiOnly, onChanged: _setWifiOnly, activeColor: gold, secondary: const Icon(Icons.wifi, color: gold),
-        title: const Text('التشغيل عبر Wi-Fi فقط', style: TextStyle(color: Colors.white)), subtitle: const Text('منع تشغيل الفيديو عبر بيانات الهاتف لتوفير الباقة', style: TextStyle(color: Colors.white54)))),
-      _tile(icon: Icons.cleaning_services_outlined, title: 'مسح التخزين المؤقت', subtitle: 'حذف الملفات المؤقتة دون حذف إعدادات التطبيق', onTap: _clearCache),
-      _tile(icon: Icons.history_toggle_off, title: 'مسح السجل بالكامل', subtitle: 'حذف سجل المشاهدة كاملاً', onTap: _clearHistory),
-      _tile(icon: Icons.refresh, title: 'تحديث قائمة القنوات', subtitle: 'جلب أحدث القنوات المنشورة', onTap: _refreshChannels),
-      _tile(icon: Icons.system_update_alt, title: 'البحث عن تحديث للتطبيق', subtitle: 'تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix', onTap: _checkForUpdate),
+        title: Text(ShamFlixAppPreferences.tr('التشغيل عبر Wi-Fi فقط'), style: const TextStyle(color: Colors.white)), subtitle: Text(ShamFlixAppPreferences.tr('منع تشغيل الفيديو عبر بيانات الهاتف لتوفير الباقة'), style: const TextStyle(color: Colors.white54)))),
+      _tile(icon: Icons.cleaning_services_outlined, title: ShamFlixAppPreferences.tr('مسح التخزين المؤقت'), subtitle: 'حذف الملفات المؤقتة دون حذف إعدادات التطبيق', onTap: _clearCache),
+      _tile(icon: Icons.history_toggle_off, title: ShamFlixAppPreferences.tr('مسح السجل بالكامل'), subtitle: 'حذف سجل المشاهدة كاملاً', onTap: _clearHistory),
+      _tile(icon: Icons.refresh, title: ShamFlixAppPreferences.tr('تحديث قائمة القنوات'), subtitle: 'جلب أحدث القنوات المنشورة', onTap: _refreshChannels),
+      _tile(icon: Icons.system_update_alt, title: ShamFlixAppPreferences.tr('البحث عن تحديث للتطبيق'), subtitle: 'تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix', onTap: _checkForUpdate),
       if (working) const Padding(padding: EdgeInsets.all(14), child: Center(child: CircularProgressIndicator(color: gold))),
     ]),
   ));
@@ -2325,7 +2325,7 @@ class ShamFlixLegalPage extends StatelessWidget {
   const ShamFlixLegalPage({super.key});
   @override
   Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
-    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('حقوق النشر والخصوصية')),
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('حقوق النشر والخصوصية'))),
     body: ListView(padding: const EdgeInsets.all(18), children: const [
       Text('حقوق النشر', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)), SizedBox(height: 8),
       Text('جميع الحقوق محفوظة لتطبيق ShamFlix. أسماء وشعارات ومحتويات الجهات المالكة تبقى ملكاً لأصحابها.', style: TextStyle(color: Colors.white70, height: 1.7)),
@@ -3694,3 +3694,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة ترجمة أساسية للواجهة الرئيسية والتنقل وإعدادات الزائر بالإنجليزية والتركية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توسيع الترجمة الأساسية لقائمة الزائر وإعدادات التطبيق وصفحات التفاصيل والقنوات.
