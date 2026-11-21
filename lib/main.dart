@@ -858,21 +858,8 @@ class _HomePageState extends State<HomePage> {
       ]),
     );
   }
-  Widget moviesPage() {
-    return ListView(
-      children: [
-        mediaSection('الأفلام', movies, isSeries: false),
-      ],
-    );
-  }
-
-  Widget tvPage() {
-    return ListView(
-      children: [
-        mediaSection('المسلسلات', series, isSeries: true),
-      ],
-    );
-  }
+  Widget moviesPage() => const ShamFlixCatalogPage(contentType: 'movie');
+  Widget tvPage() => const ShamFlixCatalogPage(contentType: 'series');
 
   Widget channelsPage() {
     return FutureBuilder<List<Map<String, dynamic>>>(
@@ -1025,6 +1012,89 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+class ShamFlixCatalogPage extends StatefulWidget {
+  final String contentType;
+  const ShamFlixCatalogPage({super.key, required this.contentType});
+  @override
+  State<ShamFlixCatalogPage> createState() => _ShamFlixCatalogPageState();
+}
+
+class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
+  String? selectedPackageId;
+  String search = '';
+  late Future<List<Map<String, dynamic>>> packagesFuture;
+  late Future<List<Map<String, dynamic>>> contentFuture;
+  @override
+  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages(widget.contentType); contentFuture = _loadContent(); }
+  Future<List<Map<String, dynamic>>> _loadContent() => widget.contentType == 'movie' ? SupabaseService.getMovies() : SupabaseService.getSeries();
+  String get pageTitle => widget.contentType == 'movie' ? 'الأفلام' : 'المسلسلات';
+  Future<List<Map<String, dynamic>>> _filterPackage(List<Map<String, dynamic>> all) async {
+    if (selectedPackageId == null) return all;
+    final ids = await SupabaseService.getPackageContentIds(selectedPackageId!);
+    return all.where((item) => ids.contains(item['id']?.toString())).toList();
+  }
+  @override
+  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
+    backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(pageTitle), actions: [
+      IconButton(icon: const Icon(Icons.search, color: gold), onPressed: () async {
+        final controller = TextEditingController(text: search);
+        final value = await showDialog<String>(context: context, builder: (context) => AlertDialog(backgroundColor: panel,
+          title: const Text('بحث', style: TextStyle(color: gold)), content: TextField(controller: controller, autofocus: true, style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(hintText: 'اكتب اسم المحتوى')),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('بحث'))]));
+        controller.dispose(); if (value != null && mounted) setState(() => search = value);
+      }),
+    ]),
+    body: FutureBuilder<List<Map<String, dynamic>>>(future: packagesFuture, builder: (context, packageSnapshot) {
+      if (packageSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+      if (packageSnapshot.hasError) return Center(child: Text('تعذر تحميل باقات $pageTitle', style: const TextStyle(color: Colors.white54)));
+      final packages = packageSnapshot.data ?? [];
+      return FutureBuilder<List<Map<String, dynamic>>>(future: contentFuture, builder: (context, contentSnapshot) {
+        if (contentSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+        if (contentSnapshot.hasError) return const Center(child: Text('تعذر تحميل المحتوى', style: TextStyle(color: Colors.white54)));
+        final all = contentSnapshot.data ?? [];
+        return FutureBuilder<List<Map<String, dynamic>>>(future: _filterPackage(all), builder: (context, filteredSnapshot) {
+          if (filteredSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+          final items = (filteredSnapshot.data ?? []).where((item) => search.isEmpty || valueOf(item['title']).toLowerCase().contains(search.toLowerCase())).toList();
+          return Row(children: [
+            SizedBox(width: 112, child: Container(color: panel, child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 10), children: [
+                _packageTile('الكل', null, selectedPackageId == null),
+                ...packages.map((package) => _packageTile(valueOf(package['name']), package['id']?.toString(), selectedPackageId == package['id']?.toString())),
+              ],
+            ))),
+            Expanded(child: items.isEmpty ? const Center(child: Text('لا يوجد محتوى في هذه الباقة', style: TextStyle(color: Colors.white54))) :
+              GridView.builder(padding: const EdgeInsets.all(12), gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: MediaQuery.of(context).size.width > 700 ? 4 : 2, childAspectRatio: 0.61, crossAxisSpacing: 12, mainAxisSpacing: 14),
+                itemCount: items.length, itemBuilder: (context, index) {
+                  final item = items[index]; final poster = valueOf(item['poster_url']);
+                  return GestureDetector(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(item: item, isSeries: widget.contentType == 'series'))),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(10), child: poster.isEmpty ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 42)) :
+                        Image.network(poster, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 42))))),
+                      const SizedBox(height: 7),
+                      Text(valueOf(item['title'], 'بدون عنوان'), maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      Text(valueOf(item['release_year']), style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    ]),
+                  );
+                },
+              )),
+          ]);
+        });
+      });
+    }),
+  ));
+  Widget _packageTile(String name, String? id, bool selected) => InkWell(
+    onTap: () => setState(() => selectedPackageId = id),
+    child: Container(margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+      decoration: BoxDecoration(color: selected ? const Color(0xFF493B25) : Colors.transparent, borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: selected ? gold : Colors.white10)),
+      child: Text(name, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: selected ? gold : Colors.white70, fontWeight: selected ? FontWeight.bold : FontWeight.normal, fontSize: 12))),
+  );
+}
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
 
@@ -3470,3 +3540,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تحديث بيانات الشاشة الرئيسية فور طلب تحديث القنوات أو مسح سجل المشاهدة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إنشاء قوائم أفلام ومسلسلات بباقات جانبية ومحتوى شبكي قابل للبحث.
