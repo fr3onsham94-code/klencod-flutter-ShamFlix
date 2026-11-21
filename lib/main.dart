@@ -64,7 +64,7 @@ class ShamFlixAppPreferences {
     },
   };
   static String tr(String value) => _translations[locale.value.languageCode]?[value] ?? value;
-  static TextDirection get textDirection => locale.value.languageCode == 'ar' ? ShamFlixAppPreferences.textDirection : TextDirection.ltr;
+  static TextDirection get textDirection => locale.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr;
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
@@ -3701,3 +3701,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // عكس اتجاه الواجهة تلقائياً عند اختيار العربية أو الإنجليزية أو التركية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تثبيت اتجاه النص الصحيح لكل لغة.
