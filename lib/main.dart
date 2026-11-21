@@ -1858,11 +1858,13 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: appLocaleNotifier.value.languageCode == 'ar'
-          ? TextDirection.rtl
-          : TextDirection.ltr,
-      child: Column(
+    return ColoredBox(
+      color: AppTheme.sectionColor(_themeSection, 'background'),
+      child: Directionality(
+        textDirection: appLocaleNotifier.value.languageCode == 'ar'
+            ? TextDirection.rtl
+            : TextDirection.ltr,
+        child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -1922,6 +1924,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                           ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -3807,9 +3810,11 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
-      child: Column(
+    return ColoredBox(
+      color: AppTheme.sectionColor('live', 'background'),
+      child: Directionality(
+        textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+        child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
@@ -3849,8 +3854,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                             ? Center(child: CircularProgressIndicator(color: AppTheme.sectionColor('live', 'primary')))
                             : error != null
                                 ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
-                                : channels.isEmpty
-                                    ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
+                                : filteredChannels.isEmpty
+                                    ? Center(child: Text(searchQuery.isNotEmpty ? appText('لا توجد قنوات مطابقة', 'No matching channels', 'Eşleşen kanal yok') : appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
                                         style: TextStyle(color: AppTheme.sectionColor('live', 'secondaryText'))))
                                     : RefreshIndicator(
                                         color: AppTheme.sectionColor('live', 'primary'),
@@ -3875,6 +3880,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -5079,4 +5085,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: ربط ألوان الرئيسية والأفلام والمسلسلات والمباشر والإعدادات بلوحات الألوان المستقلة | التاريخ: 2026-11-21 | الوقت: 22:57:00 بتوقيت تركيا
+// آخر تعديل: إكمال ألوان خلفيات الأقسام وإظهار حالة عدم وجود نتائج في بحث القنوات | التاريخ: 2026-11-21 | الوقت: 23:02:00 بتوقيت تركيا
