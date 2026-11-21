@@ -465,7 +465,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int selectedTab = 0;
-  int selectedCategory = 0;
 
   // إعداد إظهار أو إخفاء شارة التصنيف
   bool showCategoryBadge = true;
@@ -474,15 +473,6 @@ class _HomePageState extends State<HomePage> {
   late Future<List<Map<String, dynamic>>> series;
   late Future<List<Map<String, dynamic>>> channels;
   late Future<List<Map<String, dynamic>>> recentHistory;
-
-  final List<String> categories = [
-    'الكل',
-    'أكشن',
-    'دراما',
-    'كوميديا',
-    'رعب',
-    'خيال علمي',
-  ];
 
   @override
   void initState() {
@@ -547,18 +537,6 @@ class _HomePageState extends State<HomePage> {
       channels.then((_) {}).catchError((_) {}),
       loadCategoryBadgeSetting(),
     ]);
-  }
-
-  List<Map<String, dynamic>> filterCategory(
-    List<Map<String, dynamic>> items,
-  ) {
-    if (selectedCategory == 0) return items;
-
-    final selected = categories[selectedCategory];
-
-    return items.where((item) {
-      return valueOf(item['category']) == selected;
-    }).toList();
   }
 
   Widget sectionTitle(String title) {
@@ -730,7 +708,7 @@ class _HomePageState extends State<HomePage> {
                 );
               }
 
-              final items = filterCategory(snapshot.data ?? []);
+              final items = snapshot.data ?? [];
 
               if (items.isEmpty) {
                 return const Center(
@@ -797,181 +775,81 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget homeContent() {
-    return RefreshIndicator(
-      color: gold,
-      backgroundColor: panel,
-      onRefresh: refreshData,
-      child: ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
-            child: Row(
-              children: [
-                const Icon(Icons.movie_filter, color: gold, size: 32),
-                const SizedBox(width: 9),
-                const Text(
-                  'Sham',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Text(
-                  'Flix',
-                  style: TextStyle(
-                    color: gold,
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'الملفات الشخصية',
-                  onPressed: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()));
-                    if (mounted) setState(() => recentHistory = ShamFlixLocalStore.getHistory());
-                  },
-                  icon: const Icon(Icons.account_circle_outlined, color: gold),
-                ),
-                IconButton(
-                  onPressed: () {
-                    showSearch(
-                      context: context,
-                      delegate: ShamFlixSearch(),
-                    );
-                  },
-                  icon: const Icon(Icons.search, color: Colors.white),
-                ),
-                IconButton(
-                  tooltip: 'التنزيلات',
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixDownloadsPage())),
-                  icon: const Icon(Icons.download_for_offline_outlined, color: gold),
-                ),
-                IconButton(
-                  tooltip: 'الإشعارات',
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
-                  icon: const Icon(Icons.notifications_none, color: gold),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              height: 220,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF604821),
-                    Color(0xFF211A10),
-                    panel,
-                  ],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  const Positioned(
-                    left: 20,
-                    top: 30,
-                    child: Icon(
-                      Icons.local_movies,
-                      color: Color(0x44FFFFFF),
-                      size: 130,
-                    ),
-                  ),
-                  Positioned(
-                    right: 18,
-                    bottom: 20,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'ShamFlix ORIGINAL',
-                          style: TextStyle(
-                            color: gold,
-                            fontSize: 12,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'اكتشف عالم السينما',
-                          style: TextStyle(
-                            fontSize: 23,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: gold,
-                            foregroundColor: Colors.black,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              selectedTab = 1;
-                            });
-                          },
-                          icon: const Icon(Icons.play_arrow),
-                          label: const Text('استكشف الآن'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          continueWatchingSection(),
-          sectionTitle('التصنيفات'),
-          SizedBox(
-            height: 43,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: categories.length,
-              itemBuilder: (context, index) {
-                final active = selectedCategory == index;
+  Widget animeSection() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      sectionTitle('أحدث الأنمي'),
+      SizedBox(height: 220, child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: series,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+          if (snapshot.hasError) return const Center(child: Text('تعذر تحميل الأنمي', style: TextStyle(color: Colors.white54)));
+          final items = (snapshot.data ?? []).where((item) {
+            final category = valueOf(item['category']).toLowerCase();
+            final title = valueOf(item['title']).toLowerCase();
+            return category.contains('anime') || category.contains('أنمي') || category.contains('انمي') || title.contains('أنمي') || title.contains('انمي');
+          }).toList();
+          if (items.isEmpty) return const Center(child: Text('لا يوجد أنمي منشور حالياً', style: TextStyle(color: Colors.white54)));
+          return ListView.builder(scrollDirection: Axis.horizontal, reverse: true, padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: items.length, itemBuilder: (context, index) => mediaCard(items[index], isSeries: true));
+        },
+      )),
+    ]);
+  }
 
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      selectedCategory = index;
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 5),
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    decoration: BoxDecoration(
-                      color: active ? gold : panel,
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      categories[index],
-                      style: TextStyle(
-                        color: active ? Colors.black : Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          mediaSection('أحدث الأفلام', movies, isSeries: false),
-          mediaSection('المسلسلات', series, isSeries: true),
-          const SizedBox(height: 30),
-        ],
-      ),
+  Widget recentlyWatchedChannelsSection() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: recentHistory,
+      builder: (context, snapshot) {
+        final seen = <String>{};
+        final records = (snapshot.data ?? []).where((record) {
+          if (record['isChannel'] != true && record['contentType'] != 'channel') return false;
+          final id = valueOf(record['contentId']);
+          return id.isNotEmpty && seen.add(id);
+        }).take(12).toList();
+        if (records.isEmpty) return const SizedBox.shrink();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          sectionTitle('آخر القنوات مشاهدة'),
+          SizedBox(height: 116, child: ListView.builder(scrollDirection: Axis.horizontal, reverse: true,
+            padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: records.length,
+            itemBuilder: (context, index) {
+              final record = records[index]; final logo = valueOf(record['poster_url']);
+              return GestureDetector(onTap: () => openWatchRecord(context, record),
+                child: Container(width: 104, margin: const EdgeInsets.only(left: 12),
+                  child: Column(children: [
+                    CircleAvatar(radius: 35, backgroundColor: panel, backgroundImage: logo.isEmpty ? null : NetworkImage(logo),
+                      child: logo.isEmpty ? const Icon(Icons.live_tv, color: gold, size: 30) : null),
+                    const SizedBox(height: 7),
+                    Text(valueOf(record['title'], 'قناة'), maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              );
+            },
+          )),
+        ]);
+      },
     );
   }
 
+  Widget homeContent() {
+    return RefreshIndicator(color: gold, backgroundColor: panel, onRefresh: refreshData,
+      child: ListView(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(18, 15, 18, 8), child: Row(children: [
+          const Icon(Icons.movie_filter, color: gold, size: 32), const SizedBox(width: 9),
+          const Text('Sham', style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold)),
+          const Text('Flix', style: TextStyle(color: gold, fontSize: 25, fontWeight: FontWeight.bold)),
+          const Spacer(),
+          IconButton(tooltip: 'بحث', onPressed: () => showSearch(context: context, delegate: ShamFlixSearch()), icon: const Icon(Icons.search, color: Colors.white)),
+          IconButton(tooltip: 'الإشعارات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())), icon: const Icon(Icons.notifications_none, color: gold)),
+        ])),
+        mediaSection('أحدث الأفلام', movies, isSeries: false),
+        mediaSection('أحدث المسلسلات', series, isSeries: true),
+        animeSection(),
+        recentlyWatchedChannelsSection(),
+        const SizedBox(height: 30),
+      ]),
+    );
+  }
   Widget moviesPage() {
     return ListView(
       children: [
@@ -3744,3 +3622,6 @@ class ShamFlixSearch extends SearchDelegate {
 // تقليل طلبات مزامنة تقدم المشاهدة السحابية إلى مرة كل 30 ثانية لكل محتوى.
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة تفضيلات اللغة وسياسة التشغيل عبر Wi-Fi.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// الشاشة الرئيسية أصبحت أحدث الأفلام والمسلسلات والأنمي وآخر القنوات مشاهدة، دون ملفات شخصية أو تنزيلات أو تصنيفات.
