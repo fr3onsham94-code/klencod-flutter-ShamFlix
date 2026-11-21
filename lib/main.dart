@@ -16,6 +16,7 @@ import 'supabase_service.dart';
 import 'admin_auth_service.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
+import 'shamflix_cloud_service.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -30,6 +31,7 @@ Future<void> main() async {
     const Duration(seconds: 20),
   );
   await ShamFlixLocalStore.initialize();
+  unawaited(syncShamFlixCloudData());
 
   runApp(const ShamFlixApp());
 }
@@ -70,6 +72,25 @@ class ShamFlixLocalStore {
   }
 
   static String _key(String suffix) => 'shamflix_profile_${activeProfileId}_$suffix';
+  static String _keyForProfile(String profileId, String suffix) => 'shamflix_profile_${profileId}_$suffix';
+
+  static Future<List<Map<String, dynamic>>> getListForProfile(String profileId, String collection) async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final decoded = jsonDecode(prefs.getString(_keyForProfile(profileId, collection)) ?? '[]') as List;
+      return decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+    } catch (_) { return []; }
+  }
+
+  static Future<void> setListForProfile(String profileId, String collection, List<Map<String, dynamic>> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyForProfile(profileId, collection), jsonEncode(items));
+  }
+
+  static Future<void> setProfiles(List<Map<String, dynamic>> profiles) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_profilesKey, jsonEncode(profiles));
+  }
 
   static String playerPrefix(String progressKey, String title) {
     final base = progressKey.isEmpty ? title.hashCode : progressKey;
@@ -95,6 +116,7 @@ class ShamFlixLocalStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_profilesKey, jsonEncode(profiles));
     localProfileRefreshNotifier.value++;
+    unawaited(syncShamFlixCloudData());
     return true;
   }
 
@@ -105,6 +127,7 @@ class ShamFlixLocalStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_activeProfileKey, id);
     localProfileRefreshNotifier.value++;
+    unawaited(syncShamFlixCloudData());
   }
 
   static Future<void> removeProfile(String id) async {
@@ -159,6 +182,12 @@ class ShamFlixLocalStore {
       items.insert(0, record);
     }
     await _writeList('favorites', items);
+    if (exists) {
+      unawaited(ShamFlixCloudService.removeRecord(profileId: activeProfileId, collection: 'favorites', contentType: type, contentId: id).catchError((_) {}));
+    } else {
+      record['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+      unawaited(ShamFlixCloudService.saveRecord(profileId: activeProfileId, collection: 'favorites', record: record).catchError((_) {}));
+    }
     return !exists;
   }
 
@@ -166,6 +195,7 @@ class ShamFlixLocalStore {
     final items = await getFavorites();
     items.removeWhere((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id);
     await _writeList('favorites', items);
+    unawaited(ShamFlixCloudService.removeRecord(profileId: activeProfileId, collection: 'favorites', contentType: type, contentId: id).catchError((_) {}));
   }
 
   static Future<List<Map<String, dynamic>>> getHistory() => _readList('history');
@@ -180,6 +210,7 @@ class ShamFlixLocalStore {
     items.insert(0, record);
     if (items.length > 50) items.removeRange(50, items.length);
     await _writeList('history', items);
+    unawaited(ShamFlixCloudService.saveRecord(profileId: activeProfileId, collection: 'history', record: record).catchError((_) {}));
   }
 
   static Future<void> updateProgress(String progressKey, int position) async {
@@ -189,14 +220,51 @@ class ShamFlixLocalStore {
     items[index]['position'] = position;
     items[index]['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
     await _writeList('history', items);
+    unawaited(ShamFlixCloudService.saveRecord(profileId: activeProfileId, collection: 'history', record: items[index]).catchError((_) {}));
   }
 
   static Future<void> removeHistory(String type, String id) async {
     final items = await getHistory();
     items.removeWhere((item) => item['contentType']?.toString() == type && item['contentId']?.toString() == id);
     await _writeList('history', items);
+    unawaited(ShamFlixCloudService.removeRecord(profileId: activeProfileId, collection: 'history', contentType: type, contentId: id).catchError((_) {}));
   }
-  static Future<void> clearHistory() async => _writeList('history', []);
+  static Future<void> clearHistory() async {
+    await _writeList('history', []);
+    unawaited(ShamFlixCloudService.clearCollection(profileId: activeProfileId, collection: 'history').catchError((_) {}));
+  }
+}
+
+Future<void> syncShamFlixCloudData() async {
+  if (!ShamFlixCloudService.isAvailable) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = AuthService.client.auth.currentUser?.id;
+    if (userId == null) return;
+    final previousOwner = prefs.getString('shamflix_cloud_owner_id');
+    var profiles = await ShamFlixLocalStore.getProfiles();
+    if (previousOwner != null && previousOwner != userId) {
+      profiles = [{'id': 'main', 'name': 'ملفي الرئيسي'}];
+      await ShamFlixLocalStore.setProfiles(profiles);
+      await ShamFlixLocalStore.setListForProfile('main', 'favorites', []);
+      await ShamFlixLocalStore.setListForProfile('main', 'history', []);
+    }
+    profiles = await ShamFlixCloudService.syncProfiles(profiles);
+    if (!profiles.any((p) => p['id'] == 'main')) profiles.insert(0, {'id': 'main', 'name': 'ملفي الرئيسي'});
+    await ShamFlixLocalStore.setProfiles(profiles);
+    for (final profile in profiles) {
+      final id = profile['id'].toString();
+      for (final collection in ['favorites', 'history']) {
+        final local = await ShamFlixLocalStore.getListForProfile(id, collection);
+        final merged = await ShamFlixCloudService.syncCollection(profileId: id, collection: collection, localRecords: local);
+        await ShamFlixLocalStore.setListForProfile(id, collection, merged);
+      }
+    }
+    await prefs.setString('shamflix_cloud_owner_id', userId);
+    localProfileRefreshNotifier.value++;
+  } catch (_) {
+    // تبقى البيانات المحلية متاحة إذا تعذر الاتصال بالسحابة.
+  }
 }
 
 String formatWatchPosition(dynamic milliseconds) {
@@ -286,6 +354,9 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
         AuthService.client.auth.onAuthStateChange.listen(
       (data) {
         authRefreshNotifier.value++;
+        if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.initialSession) {
+          unawaited(syncShamFlixCloudData());
+        }
 
         if (data.event == AuthChangeEvent.passwordRecovery) {
           messengerKey.currentState?.showSnackBar(
@@ -722,7 +793,11 @@ class _HomePageState extends State<HomePage> {
                   },
                   icon: const Icon(Icons.search, color: Colors.white),
                 ),
-                const Icon(Icons.notifications_none, color: gold),
+                IconButton(
+                  tooltip: 'الإشعارات',
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
+                  icon: const Icon(Icons.notifications_none, color: gold),
+                ),
               ],
             ),
           ),
@@ -1460,6 +1535,65 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
   );
 }
 
+class ShamFlixNotificationsPage extends StatefulWidget {
+  const ShamFlixNotificationsPage({super.key});
+  @override
+  State<ShamFlixNotificationsPage> createState() => _ShamFlixNotificationsPageState();
+}
+class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
+  late Future<List<Map<String, dynamic>>> notifications;
+  @override
+  void initState() { super.initState(); notifications = ShamFlixCloudService.getNotifications(); }
+  void reload() { setState(() => notifications = ShamFlixCloudService.getNotifications()); }
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: Scaffold(
+      backgroundColor: bg,
+      appBar: AppBar(backgroundColor: bg, title: const Text('إشعارات ShamFlix'),
+        actions: [IconButton(onPressed: reload, icon: const Icon(Icons.refresh, color: gold))]),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: notifications,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+          if (snapshot.hasError) return const Center(child: Text('تعذر تحميل الإشعارات. سجّل الدخول وحاول مجدداً.', style: TextStyle(color: Colors.white54)));
+          final items = snapshot.data ?? [];
+          if (items.isEmpty) return const Center(child: Text('لا توجد إشعارات جديدة حالياً', style: TextStyle(color: Colors.white54)));
+          return ListView.builder(
+            padding: const EdgeInsets.all(12), itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final read = item['is_read'] == true;
+              return Card(color: panel, child: ListTile(
+                leading: Icon(item['content_type'] == 'episode' ? Icons.video_library : Icons.notifications_active, color: gold),
+                title: Text(valueOf(item['title'], 'محتوى جديد'), style: TextStyle(color: Colors.white, fontWeight: read ? FontWeight.normal : FontWeight.bold)),
+                subtitle: Text(valueOf(item['body']), style: const TextStyle(color: Colors.white54)),
+                trailing: PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white54),
+                  onSelected: (value) async {
+                    if (value == 'read') await ShamFlixCloudService.markNotificationRead(item['id'].toString());
+                    if (value == 'delete') await ShamFlixCloudService.deleteNotification(item['id'].toString());
+                    if (mounted) reload();
+                  },
+                  itemBuilder: (_) => [
+                    if (!read) const PopupMenuItem(value: 'read', child: Text('تحديد كمقروء')),
+                    const PopupMenuItem(value: 'delete', child: Text('حذف')),
+                  ],
+                ),
+                onTap: () async {
+                  if (!read) await ShamFlixCloudService.markNotificationRead(item['id'].toString());
+                  if (mounted) reload();
+                },
+              ));
+            },
+          );
+        },
+      ),
+    ),
+  );
+}
+
 class FavoritesPage extends StatefulWidget {
   const FavoritesPage({super.key});
   @override
@@ -1570,6 +1704,9 @@ class DetailsPage extends StatefulWidget {
 class _DetailsPageState extends State<DetailsPage> {
   bool isFavorite = false;
   bool seasonsLoading = false;
+  double myRating = 0;
+  String myReaction = 'none';
+  Map<String, dynamic> ratingSummary = {'average': 0.0, 'count': 0, 'likes': 0, 'dislikes': 0};
   List<Map<String, dynamic>> seasons = [];
   String? seasonsError;
 
@@ -1577,6 +1714,7 @@ class _DetailsPageState extends State<DetailsPage> {
   void initState() {
     super.initState();
     _loadFavoriteState();
+    _loadEngagement();
     if (widget.isSeries) _loadSeasons();
   }
 
@@ -1602,6 +1740,119 @@ class _DetailsPageState extends State<DetailsPage> {
       setState(() => isFavorite = saved);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(saved ? 'تمت الإضافة إلى المفضلة' : 'تمت الإزالة من المفضلة')));
     }
+  }
+
+  Future<void> _loadEngagement() async {
+    final type = widget.isChannel ? 'channel' : widget.isSeries ? 'series' : 'movie';
+    final id = widget.item['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    try {
+      final summary = await ShamFlixCloudService.getRatingSummary(contentType: type, contentId: id);
+      final mine = await ShamFlixCloudService.getMyRating(contentType: type, contentId: id);
+      if (!mounted) return;
+      setState(() {
+        ratingSummary = summary;
+        myRating = (mine?['rating'] as num?)?.toDouble() ?? 0;
+        myReaction = mine?['reaction']?.toString() ?? 'none';
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveEngagement({double? rating, String? reaction}) async {
+    if (!AuthService.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سجّل الدخول أولاً لتقييم المحتوى')));
+      return;
+    }
+    final type = widget.isChannel ? 'channel' : widget.isSeries ? 'series' : 'movie';
+    final id = widget.item['id']?.toString() ?? '';
+    try {
+      await ShamFlixCloudService.saveRating(
+        contentType: type,
+        contentId: id,
+        rating: (rating ?? (myRating == 0 ? 5 : myRating)).round(),
+        reaction: reaction ?? myReaction,
+      );
+      await _loadEngagement();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ تقييمك')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Widget _engagementPanel() {
+    final average = (ratingSummary['average'] as num?)?.toDouble() ?? 0;
+    final count = ratingSummary['count'] ?? 0;
+    return Card(
+      color: panel,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('تقييمك للمحتوى', style: TextStyle(color: gold, fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Row(children: [
+            for (int i = 1; i <= 5; i++)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _saveEngagement(rating: i.toDouble()),
+                icon: Icon(i <= myRating ? Icons.star : Icons.star_border, color: gold),
+              ),
+            const Spacer(),
+            Text(average == 0 ? 'لا يوجد تقييم' : average.toStringAsFixed(1), style: const TextStyle(color: Colors.white)),
+            const Icon(Icons.star, color: gold, size: 17),
+            Text(' ($count)', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ]),
+          Row(children: [
+            TextButton.icon(onPressed: () => _saveEngagement(reaction: 'like'),
+              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? gold : Colors.white54), label: const Text('إعجاب')),
+            TextButton.icon(onPressed: () => _saveEngagement(reaction: 'dislike'),
+              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : Colors.white54), label: const Text('لا يعجبني')),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _recommendationsSection() {
+    final category = valueOf(widget.item['category']);
+    if (category.isEmpty) return const SizedBox.shrink();
+    final currentId = widget.item['id']?.toString() ?? '';
+    return FutureBuilder<List<List<Map<String, dynamic>>>>(
+      future: Future.wait([SupabaseService.getMovies(), SupabaseService.getSeries()]),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        final related = <Map<String, dynamic>>[];
+        for (final list in snapshot.data!) {
+          related.addAll(list.where((item) => valueOf(item['category']) == category && item['id']?.toString() != currentId));
+        }
+        final unique = <String, Map<String, dynamic>>{};
+        for (final item in related) { unique[item['id'].toString()] = item; }
+        final items = unique.values.take(10).toList();
+        if (items.isEmpty) return const SizedBox.shrink();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const SizedBox(height: 22),
+          const Text('قد يعجبك أيضاً', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          SizedBox(height: 195, child: ListView.builder(
+            reverse: true, scrollDirection: Axis.horizontal, itemCount: items.length,
+            itemBuilder: (context, index) {
+              final relatedItem = items[index];
+              final isSeriesItem = relatedItem.containsKey('_isSeries') ? relatedItem['_isSeries'] == true : snapshot.data![1].any((e) => e['id'] == relatedItem['id']);
+              final posterUrl = valueOf(relatedItem['poster_url']);
+              return GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(item: relatedItem, isSeries: isSeriesItem))),
+                child: Container(width: 112, margin: const EdgeInsets.only(left: 10), child: Column(children: [
+                  Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(9), child: posterUrl.isEmpty
+                    ? Container(color: panel, child: const Icon(Icons.movie, color: gold))
+                    : Image.network(posterUrl, width: 112, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold))))),
+                  const SizedBox(height: 6),
+                  Text(valueOf(relatedItem['title']), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                ])),
+              );
+            },
+          )),
+        ]);
+      },
+    );
   }
 
   Future<void> _loadSeasons() async {
@@ -1940,6 +2191,9 @@ class _DetailsPageState extends State<DetailsPage> {
                     const Text('القصة والوصف', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
+                    const SizedBox(height: 18),
+                    _engagementPanel(),
+                    _recommendationsSection(),
                     const SizedBox(height: 25),
                     if (!isSeries)
                       SizedBox(
@@ -3321,3 +3575,5 @@ class ShamFlixSearch extends SearchDelegate {
 // ضمان استكمال موضع المشاهدة من المشغل الداخلي وتصحيح تمييز نتائج المسلسلات في البحث بتاريخ 21-11-2026.
 
 // إضافة مسار احتياطي لاستكمال المشاهدة عند تعذر جلب قائمة السيرفرات بتاريخ 21-11-2026.
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة مزامنة سحابية للملفات والمفضلة وسجل المشاهدة، تقييمات وتوصيات ومركز إشعارات داخل التطبيق.
