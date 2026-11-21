@@ -14,6 +14,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -3729,6 +3730,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
   late int currentServerIndex;
   final Set<int> _failedServers = <int>{};
+  String? _externalSubtitlePath;
   bool _failoverInProgress = false;
   StreamSubscription<Duration>? _positionSubscription;
   int _lastSavedSecond = -1;
@@ -3821,6 +3823,23 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   Future<void> _restoreTrackPreferences(SharedPreferences prefs) async {
     final audioId = prefs.getString('${_settingsPrefix}_audio');
     final subtitleId = prefs.getString('${_settingsPrefix}_subtitle');
+    final externalSubtitle = prefs.getString('${_settingsPrefix}_external_subtitle');
+    if (externalSubtitle != null && externalSubtitle.trim().isNotEmpty) {
+      final externalUri = Uri.tryParse(externalSubtitle);
+      final isRemote = externalUri != null &&
+          (externalUri.scheme == 'http' || externalUri.scheme == 'https');
+      if (isRemote || await File(externalSubtitle).exists()) {
+        _externalSubtitlePath = externalSubtitle;
+        final subtitleName = isRemote && externalUri!.pathSegments.isNotEmpty
+            ? externalUri.pathSegments.last
+            : externalSubtitle.split(Platform.pathSeparator).last;
+        await player.setSubtitleTrack(
+          SubtitleTrack.uri(externalSubtitle, title: subtitleName),
+        );
+        return;
+      }
+      await prefs.remove('${_settingsPrefix}_external_subtitle');
+    }
     if (audioId != null) {
       for (final track in player.state.tracks.audio) {
         if (track.id.toString() == audioId) {
@@ -3885,6 +3904,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         try {
           await player.open(Media(nextUrl)).timeout(const Duration(seconds: 20));
           if (!mounted) return;
+          final playbackPrefs = await SharedPreferences.getInstance();
+          await _restoreTrackPreferences(playbackPrefs);
           await _savePreferredServer();
           _failedServers.clear();
           setState(() => opening = false);
@@ -4068,7 +4089,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _pickSubtitleTrack() async {
     final tracks = player.state.tracks.subtitle;
-    final selected = await showModalBottomSheet<SubtitleTrack>(
+    final selected = await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -4095,6 +4116,22 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
+                      leading: Icon(Icons.folder_open_rounded, color: gold, size: 18),
+                      title: Text(appText('تحميل ترجمة من الجهاز', 'Load Subtitle File', 'Cihazdan Altyazı Yükle'), textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, '__local_subtitle__'),
+                    ),
+                    ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
+                      leading: Icon(Icons.link_rounded, color: gold, size: 18),
+                      title: Text(appText('إضافة ترجمة من رابط', 'Load Subtitle from URL', 'URL ile Altyazı Yükle'), textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onTap: () => Navigator.pop(sheetContext, '__url_subtitle__'),
+                    ),
+                    ListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -2),
                       title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
@@ -4115,10 +4152,134 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         );
       },
     );
-    if (selected != null) {
+    if (selected == '__local_subtitle__') {
+      await _pickLocalSubtitle();
+      return;
+    }
+    if (selected == '__url_subtitle__') {
+      await _pickSubtitleFromUrl();
+      return;
+    }
+    if (selected is SubtitleTrack) {
       await player.setSubtitleTrack(selected);
+      _externalSubtitlePath = null;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('${_settingsPrefix}_external_subtitle');
       await _savePlayerSetting('subtitle', selected.id.toString());
       _showControls();
+    }
+  }
+
+  Future<void> _pickLocalSubtitle() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['srt', 'ass', 'ssa', 'vtt', 'sub', 'smi', 'txt'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.single;
+      var bytes = picked.bytes;
+      if (bytes == null && picked.path != null) {
+        bytes = await File(picked.path!).readAsBytes();
+      }
+      if (bytes == null || bytes.isEmpty) {
+        _message('ملف الترجمة فارغ أو تعذر قراءته');
+        return;
+      }
+      final temporaryDirectory = await getTemporaryDirectory();
+      final subtitleDirectory = Directory(
+        '${temporaryDirectory.path}${Platform.pathSeparator}shamflix_subtitles',
+      );
+      await subtitleDirectory.create(recursive: true);
+      final safeName = picked.name.replaceAll(
+        RegExp(r'[^A-Za-z0-9._-]'),
+        '_',
+      );
+      final subtitleFile = File(
+        '${subtitleDirectory.path}${Platform.pathSeparator}${DateTime.now().microsecondsSinceEpoch}_$safeName',
+      );
+      await subtitleFile.writeAsBytes(bytes, flush: true);
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(subtitleFile.path, title: picked.name),
+      );
+      _externalSubtitlePath = subtitleFile.path;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '${_settingsPrefix}_external_subtitle',
+        subtitleFile.path,
+      );
+      await prefs.remove('${_settingsPrefix}_subtitle');
+      _message('تم تحميل الترجمة: ${picked.name}');
+      _showControls();
+    } catch (e) {
+      _message('تعذر تحميل ملف الترجمة: $e');
+    }
+  }
+
+  Future<void> _pickSubtitleFromUrl() async {
+    final urlController = TextEditingController();
+    try {
+      final enteredUrl = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF202020),
+          title: Text(
+            appText('رابط ملف الترجمة', 'Subtitle URL', 'Altyazı URL\'si'),
+            style: TextStyle(color: Colors.white),
+          ),
+          content: TextField(
+            controller: urlController,
+            keyboardType: TextInputType.url,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'https://example.com/subtitle.srt',
+              hintStyle: const TextStyle(color: Colors.white38),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(appText('إلغاء', 'Cancel', 'İptal')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold),
+              onPressed: () => Navigator.pop(dialogContext, urlController.text.trim()),
+              child: Text(appText('تحميل', 'Load', 'Yükle')),
+            ),
+          ],
+        ),
+      );
+      if (enteredUrl == null || enteredUrl.isEmpty) return;
+      final uri = Uri.tryParse(enteredUrl);
+      if (uri == null ||
+          !uri.hasAuthority ||
+          (uri.scheme != 'http' && uri.scheme != 'https')) {
+        _message('أدخل رابط ترجمة صحيحاً يبدأ بـ http أو https');
+        return;
+      }
+      await player.setSubtitleTrack(
+        SubtitleTrack.uri(
+          uri.toString(),
+          title: uri.pathSegments.isNotEmpty
+              ? uri.pathSegments.last
+              : 'External Subtitle',
+        ),
+      );
+      _externalSubtitlePath = uri.toString();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '${_settingsPrefix}_external_subtitle',
+        uri.toString(),
+      );
+      await prefs.remove('${_settingsPrefix}_subtitle');
+      _message('تم تحميل الترجمة الخارجية');
+      _showControls();
+    } catch (e) {
+      _message('تعذر تحميل الترجمة من الرابط: $e');
+    } finally {
+      urlController.dispose();
     }
   }
 
@@ -4887,3 +5048,5 @@ class ShamFlixSearch extends SearchDelegate {
 }
 
 // آخر تعديل: إصلاح مراجع ألوان الصفحات العامة والتفاصيل والإعدادات والقنوات خارج صفحة الباقات | التاريخ: 2026-11-21 | الوقت: 23:50:00 بتوقيت تركيا
+
+// آخر تعديل: إضافة تحميل ملفات الترجمة الخارجية من الجهاز أو الرابط، مع حفظ الاختيار واستعادته عند فتح المشغل | التاريخ والوقت: 22/11/2026, 00:29:37 بتوقيت تركيا.
