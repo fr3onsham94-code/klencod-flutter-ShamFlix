@@ -2512,6 +2512,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Future<void> _open([String? url]) async {
+    if (widget.embedded && !await ShamFlixAppPreferences.canPlayOverCurrentNetwork()) {
+      if (mounted) setState(() { opening = false; error = 'التشغيل متاح عبر Wi-Fi فقط. غيّر إعداد الشبكة للسماح ببيانات الهاتف.'; });
+      return;
+    }
     try {
       await player.open(Media(url ?? widget.url)).timeout(const Duration(seconds: 20));
       if (!mounted) return;
@@ -2927,6 +2931,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _toggleFullscreen() async {
     if (widget.embedded) {
+      if (!await ShamFlixAppPreferences.canPlayOverCurrentNetwork()) { _message('التشغيل متاح عبر Wi-Fi فقط.'); return; }
       await player.pause();
       if (!mounted) return;
       final selectedUrl = widget.servers.isNotEmpty && currentServerIndex < widget.servers.length
@@ -3854,3 +3859,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // زر إعادة المحاولة داخل المشغل المضمن دون إغلاق صفحة القنوات عند فشل البث.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تطبيق شرط Wi-Fi عند كل محاولة تبديل سيرفر أو إعادة تشغيل أو توسيع المشغل المضمن.
