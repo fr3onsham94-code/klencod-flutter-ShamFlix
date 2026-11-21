@@ -1201,329 +1201,57 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
+  Future<void> inviteFriend() async {
+    try {
+      final row = await AuthService.client.from('app_settings').select('setting_value').eq('setting_key', 'app_invite_link').maybeSingle();
+      final link = row?['setting_value']?.toString().trim() ?? '';
+      if (link.isEmpty) { showMessage('رابط الدعوة لم يضفه المدير بعد'); return; }
+      await Share.share('جرّب تطبيق ShamFlix لمشاهدة الأفلام والمسلسلات والقنوات: $link');
+    } catch (_) { showMessage('تعذر تجهيز رابط الدعوة حالياً'); }
+  }
+
   @override
   Widget build(BuildContext context) {
     final loggedIn = AuthService.isLoggedIn;
-
-    return ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        const SizedBox(height: 25),
-        const Icon(
-          Icons.account_circle,
-          color: gold,
-          size: 85,
-        ),
+    return ListView(padding: const EdgeInsets.all(18), children: [
+      const SizedBox(height: 18),
+      const Icon(Icons.account_circle, color: gold, size: 76),
+      const SizedBox(height: 8),
+      const Center(child: Text('حسابي', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
+      const SizedBox(height: 16),
+      if (loggedIn)
+        Card(color: panel, child: ListTile(leading: const Icon(Icons.verified_user_outlined, color: gold),
+          title: Text(AuthService.userEmail ?? 'مستخدم ShamFlix', style: const TextStyle(color: Colors.white)),
+          subtitle: Text(AuthService.isAdmin ? 'مدير' : 'حساب مسجل', style: const TextStyle(color: Colors.white54))))
+      else ...[
+        const Center(child: Text('أهلاً بك في ShamFlix', style: TextStyle(color: Colors.white70, fontSize: 16))),
         const SizedBox(height: 12),
-        const Center(
-          child: Text(
-            'حسابي',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 25,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        const SizedBox(height: 25),
-
-        if (!loggedIn) ...[
-          const Center(
-            child: Text(
-              'أهلاً بك في ShamFlix',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 16,
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 52,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: gold,
-                foregroundColor: Colors.black,
-              ),
-              onPressed: openLogin,
-              icon: const Icon(Icons.login),
-              label: const Text(
-                'تسجيل الدخول أو إنشاء حساب',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          const SizedBox(height: 15),
-          accountTile(icon: Icons.people_alt_outlined, title: 'الملفات الشخصية', subtitle: 'حتى 5 ملفات مستقلة',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()))),
-          accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'أفلامك ومسلسلاتك المحفوظة',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-          accountTile(
-            icon: Icons.settings_outlined,
-            title: 'إعدادات المشغل',
-            subtitle: 'اختيار المشغل الداخلي أو VLC أو MX Player',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ShamFlixPlayerSettingsPage(),
-                ),
-              );
-            },
-          ),
-
-          accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'آخر ما شاهدته على هذا الملف',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
-        ] else ...[
-          Card(
-            color: panel,
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                children: [
-                  const Icon(
-                    Icons.account_circle,
-                    color: gold,
-                    size: 55,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    AuthService.userEmail ?? 'مستخدم ShamFlix',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF493B25),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      AuthService.isAdmin ? 'مدير' : 'مستخدم',
-                      style: const TextStyle(
-                        color: gold,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          googleAccountTile(),
-
-          if (AuthService.isAdmin)
-            accountTile(
-              icon: Icons.admin_panel_settings,
-              title: 'إدارة ShamFlix',
-              subtitle: 'إعدادات وأدوات الإدارة',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AdminPage(),
-                  ),
-                );
-              },
-            ),
-
-          accountTile(icon: Icons.people_alt_outlined, title: 'الملفات الشخصية', subtitle: 'حتى 5 ملفات مستقلة',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileManagerPage()))),
-          accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'أفلامك ومسلسلاتك المحفوظة',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-          accountTile(
-            icon: Icons.settings_outlined,
-            title: 'إعدادات المشغل',
-            subtitle: 'اختيار المشغل الداخلي أو VLC أو MX Player',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ShamFlixPlayerSettingsPage(),
-                ),
-              );
-            },
-          ),
-
-          accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'آخر ما شاهدته على هذا الملف',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
-
-          const SizedBox(height: 15),
-
-          SizedBox(
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: loading ? null : logout,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: gold,
-                side: const BorderSide(color: gold),
-              ),
-              icon: loading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        color: gold,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(Icons.logout),
-              label: const Text('تسجيل الخروج'),
-            ),
-          ),
-        ],
+        SizedBox(height: 48, child: FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+          onPressed: openLogin, icon: const Icon(Icons.login), label: const Text('تسجيل الدخول أو إنشاء حساب'))),
       ],
-    );
-  }
-}
-
-
-class ProfileManagerPage extends StatefulWidget {
-  const ProfileManagerPage({super.key});
-  @override
-  State<ProfileManagerPage> createState() => _ProfileManagerPageState();
-}
-class _ProfileManagerPageState extends State<ProfileManagerPage> {
-  late Future<List<Map<String, dynamic>>> profiles;
-  @override
-  void initState() { super.initState(); profiles = ShamFlixLocalStore.getProfiles(); }
-  void reload() => setState(() => profiles = ShamFlixLocalStore.getProfiles());
-
-  Future<void> addProfile() async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(context: context, builder: (dialogContext) => AlertDialog(
-      backgroundColor: panel, title: const Text('ملف شخصي جديد', style: TextStyle(color: gold)),
-      content: TextField(controller: controller, autofocus: true, maxLength: 24,
-        style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'اسم الملف الشخصي')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
-          onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('إضافة')),
+      if (AuthService.isAdmin)
+        accountTile(icon: Icons.admin_panel_settings, title: 'إدارة ShamFlix', subtitle: 'لوحة المدير والأدمن',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPage()))),
+      accountTile(icon: Icons.settings_outlined, title: 'إعدادات التطبيق', subtitle: 'المشغل واللغة والشبكة والتخزين',
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixAppSettingsPage()))),
+      accountTile(icon: Icons.favorite_outline, title: 'المفضلة', subtitle: 'الأفلام والمسلسلات والقنوات المحفوظة',
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
+      accountTile(icon: Icons.history, title: 'سجل المشاهدة', subtitle: 'كل ما شاهدته مؤخراً',
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
+      accountTile(icon: Icons.person_add_alt_1_outlined, title: 'دعوة صديق', subtitle: 'إرسال رابط التطبيق مباشرة', onTap: inviteFriend),
+      accountTile(icon: Icons.policy_outlined, title: 'حقوق النشر والخصوصية', subtitle: 'حقوق تطبيق ShamFlix وسياسة الخصوصية',
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixLegalPage()))),
+      if (loggedIn) ...[
+        const SizedBox(height: 14),
+        SizedBox(height: 48, child: OutlinedButton.icon(onPressed: loading ? null : logout,
+          style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold)),
+          icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: gold, strokeWidth: 2)) : const Icon(Icons.logout),
+          label: const Text('تسجيل الخروج'))),
       ],
-    ));
-    controller.dispose();
-    if (name == null || name.trim().isEmpty) return;
-    final added = await ShamFlixLocalStore.addProfile(name);
-    if (!mounted) return;
-    if (!added) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يمكنك إنشاء 5 ملفات شخصية كحد أقصى')));
-    reload();
+    ]);
   }
-
-  Future<void> removeProfile(Map<String, dynamic> profile) async {
-    final id = profile['id']?.toString() ?? '';
-    if (id == 'main') return;
-    final confirm = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
-      backgroundColor: panel, title: const Text('حذف الملف الشخصي؟', style: TextStyle(color: Colors.white)),
-      content: Text('سيتم حذف ملف "${profile['name']}" وبياناته المحلية من هذا الجهاز.', style: const TextStyle(color: Colors.white70)),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-        TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف', style: TextStyle(color: Colors.redAccent))),
-      ],
-    ));
-    if (confirm != true) return;
-    await ShamFlixLocalStore.removeProfile(id);
-    if (mounted) reload();
-  }
-
-  @override
-  Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
-    child: Scaffold(
-      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('الملفات الشخصية')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(future: profiles, builder: (context, snapshot) {
-        final items = snapshot.data ?? [];
-        return ListView(padding: const EdgeInsets.all(16), children: [
-          const Text('اختر ملفاً لمتابعة المشاهدة بقوائمه وسجله المستقل.', style: TextStyle(color: Colors.white60)),
-          const SizedBox(height: 14),
-          for (final profile in items)
-            Card(color: panel, child: ListTile(
-              leading: const CircleAvatar(backgroundColor: Color(0xFF493B25), child: Icon(Icons.person, color: gold)),
-              title: Text(valueOf(profile['name']), style: const TextStyle(color: Colors.white)),
-              subtitle: Text(profile['id'] == ShamFlixLocalStore.activeProfileId ? 'الملف النشط' : 'اضغط للتبديل',
-                style: const TextStyle(color: Colors.white54)),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (profile['id'] == ShamFlixLocalStore.activeProfileId) const Icon(Icons.check_circle, color: gold),
-                if (profile['id'] != 'main') IconButton(tooltip: 'حذف الملف', onPressed: () => removeProfile(profile),
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
-              ]),
-              onTap: () async { await ShamFlixLocalStore.setActiveProfile(profile['id'].toString()); if (mounted) Navigator.pop(context); },
-            )),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(onPressed: items.length >= 5 ? null : addProfile, icon: const Icon(Icons.add),
-            label: const Text('إضافة ملف شخصي'),
-            style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold))),
-          const SizedBox(height: 8),
-          const Text('الملفات الشخصية محفوظة على هذا الجهاز ولا تغيّر حساب تسجيل الدخول.',
-            textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
-        ]);
-      }),
-    ),
-  );
 }
 
-class ShamFlixDownloadsPage extends StatefulWidget {
-  const ShamFlixDownloadsPage({super.key});
-  @override
-  State<ShamFlixDownloadsPage> createState() => _ShamFlixDownloadsPageState();
-}
-class _ShamFlixDownloadsPageState extends State<ShamFlixDownloadsPage> {
-  late Future<List<Map<String, dynamic>>> downloads;
-  @override
-  void initState() { super.initState(); downloads = ShamFlixDownloadService.list(); }
-  void reload() => setState(() => downloads = ShamFlixDownloadService.list());
-
-  String _size(dynamic bytes) {
-    final value = (bytes as num?)?.toDouble() ?? 0;
-    if (value >= 1024 * 1024 * 1024) return '${(value / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    return '${(value / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
-  @override
-  Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
-    child: Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text('التنزيلات')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: downloads,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
-          final items = snapshot.data ?? [];
-          if (items.isEmpty) return const Center(child: Text('لا توجد ملفات محفوظة دون إنترنت', style: TextStyle(color: Colors.white54)));
-          return ListView.builder(
-            padding: const EdgeInsets.all(12), itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return Card(color: panel, child: ListTile(
-                leading: const Icon(Icons.movie, color: gold, size: 34),
-                title: Text(valueOf(item['title'], 'فيديو'), style: const TextStyle(color: Colors.white)),
-                subtitle: Text(_size(item['size']), style: const TextStyle(color: Colors.white54)),
-                trailing: PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white54),
-                  onSelected: (value) async {
-                    if (value == 'delete') { await ShamFlixDownloadService.remove(item); if (mounted) reload(); }
-                  },
-                  itemBuilder: (_) => const [PopupMenuItem(value: 'delete', child: Text('حذف التنزيل'))],
-                ),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(
-                  url: item['path'].toString(), title: valueOf(item['title'], 'فيديو'),
-                ))),
-              ));
-            },
-          );
-        },
-      ),
-    ),
-  );
-}
 
 class ShamFlixNotificationsPage extends StatefulWidget {
   const ShamFlixNotificationsPage({super.key});
@@ -1732,15 +1460,6 @@ class _DetailsPageState extends State<DetailsPage> {
     }
   }
 
-  Future<void> _downloadItem(String url, String title, String id) async {
-    try {
-      await ShamFlixDownloadService.download(url: url, title: title, contentId: id);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تنزيل المحتوى للمشاهدة دون إنترنت')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
-    }
-  }
-
   Future<void> _loadEngagement() async {
     final type = widget.isChannel ? 'channel' : widget.isSeries ? 'series' : 'movie';
     final id = widget.item['id']?.toString() ?? '';
@@ -1885,6 +1604,10 @@ class _DetailsPageState extends State<DetailsPage> {
     required String title,
     String? legacyUrl,
   }) async {
+    if (!await ShamFlixAppPreferences.canPlayOverCurrentNetwork()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('التشغيل متاح عبر Wi-Fi فقط. غيّر إعداد الشبكة للسماح ببيانات الهاتف.')));
+      return;
+    }
     if (contentType != 'episode') {
       await saveWatchRecord(contentType: contentType, item: widget.item, title: title,
         isSeries: widget.isSeries, isChannel: widget.isChannel);
@@ -2133,12 +1856,7 @@ class _DetailsPageState extends State<DetailsPage> {
                     ),
               title: Text('$number - $episodeTitle', style: const TextStyle(color: Colors.white)),
               subtitle: const Text('تشغيل الحلقة', style: TextStyle(color: Colors.white54)),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (ShamFlixDownloadService.extensionFor(valueOf(episode['stream_url'])) != null)
-                  IconButton(tooltip: 'تنزيل الحلقة', icon: const Icon(Icons.download_outlined, color: gold),
-                    onPressed: () => _downloadItem(valueOf(episode['stream_url']), episodeTitle, episode['id'].toString())),
-                const Icon(Icons.play_circle_outline, color: gold),
-              ]),
+              trailing: const Icon(Icons.play_circle_outline, color: gold),
               onTap: () async {
                 final episodeRecord = Map<String, dynamic>.from(episode);
                 if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
@@ -2208,16 +1926,6 @@ class _DetailsPageState extends State<DetailsPage> {
                     _engagementPanel(),
                     _recommendationsSection(),
                     const SizedBox(height: 25),
-                    if (!isChannel && ShamFlixDownloadService.extensionFor(valueOf(item['stream_url'])) != null)
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _downloadItem(valueOf(item['stream_url']), title, item['id'].toString()),
-                          icon: const Icon(Icons.download, color: gold),
-                          label: const Text('تنزيل للمشاهدة دون إنترنت', style: TextStyle(color: gold)),
-                          style: OutlinedButton.styleFrom(side: const BorderSide(color: gold), padding: const EdgeInsets.all(14)),
-                        ),
-                      ),
                     if (!isSeries)
                       SizedBox(
                         width: double.infinity,
@@ -3625,3 +3333,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // الشاشة الرئيسية أصبحت أحدث الأفلام والمسلسلات والأنمي وآخر القنوات مشاهدة، دون ملفات شخصية أو تنزيلات أو تصنيفات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إعادة ترتيب قائمة الزائر وإزالة صفحات الملفات الشخصية والتنزيلات وأزرار تنزيل الحلقات والأفلام.
