@@ -1735,9 +1735,11 @@ insetPadding: const EdgeInsets.all(8),
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             backgroundColor: adminPanel,
+                insetPadding: const EdgeInsets.all(8),
             title: Text(existing == null ? 'إضافة حلقة' : 'تعديل الحلقة', style: const TextStyle(color: adminGold)),
             content: SizedBox(
-              width: 500,
+              width: MediaQuery.of(context).size.width > 800 ? 760 : MediaQuery.of(context).size.width * 0.94,
+              height: MediaQuery.of(context).size.height * 0.78,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -2761,6 +2763,7 @@ insetPadding: const EdgeInsets.all(8),
               textDirection: TextDirection.rtl,
               child: AlertDialog(
                 backgroundColor: adminPanel,
+                insetPadding: const EdgeInsets.all(8),
                 title: Text(
                   existing == null
                       ? 'إضافة فيلم جديد'
@@ -2770,7 +2773,7 @@ insetPadding: const EdgeInsets.all(8),
                   ),
                 ),
                 content: SizedBox(
-                  width: 500,
+                  width: MediaQuery.of(context).size.width > 800 ? 760 : MediaQuery.of(context).size.width * 0.94,
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -3765,3 +3768,6 @@ insetPadding: const EdgeInsets.all(8),
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تحويل نماذج إضافة وتعديل الأفلام والمسلسلات والقنوات والحلقات إلى نوافذ شبه كاملة الشاشة تشبه صفحات الإدارة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توحيد حجم نوافذ نماذج المحتوى لتكون شبه كاملة الشاشة على الهواتف والأجهزة اللوحية.
