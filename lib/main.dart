@@ -1058,6 +1058,13 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
         contentId: channel['id'].toString(),
       );
     });
+    unawaited(saveWatchRecord(
+      contentType: 'channel',
+      item: channel,
+      title: valueOf(channel['name'], 'قناة'),
+      isChannel: true,
+      fallbackPoster: valueOf(channel['logo_url']),
+    ));
   }
   @override
   Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
@@ -3807,3 +3814,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تطبيق شرط Wi-Fi قبل تشغيل المشغل المضمن واختيار أول قناة تلقائياً بعد تحميل الباقة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تسجيل القناة المختارة في سجل المشاهدة لعرضها ضمن آخر القنوات مشاهدة على الرئيسية.
