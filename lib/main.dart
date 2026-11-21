@@ -1737,7 +1737,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text('سرعة التشغيل',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
             ),
             for (final option in <MapEntry<double, String>>[
               const MapEntry(0.5, 'نصف السرعة'),
@@ -1752,10 +1752,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                 title: Text(
                   '${option.key}x',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: player.state.rate == option.key ? gold : Colors.white),
+                  style: TextStyle(color: player.state.rate == option.key ? gold : Colors.white, fontSize: 13),
                 ),
                 subtitle: Text(option.value, textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    style: const TextStyle(color: Colors.white54, fontSize: 10)),
                 onTap: () => Navigator.pop(sheetContext, option.key),
               ),
           ],
@@ -1807,12 +1807,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           shrinkWrap: true,
           children: [
             const ListTile(title: Text('مسار الصوت', textAlign: TextAlign.center,
-                style: TextStyle(color: gold, fontWeight: FontWeight.bold))),
+                style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
             for (int index = 0; index < tracks.length; index++)
               ListTile(
                 title: Text(_friendlyTrackLabel(tracks[index], index),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white)),
+                    style: const TextStyle(color: Colors.white, fontSize: 12)),
                 onTap: () => Navigator.pop(sheetContext, tracks[index]),
               ),
           ],
@@ -1835,17 +1835,17 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           shrinkWrap: true,
           children: [
             const ListTile(title: Text('الترجمة', textAlign: TextAlign.center,
-                style: TextStyle(color: gold, fontWeight: FontWeight.bold))),
+                style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
             ListTile(
               title: const Text('إيقاف الترجمة', textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white)),
+                  style: TextStyle(color: Colors.white, fontSize: 12)),
               onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
             ),
             for (int index = 0; index < tracks.length; index++)
               ListTile(
                 title: Text(_friendlyTrackLabel(tracks[index], index),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white)),
+                    style: const TextStyle(color: Colors.white, fontSize: 12)),
                 onTap: () => Navigator.pop(sheetContext, tracks[index]),
               ),
           ],
@@ -1938,13 +1938,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white, size: 21),
+            Icon(icon, color: Colors.white, size: 19),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 9)),
           ],
         ),
       ),
@@ -2589,3 +2589,5 @@ class ShamFlixSearch extends SearchDelegate {
 // إصلاح تنسيق الوقت أسفل شريط التقدم لمنع ظهور تعبيرات Dart كنص بتاريخ 21-11-2026.
 
 // تصغير خط الوقت الحالي والمدة أسفل شريط التقدم إلى 9px بتاريخ 21-11-2026.
+
+// تصغير خطوط قوائم السرعة والصوت والترجمة وتسميات أدوات المشغّل بتاريخ 21-11-2026.
