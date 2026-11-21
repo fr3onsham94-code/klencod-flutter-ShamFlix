@@ -2144,8 +2144,8 @@ class _AdminPageState extends State<AdminPage> {
 
       // ترتيب المدراء أولاً، ثم الأحدث تسجيلاً.
       users.sort((a, b) {
-        final aAdmin = a['role'] == 'admin';
-        final bAdmin = b['role'] == 'admin';
+        final aAdmin = ['admin', 'manager'].contains(a['role']);
+        final bAdmin = ['admin', 'manager'].contains(b['role']);
 
         if (aAdmin != bAdmin) {
           return aAdmin ? -1 : 1;
@@ -2185,7 +2185,7 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   bool isUserAdmin(Map<String, dynamic> user) {
-    return user['role'] == 'admin';
+    return ['admin', 'manager'].contains(user['role']);
   }
 
   // =========================
