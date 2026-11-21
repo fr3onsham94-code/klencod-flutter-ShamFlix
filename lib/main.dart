@@ -68,7 +68,7 @@ Future<void> main() async {
 }
 
 const bg = Color(0xFF090909);
-const gold = Color(0xFFD6AC55);
+const gold = Color(0xFFE50914);
 const panel = Color(0xFF191919);
 
 String valueOf(dynamic value, [String fallback = '']) {
@@ -1020,7 +1020,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: const Text(
-                    'SHAMFLIX',
+                    'SHAM FLIX',
                     style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
                   ),
                 ),
@@ -1173,7 +1173,22 @@ class _HomePageState extends State<HomePage> {
         ),
         bottomNavigationBar: NavigationBar(
           backgroundColor: const Color(0xFF151515),
-          indicatorColor: const Color(0xFF493B25),
+          indicatorColor: const Color(0x33E50914),
+          height: 62,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
+            return TextStyle(
+              color: states.contains(WidgetState.selected) ? Colors.white : Colors.white60,
+              fontSize: states.contains(WidgetState.selected) ? 10 : 9,
+              fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.normal,
+            );
+          }),
+          iconTheme: WidgetStateProperty.resolveWith<IconThemeData>((states) {
+            return IconThemeData(
+              size: 19,
+              color: states.contains(WidgetState.selected) ? gold : Colors.white60,
+            );
+          }),
           selectedIndex: selectedTab,
           onDestinationSelected: (index) {
             setState(() {
@@ -1734,7 +1749,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   }
 }
 
-// آخر تعديل: اعتماد واجهة رئيسية بأسلوب Netflix مع بانر فيلم مميز وقسم تابع المشاهدة | التاريخ: 2026-11-21 | الوقت: 18:56 بتوقيت تركيا
+
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -2415,11 +2430,11 @@ class PrivacyPage extends StatelessWidget {
       backgroundColor: bg,
       appBar: AppBar(backgroundColor: bg, title: Text(appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'))),
       body: ListView(padding: const EdgeInsets.all(20), children: [
-        Text('SHAMFLIX', style: TextStyle(color: gold, fontSize: 25, fontWeight: FontWeight.bold)),
+        Text('SHAM FLIX', style: TextStyle(color: gold, fontSize: 25, fontWeight: FontWeight.bold)),
         SizedBox(height: 14),
         Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text(appText('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', 'The ShamFlix name, design and interface are protected by their owners. Displayed content and streaming links remain subject to their respective rights holders.', 'ShamFlix adı, tasarımı ve arayüzü sahiplerine aittir. Gösterilen içerikler ve yayın bağlantıları ilgili hak sahiplerinin koşullarına tabidir.'), style: TextStyle(color: Colors.white70, height: 1.7)),
+        Text(appText('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', 'The SHAM FLIX name, design and interface are protected by their owners. Displayed content and streaming links remain subject to their respective rights holders.', 'ShamFlix adı, tasarımı ve arayüzü sahiplerine aittir. Gösterilen içerikler ve yayın bağlantıları ilgili hak sahiplerinin koşullarına tabidir.'), style: TextStyle(color: Colors.white70, height: 1.7)),
         SizedBox(height: 20),
         Text(appText('الخصوصية', 'Privacy', 'Gizlilik'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
@@ -4303,7 +4318,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 ),
                                               ),
                                               const Text(
-                                                'SHAMFLIX PLAYER',
+                                                'SHAM FLIX PLAYER',
                                                 style: TextStyle(
                                                   color: gold,
                                                   fontSize: 9,
@@ -4780,3 +4795,5 @@ class ShamFlixSearch extends SearchDelegate {
 }
 
 // آخر تعديل: إضافة إعداد موحّد لعدد أعمدة بوسترات الباقات للأفلام والمسلسلات | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
+
+// آخر تعديل: اعتماد ألوان Netflix الحمراء، تصغير شريط التنقل، وتحديث اسم التطبيق إلى SHAM FLIX | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
