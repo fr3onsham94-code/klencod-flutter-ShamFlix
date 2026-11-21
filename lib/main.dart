@@ -1716,7 +1716,9 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
     );
     if (confirm != true) return;
     await ShamFlixLocalStore.clearHistory();
-    await ShamFlixCloudService.clearCollection(profileId: ShamFlixLocalStore.activeProfileId, collection: 'history');
+    try {
+      await ShamFlixCloudService.clearCollection(profileId: ShamFlixLocalStore.activeProfileId, collection: 'history');
+    } catch (_) {}
     localProfileRefreshNotifier.value++;
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم مسح سجل المشاهدة بالكامل')));
   }
