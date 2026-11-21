@@ -55,9 +55,6 @@ class _AdminPageState extends State<AdminPage> {
   int catalogGridColumns = 5;
   bool catalogGridColumnsLoading = true;
   bool catalogGridColumnsSaving = false;
-  int channelGridColumns = 5;
-  bool channelGridColumnsLoading = true;
-  bool channelGridColumnsSaving = false;
   String selectedThemeSection = 'global';
   final Map<String, TextEditingController> themeColorControllers = {
     for (final entry in AppTheme.defaults.entries)
@@ -108,7 +105,6 @@ class _AdminPageState extends State<AdminPage> {
     super.initState();
     loadCategoryBadgeSetting();
     loadCatalogGridColumnsSetting();
-    loadChannelGridColumnsSetting();
     loadAppLinksAndUpdateSettings();
     loadThemePaletteSetting();
   }
@@ -267,43 +263,6 @@ class _AdminPageState extends State<AdminPage> {
       showMessage('تعذر حفظ عدد البوسترات: $e', isError: true);
     } finally {
       if (mounted) setState(() => catalogGridColumnsSaving = false);
-    }
-  }
-
-  Future<void> loadChannelGridColumnsSetting() async {
-    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
-    if (mounted) setState(() => channelGridColumnsLoading = true);
-    try {
-      final row = await AuthService.client.from('app_settings')
-          .select('setting_value').eq('setting_key', 'channel_grid_columns').maybeSingle();
-      final saved = int.tryParse(row?['setting_value']?.toString() ?? '');
-      if (mounted) setState(() => channelGridColumns = (saved ?? 5).clamp(2, 8).toInt());
-    } catch (e) {
-      if (mounted) showMessage('تعذر تحميل عدد القنوات في الصف: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => channelGridColumnsLoading = false);
-    }
-  }
-
-  Future<void> saveChannelGridColumnsSetting(int? value) async {
-    if (value == null || channelGridColumnsSaving) return;
-    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
-      showMessage('ليس لديك صلاحية تعديل هذا الإعداد', isError: true);
-      return;
-    }
-    setState(() => channelGridColumnsSaving = true);
-    try {
-      await AuthService.client.from('app_settings').upsert({
-        'setting_key': 'channel_grid_columns',
-        'setting_value': value,
-      }, onConflict: 'setting_key');
-      if (!mounted) return;
-      setState(() => channelGridColumns = value);
-      showMessage('تم حفظ عدد القنوات في كل صف وتطبيقه على البث المباشر');
-    } catch (e) {
-      showMessage('تعذر حفظ عدد القنوات: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => channelGridColumnsSaving = false);
     }
   }
 
@@ -617,7 +576,7 @@ class _AdminPageState extends State<AdminPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'إعداد موحّد يطبّق على جميع باقات الأفلام والمسلسلات. كلما زاد العدد صغر حجم البوستر الظاهر مع الحفاظ على نسبته.',
+                  'إعداد موحّد يطبّق على جميع باقات الأفلام والمسلسلات وقنوات البث المباشر. كلما زاد العدد صغر حجم البوستر أو بطاقة القناة مع الحفاظ على التناسب.',
                   style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5),
                 ),
                 const SizedBox(height: 12),
@@ -655,42 +614,6 @@ class _AdminPageState extends State<AdminPage> {
                   ),
               ],
             ),
-          ),
-        ),
-        Card(
-          color: adminPanel,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(children: [
-                Icon(Icons.live_tv, color: adminGold),
-                const SizedBox(width: 9),
-                Expanded(child: Text('عدد القنوات في كل صف', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold))),
-              ]),
-              const SizedBox(height: 8),
-              Text('تحكم بعدد شعارات القنوات الظاهرة في كل صف داخل قسم البث المباشر.', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
-              const SizedBox(height: 12),
-              if (channelGridColumnsLoading)
-                Center(child: CircularProgressIndicator(color: adminGold))
-              else
-                DropdownButtonFormField<int>(
-                  value: channelGridColumns,
-                  dropdownColor: adminPanel,
-                  style: TextStyle(color: AppTheme.text),
-                  decoration: InputDecoration(
-                    labelText: 'اختر عدد القنوات',
-                    labelStyle: TextStyle(color: AppTheme.secondaryText),
-                    enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: adminGold)),
-                  ),
-                  items: [2, 3, 4, 5, 6, 7, 8].map((count) => DropdownMenuItem<int>(
-                    value: count, child: Text('$count قنوات في كل صف'),
-                  )).toList(),
-                  onChanged: channelGridColumnsSaving ? null : saveChannelGridColumnsSetting,
-                ),
-              if (channelGridColumnsSaving)
-                Padding(padding: const EdgeInsets.only(top: 10), child: LinearProgressIndicator(color: adminGold)),
-            ]),
           ),
         ),
         Padding(
@@ -4420,4 +4343,4 @@ class _AdminPageState extends State<AdminPage> {
 
 // ==========================================
 
-// آخر تعديل: توضيح رسالة حفظ ألوان القسم المختار | التاريخ: 2026-11-21 | الوقت: 23:14:00 بتوقيت تركيا
+// آخر تعديل: توحيد إعداد عدد أعمدة الأفلام والمسلسلات والقنوات في خيار واحد بلوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 23:27:00 بتوقيت تركيا
