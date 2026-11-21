@@ -747,6 +747,9 @@ class _AdminPageState extends State<AdminPage> {
     final selectedPackageIds = existing == null
         ? <String>[]
         : await _loadAssignedPackageIds(packageType, existing['id'].toString());
+    final serverDrafts = isSeries
+        ? <Map<String, dynamic>>[]
+        : await _loadServerDrafts('channel', existing: existing, legacyUrl: existing?['stream_url']?.toString());
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -868,7 +871,7 @@ class _AdminPageState extends State<AdminPage> {
                       adminField(ratingController, 'التقييم', keyboard: const TextInputType.numberWithOptions(decimal: true)),
                     ] else ...[
                       adminField(posterController, 'رابط شعار القناة'),
-                      adminField(streamController, 'رابط البث', required: true),
+                      _serverDraftsEditor(drafts: serverDrafts, setDialogState: setDialogState),
                       adminField(categoryController, 'تصنيف القناة'),
                       SwitchListTile(
                         value: isLive,
@@ -925,7 +928,7 @@ class _AdminPageState extends State<AdminPage> {
                 style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.black),
                 onPressed: () {
                   if (titleController.text.trim().isEmpty ||
-                      (!isSeries && streamController.text.trim().isEmpty)) {
+                      (!isSeries && _firstServerUrl(serverDrafts).isEmpty)) {
                     showMessage(isSeries ? 'أدخل اسم المسلسل' : 'أدخل اسم القناة ورابط البث', isError: true);
                     return;
                   }
@@ -944,7 +947,7 @@ class _AdminPageState extends State<AdminPage> {
                     });
                   } else {
                     data.addAll({
-                      'stream_url': streamController.text.trim(),
+                      'stream_url': _firstServerUrl(serverDrafts),
                       'is_live': isLive,
                     });
                   }
@@ -966,15 +969,21 @@ class _AdminPageState extends State<AdminPage> {
     ratingController.dispose();
     streamController.dispose();
     tmdbController.dispose();
-    if (result == null) return;
+    if (result == null) {
+      _disposeServerDrafts(serverDrafts);
+      return;
+    }
     try {
       final savedId = await saveCatalogItem(section, result, id: existing?['id']?.toString());
       if (savedId != null) {
+        if (!isSeries) await _saveServerDrafts('channel', savedId, serverDrafts);
         await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
       }
       showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
     } catch (e) {
       showMessage(e.toString(), isError: true);
+    } finally {
+      _disposeServerDrafts(serverDrafts);
     }
   }
 
@@ -2846,6 +2855,11 @@ class _AdminPageState extends State<AdminPage> {
     final selectedPackageIds = existing == null
         ? <String>[]
         : await _loadAssignedPackageIds(packageType, existing['id'].toString());
+    final serverDrafts = await _loadServerDrafts(
+      'movie',
+      existing: existing,
+      legacyUrl: existing?['stream_url']?.toString(),
+    );
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -3013,10 +3027,7 @@ class _AdminPageState extends State<AdminPage> {
                             decimal: true,
                           ),
                         ),
-                        adminField(
-                          streamController,
-                          'رابط التشغيل',
-                        ),
+                        _serverDraftsEditor(drafts: serverDrafts, setDialogState: setDialogState),
                         const SizedBox(height: 10),
                         ExpansionTile(
                           tilePadding: EdgeInsets.zero,
@@ -3099,6 +3110,10 @@ class _AdminPageState extends State<AdminPage> {
                         );
                         return;
                       }
+                      if (_firstServerUrl(serverDrafts).isEmpty) {
+                        showMessage('أضف رابط سيرفر واحد على الأقل', isError: true);
+                        return;
+                      }
 
                       final tmdbId = _extractTmdbId(
                         tmdbController.text,
@@ -3120,7 +3135,7 @@ class _AdminPageState extends State<AdminPage> {
                           ratingController.text.trim(),
                         ),
                         'stream_url':
-                            streamController.text.trim(),
+                            _firstServerUrl(serverDrafts),
                         'is_published': published,
                       });
                     },
@@ -3143,7 +3158,10 @@ class _AdminPageState extends State<AdminPage> {
     ratingController.dispose();
     streamController.dispose();
 
-    if (result == null) return;
+    if (result == null) {
+      _disposeServerDrafts(serverDrafts);
+      return;
+    }
 
     try {
       final rawId = existing?['id'];
@@ -3151,6 +3169,7 @@ class _AdminPageState extends State<AdminPage> {
 
       final savedId = await saveMovie(result, id: id);
       if (savedId != null) {
+        await _saveServerDrafts('movie', savedId, serverDrafts);
         await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
       }
 
@@ -3161,6 +3180,8 @@ class _AdminPageState extends State<AdminPage> {
       );
     } catch (e) {
       showMessage(e.toString(), isError: true);
+    } finally {
+      _disposeServerDrafts(serverDrafts);
     }
   }
 
