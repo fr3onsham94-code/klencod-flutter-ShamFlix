@@ -1470,7 +1470,7 @@ class _AdminPageState extends State<AdminPage> {
   String _firstServerUrl(List<Map<String, dynamic>> drafts) {
     for (final draft in drafts) {
       final url = (draft['url'] as TextEditingController).text.trim();
-      if (url.isNotEmpty) return url;
+      if (draft['active'] == true && url.isNotEmpty) return url;
     }
     return '';
   }
