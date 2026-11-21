@@ -1729,38 +1729,61 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   Future<void> _pickSpeed() async {
     final selected = await showModalBottomSheet<double>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF171717),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('سرعة التشغيل',
-                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-            ),
-            for (final option in <MapEntry<double, String>>[
-              const MapEntry(0.5, 'نصف السرعة'),
-              const MapEntry(0.75, 'سرعة بطيئة'),
-              const MapEntry(1.0, 'السرعة العادية'),
-              const MapEntry(1.25, 'أسرع قليلاً'),
-              const MapEntry(1.5, 'سرعة 1.5'),
-              const MapEntry(1.75, 'سرعة 1.75'),
-              const MapEntry(2.0, 'ضعف السرعة'),
-            ])
-              ListTile(
-                title: Text(
-                  '${option.key}x',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: player.state.rate == option.key ? gold : Colors.white, fontSize: 13),
+      builder: (sheetContext) {
+        final screenHeight = MediaQuery.of(sheetContext).size.height;
+        return SafeArea(
+          child: SizedBox(
+            height: screenHeight * 0.72,
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 12),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Text(
+                    'سرعة التشغيل',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-                subtitle: Text(option.value, textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                onTap: () => Navigator.pop(sheetContext, option.key),
-              ),
-          ],
-        ),
-      ),
+                for (final option in <MapEntry<double, String>>[
+                  const MapEntry(0.5, 'نصف السرعة'),
+                  const MapEntry(0.75, 'سرعة بطيئة'),
+                  const MapEntry(1.0, 'السرعة العادية'),
+                  const MapEntry(1.25, 'أسرع قليلاً'),
+                  const MapEntry(1.5, 'سرعة 1.5'),
+                  const MapEntry(1.75, 'سرعة 1.75'),
+                  const MapEntry(2.0, 'ضعف السرعة'),
+                ])
+                  ListTile(
+                    dense: true,
+                    visualDensity: const VisualDensity(vertical: -2),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    title: Text(
+                      '${option.key}x',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: player.state.rate == option.key ? gold : Colors.white,
+                        fontSize: 13,
+                      ),
+                    ),
+                    subtitle: Text(
+                      option.value,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white54, fontSize: 10),
+                    ),
+                    onTap: () => Navigator.pop(sheetContext, option.key),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
     if (selected != null) {
       await player.setRate(selected);
@@ -2590,4 +2613,4 @@ class ShamFlixSearch extends SearchDelegate {
 
 // تصغير خط الوقت الحالي والمدة أسفل شريط التقدم إلى 9px بتاريخ 21-11-2026.
 
-// تصغير خطوط قوائم السرعة والصوت والترجمة وتسميات أدوات المشغّل بتاريخ 21-11-2026.
+// تصغير خطوط قوائم السرعة والصوت والترجمة وتسميات أدوات المشغّل بتاريخ 21-11-2026.\n// جعل قائمة سرعات التشغيل قابلة للتمرير وملائمة للشاشة العمودية والأفقية بتاريخ 21-11-2026.\n
