@@ -61,7 +61,8 @@ class AuthService {
     userId = user.id;
     userEmail = user.email;
 
-    isAdmin = user.appMetadata['role'] == 'admin';
+    final role = user.appMetadata['role']?.toString();
+    isAdmin = role == 'admin' || role == 'manager';
   }
 
   // استعادة الجلسة التي يحفظها Supabase SDK تلقائياً.
@@ -165,3 +166,5 @@ class AuthService {
     _authSubscription = null;
   }
 }
+// ShamFlix - آخر تحديث: 21-11-2026
+// توحيد صلاحيات المدير والأدمن في التطبيق مع إبقاء مالك التطبيق محمياً على الخادم.
