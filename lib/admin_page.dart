@@ -1230,7 +1230,7 @@ class _AdminPageState extends State<AdminPage> {
     Map<String, dynamic>? existing,
     String? legacyUrl,
   }) async {
-    String foreignKey = type == 'movie' ? 'movie_id' : 'channel_id';
+    String foreignKey = type == 'movie' ? 'movie_id' : type == 'channel' ? 'channel_id' : 'episode_id';
     final rows = existing == null
         ? <Map<String, dynamic>>[]
         : await _extraLoad('playback_servers', {
@@ -1332,7 +1332,7 @@ class _AdminPageState extends State<AdminPage> {
     String contentId,
     List<Map<String, dynamic>> drafts,
   ) async {
-    final foreignKey = type == 'movie' ? 'movie_id' : 'channel_id';
+    final foreignKey = type == 'movie' ? 'movie_id' : type == 'channel' ? 'channel_id' : 'episode_id';
     final deleted = await http.delete(
       _extraTableUrl('playback_servers').replace(queryParameters: {
         foreignKey: 'eq.$contentId',
@@ -1837,6 +1837,11 @@ class _AdminPageState extends State<AdminPage> {
     final description = TextEditingController(text: existing?['description']?.toString() ?? '');
     final poster = TextEditingController(text: existing?['poster_url']?.toString() ?? '');
     final stream = TextEditingController(text: existing?['stream_url']?.toString() ?? '');
+    final serverDrafts = await _loadServerDrafts(
+      'episode',
+      existing: existing,
+      legacyUrl: existing?['stream_url']?.toString(),
+    );
     bool published = existing?['is_published'] == true;
 
     final data = await showDialog<Map<String, dynamic>>(
@@ -1857,7 +1862,7 @@ class _AdminPageState extends State<AdminPage> {
                     adminField(title, 'عنوان الحلقة', required: true),
                     adminField(description, 'وصف الحلقة', maxLines: 3),
                     adminField(poster, 'رابط صورة الحلقة'),
-                    adminField(stream, 'رابط التشغيل القديم (اختياري)'),
+                    _serverDraftsEditor(drafts: serverDrafts, setDialogState: setFormState),
                     SwitchListTile(
                       value: published,
                       activeColor: adminGold,
@@ -1878,13 +1883,17 @@ class _AdminPageState extends State<AdminPage> {
                     showMessage('أدخل رقم الحلقة وعنوانها', isError: true);
                     return;
                   }
+                  if (_firstServerUrl(serverDrafts).isEmpty) {
+                    showMessage('أضف رابط سيرفر واحد على الأقل للحلقة', isError: true);
+                    return;
+                  }
                   Navigator.pop(ctx, {
                     'season_id': seasonId,
                     'episode_number': n,
                     'title': title.text.trim(),
                     'description': description.text.trim().isEmpty ? null : description.text.trim(),
                     'poster_url': poster.text.trim().isEmpty ? null : poster.text.trim(),
-                    'stream_url': stream.text.trim().isEmpty ? null : stream.text.trim(),
+                    'stream_url': _firstServerUrl(serverDrafts),
                     'is_published': published,
                   });
                 },
@@ -1901,15 +1910,18 @@ class _AdminPageState extends State<AdminPage> {
     description.dispose();
     poster.dispose();
     stream.dispose();
-    if (data == null) return;
-    final id = await _extraSave('episodes', data, id: existing?['id']?.toString());
-    onSaved();
-    if (id != null && existing == null && mounted) {
-      await _managePlaybackServers(
-        type: 'episode',
-        contentId: id,
-        legacyUrl: data['stream_url']?.toString(),
-      );
+    if (data == null) {
+      _disposeServerDrafts(serverDrafts);
+      return;
+    }
+    try {
+      final id = await _extraSave('episodes', data, id: existing?['id']?.toString());
+      if (id != null) {
+        await _saveServerDrafts('episode', id, serverDrafts);
+      }
+      onSaved();
+    } finally {
+      _disposeServerDrafts(serverDrafts);
     }
   }
 
@@ -3861,3 +3873,5 @@ class _AdminPageState extends State<AdminPage> {
 // ShamFlix - آخر تحديث: 21-11-2026: ربط إدارة المحتوى بالباقات مع دعم إسناد العنصر لأكثر من باقة.
 
 // ShamFlix - آخر تحديث: 21-11-2026: لوحة المتصلين تعرض الزوار والمستخدمين المسجلين.
+
+// ShamFlix - آخر تحديث: 21-11-2026: إضافة وإدارة سيرفرات الحلقة من نموذج الحلقة نفسه.
