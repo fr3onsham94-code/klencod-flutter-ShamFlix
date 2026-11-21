@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'admin_auth_service.dart';
+import 'app_theme.dart';
 
-const Color packageBg = Color(0xFF090909);
-const Color packageGold = Color(0xFFE50914);
-const Color packagePanel = Color(0xFF191919);
+Color get packageBg => AppTheme.background;
+Color get packageGold => AppTheme.primary;
+Color get packagePanel => AppTheme.panel;
 
 class AdminPackagesPage extends StatefulWidget {
   final String contentType;
@@ -60,7 +61,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
         child: AlertDialog(
           backgroundColor: packagePanel,
           title: Text(existing == null ? 'إضافة باقة' : 'تعديل الباقة',
-              style: const TextStyle(color: packageGold)),
+              style: TextStyle(color: packageGold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -131,7 +132,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: packagePanel,
-        title: const Text('حذف الباقة؟', style: TextStyle(color: packageGold)),
+        title: Text('حذف الباقة؟', style: TextStyle(color: packageGold)),
         content: Text('سيتم حذف باقة «${item['name']}» وإزالة ربطها بالمحتوى.',
             style: const TextStyle(color: Colors.white70)),
         actions: [
@@ -163,7 +164,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
   @override
   Widget build(BuildContext context) {
     if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: packageBg,
         body: Center(child: Text('ليس لديك صلاحية الوصول', style: TextStyle(color: Colors.white))),
       );
@@ -174,8 +175,8 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
         backgroundColor: packageBg,
         appBar: AppBar(
           backgroundColor: packageBg,
-          title: Text('باقات ${widget.title}', style: const TextStyle(color: packageGold)),
-          actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh, color: packageGold))],
+          title: Text('باقات ${widget.title}', style: TextStyle(color: packageGold)),
+          actions: [IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: packageGold))],
         ),
         floatingActionButton: FloatingActionButton.extended(
           backgroundColor: packageGold,
@@ -185,7 +186,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
           label: const Text('إضافة باقة'),
         ),
         body: loading
-            ? const Center(child: CircularProgressIndicator(color: packageGold))
+            ? Center(child: CircularProgressIndicator(color: packageGold))
             : error != null
                 ? Center(child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -197,7 +198,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
                   ))
                 : packages.isEmpty
                     ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.inventory_2_outlined, color: packageGold, size: 48),
+                        Icon(Icons.inventory_2_outlined, color: packageGold, size: 48),
                         const SizedBox(height: 12),
                         const Text('لا توجد باقات بعد', style: TextStyle(color: Colors.white70)),
                         const SizedBox(height: 12),
@@ -218,7 +219,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
                             child: ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: packageGold.withOpacity(0.15),
-                                child: const Icon(Icons.folder_open, color: packageGold),
+                                child: Icon(Icons.folder_open, color: packageGold),
                               ),
                               title: Text(item['name']?.toString() ?? 'باقة',
                                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -226,7 +227,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
                                   style: const TextStyle(color: Colors.white54)),
                               trailing: Wrap(children: [
                                 IconButton(onPressed: () => _editPackage(existing: item),
-                                    icon: const Icon(Icons.edit_outlined, color: packageGold)),
+                                    icon: Icon(Icons.edit_outlined, color: packageGold)),
                                 IconButton(onPressed: () => _deletePackage(item),
                                     icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
                               ]),
@@ -240,4 +241,4 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
 }
 
 
-// آخر تعديل: اعتماد اللون الأحمر بهوية SHAM FLIX في إدارة الباقات | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
+// آخر تعديل: ربط ألوان الواجهات الفعلية بإعدادات لوحة الإدارة لتطبيق التغييرات فوراً | التاريخ: 2026-11-21 | الوقت: 22:00:00 بتوقيت تركيا
