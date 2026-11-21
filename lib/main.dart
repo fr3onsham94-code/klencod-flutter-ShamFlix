@@ -35,6 +35,36 @@ final ValueNotifier<int> contentRefreshNotifier = ValueNotifier<int>(0);
 
 class ShamFlixAppPreferences {
   static final ValueNotifier<Locale> locale = ValueNotifier<Locale>(const Locale('ar'));
+  static const Map<String, Map<String, String>> _translations = {
+    'en': {
+      'الرئيسية':'Home','الأفلام':'Movies','المسلسلات':'Series','مباشر':'Live TV','المفضلة':'Favorites','حسابي':'My account',
+      'أحدث الأفلام':'Latest movies','أحدث المسلسلات':'Latest series','أحدث الأنمي':'Latest anime','آخر القنوات مشاهدة':'Recently watched channels',
+      'إعدادات التطبيق':'App settings','إعدادات المشغل':'Player settings','لغة التطبيق':'App language','التشغيل عبر Wi-Fi فقط':'Wi-Fi only playback',
+      'مسح التخزين المؤقت':'Clear cached files','مسح السجل بالكامل':'Clear watch history','تحديث قائمة القنوات':'Refresh channel list',
+      'البحث عن تحديث للتطبيق':'Check for app updates','دعوة صديق':'Invite a friend','حقوق النشر والخصوصية':'Copyright & privacy',
+      'سجل المشاهدة':'Watch history','تشغيل القناة':'Play channel','تشغيل الآن':'Play now','القصة والوصف':'Story & description',
+      'المواسم والحلقات':'Seasons & episodes','المخرج':'Director','الممثلون':'Cast','بحث':'Search','الكل':'All',
+      'الأفلام والمسلسلات والقنوات المحفوظة':'Saved movies, series and channels','كل ما شاهدته مؤخراً':'Your recent watch history',
+      'إرسال رابط التطبيق مباشرة':'Share the app link','المشغل واللغة والشبكة والتخزين':'Player, language, network and storage',
+      'منع تشغيل الفيديو عبر بيانات الهاتف لتوفير الباقة':'Block mobile data playback to save your data plan',
+      'العربية أو English أو Türkçe':'Arabic, English or Turkish','أنت تستخدم أحدث إصدار من ShamFlix':'You are using the latest ShamFlix version',
+    },
+    'tr': {
+      'الرئيسية':'Ana Sayfa','الأفلام':'Filmler','المسلسلات':'Diziler','مباشر':'Canlı TV','المفضلة':'Favoriler','حسابي':'Hesabım',
+      'أحدث الأفلام':'En yeni filmler','أحدث المسلسلات':'En yeni diziler','أحدث الأنمي':'En yeni anime','آخر القنوات مشاهدة':'Son izlenen kanallar',
+      'إعدادات التطبيق':'Uygulama ayarları','إعدادات المشغل':'Oynatıcı ayarları','لغة التطبيق':'Uygulama dili','التشغيل عبر Wi-Fi فقط':'Yalnızca Wi-Fi ile oynat',
+      'مسح التخزين المؤقت':'Önbelleği temizle','مسح السجل بالكامل':'İzleme geçmişini temizle','تحديث قائمة القنوات':'Kanal listesini yenile',
+      'البحث عن تحديث للتطبيق':'Uygulama güncellemelerini kontrol et','دعوة صديق':'Arkadaşını davet et','حقوق النشر والخصوصية':'Telif hakları ve gizlilik',
+      'سجل المشاهدة':'İzleme geçmişi','تشغيل القناة':'Kanalı oynat','تشغيل الآن':'Şimdi oynat','القصة والوصف':'Hikâye ve açıklama',
+      'المواسم والحلقات':'Sezonlar ve bölümler','المخرج':'Yönetmen','الممثلون':'Oyuncular','بحث':'Ara','الكل':'Tümü',
+      'الأفلام والمسلسلات والقنوات المحفوظة':'Kaydedilen filmler, diziler ve kanallar','كل ما شاهدته مؤخراً':'Son izledikleriniz',
+      'إرسال رابط التطبيق مباشرة':'Uygulama bağlantısını paylaş','المشغل واللغة والشبكة والتخزين':'Oynatıcı, dil, ağ ve depolama',
+      'منع تشغيل الفيديو عبر بيانات الهاتف لتوفير الباقة':'Mobil veri kullanımını engelleyerek paketinizi koruyun',
+      'العربية أو English أو Türkçe':'Arapça, İngilizce veya Türkçe','أنت تستخدم أحدث إصدار من ShamFlix':'ShamFlix’in en güncel sürümünü kullanıyorsunuz',
+    },
+  };
+  static String tr(String value) => _translations[locale.value.languageCode]?[value] ?? value;
+
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     locale.value = Locale(prefs.getString('shamflix_language') ?? 'ar');
@@ -788,7 +818,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget animeSection() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      sectionTitle('أحدث الأنمي'),
+      sectionTitle(ShamFlixAppPreferences.tr('أحدث الأنمي')),
       SizedBox(height: 220, child: FutureBuilder<List<Map<String, dynamic>>>(
         future: series,
         builder: (context, snapshot) {
@@ -819,7 +849,7 @@ class _HomePageState extends State<HomePage> {
         }).take(12).toList();
         if (records.isEmpty) return const SizedBox.shrink();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          sectionTitle('آخر القنوات مشاهدة'),
+          sectionTitle(ShamFlixAppPreferences.tr('آخر القنوات مشاهدة')),
           SizedBox(height: 116, child: ListView.builder(scrollDirection: Axis.horizontal, reverse: true,
             padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: records.length,
             itemBuilder: (context, index) {
@@ -853,8 +883,8 @@ class _HomePageState extends State<HomePage> {
           IconButton(tooltip: 'بحث', onPressed: () => showSearch(context: context, delegate: ShamFlixSearch()), icon: const Icon(Icons.search, color: Colors.white)),
           IconButton(tooltip: 'الإشعارات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())), icon: const Icon(Icons.notifications_none, color: gold)),
         ])),
-        mediaSection('أحدث الأفلام', movies, isSeries: false),
-        mediaSection('أحدث المسلسلات', series, isSeries: true),
+        mediaSection(ShamFlixAppPreferences.tr('أحدث الأفلام'), movies, isSeries: false),
+        mediaSection(ShamFlixAppPreferences.tr('أحدث المسلسلات'), series, isSeries: true),
         animeSection(),
         recentlyWatchedChannelsSection(),
         const SizedBox(height: 30),
@@ -985,32 +1015,32 @@ class _HomePageState extends State<HomePage> {
               selectedTab = index;
             });
           },
-          destinations: const [
+          destinations: [
             NavigationDestination(
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home, color: gold),
-              label: 'الرئيسية',
+              label: ShamFlixAppPreferences.tr('الرئيسية'),
             ),
             NavigationDestination(
               icon: Icon(Icons.movie_outlined),
-              label: 'الأفلام',
+              label: ShamFlixAppPreferences.tr('الأفلام'),
             ),
             NavigationDestination(
               icon: Icon(Icons.video_library_outlined),
-              label: 'المسلسلات',
+              label: ShamFlixAppPreferences.tr('المسلسلات'),
             ),
             NavigationDestination(
               icon: Icon(Icons.live_tv_outlined),
-              label: 'مباشر',
+              label: ShamFlixAppPreferences.tr('مباشر'),
             ),
             NavigationDestination(
               icon: Icon(Icons.favorite_outline),
-              label: 'المفضلة',
+              label: ShamFlixAppPreferences.tr('المفضلة'),
             ),
             NavigationDestination(
               icon: Icon(Icons.person_outline),
               selectedIcon: Icon(Icons.person, color: gold),
-              label: 'حسابي',
+              label: ShamFlixAppPreferences.tr('حسابي'),
             ),
           ],
         ),
@@ -3661,3 +3691,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // قائمة القنوات تعرض باقات جانبية وشريط تشغيل علوي يفتح المشغل الكامل بميزاته الحالية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة ترجمة أساسية للواجهة الرئيسية والتنقل وإعدادات الزائر بالإنجليزية والتركية.
