@@ -1,6 +1,9 @@
 name: Build Flutter APK
 
 on:
+  push:
+    branches:
+      - shamflix-redesign-2026-11-21
   workflow_dispatch:
     inputs:
       flutter_version:
@@ -34,7 +37,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ github.event.inputs.flutter_version }}
+          flutter-version: ${{ github.event.inputs.flutter_version || '3.47.2' }}
           cache: true
           channel: stable
 
@@ -51,3 +54,6 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7
+
+# ShamFlix - آخر تحديث: 21-11-2026
+# تشغيل فحص البناء تلقائياً عند تحديث فرع التطوير.
