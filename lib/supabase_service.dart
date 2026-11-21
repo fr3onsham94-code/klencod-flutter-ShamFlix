@@ -29,7 +29,7 @@ class SupabaseService {
         'Authorization': 'Bearer $publishableKey',
         'Accept': 'application/json',
       },
-    );
+    ).timeout(const Duration(seconds: 12));
 
     if (response.statusCode != 200) {
       throw Exception(
@@ -64,7 +64,7 @@ class SupabaseService {
         'Authorization': 'Bearer $publishableKey',
         'Accept': 'application/json',
       },
-    );
+    ).timeout(const Duration(seconds: 12));
 
     if (response.statusCode != 200) {
       throw Exception(
@@ -141,3 +141,4 @@ class SupabaseService {
 }
 // ShamFlix - آخر تحديث: 21-11-2026
 // تمت إضافة جلب المواسم والحلقات وسيرفرات التشغيل من Supabase.
+// ShamFlix - آخر تعديل: تحديد مهلة 12 ثانية لطلبات واجهة المحتوى حتى لا تبقى الواجهات معلقة عند ضعف الشبكة | التاريخ والوقت: 22/11/2026، 01:00 بتوقيت تركيا.
