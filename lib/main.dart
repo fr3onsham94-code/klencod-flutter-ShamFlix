@@ -54,7 +54,7 @@ class ShamFlixAppPreferences {
       'جلب أحدث القنوات المنشورة':'Fetch the latest published channels','تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix':'Download and install the new version inside ShamFlix',
       'اختيار المشغل الداخلي أو VLC أو MX Player':'Choose the built-in player, VLC or MX Player','حقوق تطبيق ShamFlix وسياسة الخصوصية':'ShamFlix copyright and privacy policy',
       'لا يوجد محتوى في هذه الباقة':'No content in this package','لا توجد قنوات في هذه الباقة':'No channels in this package','اختر قناة للمشاهدة':'Choose a channel to watch',
-      'سنة الإصدار':'Release year','التصنيف':'Category','التقييم':'Rating','المواسم والحلقات':'Seasons & episodes','القصة والوصف':'Story & description',
+      'سنة الإصدار':'Release year','التصنيف':'Category','التقييم':'Rating',
     },
     'tr': {
       'الرئيسية':'Ana Sayfa','الأفلام':'Filmler','المسلسلات':'Diziler','مباشر':'Canlı TV','المفضلة':'Favoriler','حسابي':'Hesabım',
@@ -74,7 +74,7 @@ class ShamFlixAppPreferences {
       'جلب أحدث القنوات المنشورة':'Yayınlanan en yeni kanalları getir','تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix':'Yeni sürümü ShamFlix içinden indir ve yükle',
       'اختيار المشغل الداخلي أو VLC أو MX Player':'Dahili oynatıcı, VLC veya MX Player seç','حقوق تطبيق ShamFlix وسياسة الخصوصية':'ShamFlix telif hakları ve gizlilik politikası',
       'لا يوجد محتوى في هذه الباقة':'Bu pakette içerik yok','لا توجد قنوات في هذه الباقة':'Bu pakette kanal yok','اختر قناة للمشاهدة':'İzlemek için kanal seç',
-      'سنة الإصدار':'Yayın yılı','التصنيف':'Kategori','التقييم':'Puan','المواسم والحلقات':'Sezonlar ve bölümler','القصة والوصف':'Hikâye ve açıklama',
+      'سنة الإصدار':'Yayın yılı','التصنيف':'Kategori','التقييم':'Puan',
     },
   };
   static String tr(String value) => _translations[locale.value.languageCode]?[value] ?? value;
@@ -3745,3 +3745,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // استكمال ترجمة عناوين القوائم والتفاصيل والإعدادات بالإنجليزية والتركية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إزالة مفاتيح الترجمة المكررة من قاموس اللغات.
