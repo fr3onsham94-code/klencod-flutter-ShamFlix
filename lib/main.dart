@@ -68,7 +68,8 @@ class ShamFlixAppPreferences {
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
-    locale.value = Locale(prefs.getString('shamflix_language') ?? 'ar');
+    final savedLanguage = prefs.getString('shamflix_language') ?? 'ar';
+    locale.value = Locale(['ar', 'en', 'tr'].contains(savedLanguage) ? savedLanguage : 'ar');
   }
   static Future<void> setLanguage(String language) async {
     final prefs = await SharedPreferences.getInstance();
@@ -86,8 +87,7 @@ class ShamFlixAppPreferences {
   static Future<bool> canPlayOverCurrentNetwork() async {
     if (!await getWifiOnly()) return true;
     final connections = await Connectivity().checkConnectivity();
-    return connections.contains(ConnectivityResult.wifi) ||
-        connections.contains(ConnectivityResult.ethernet);
+    return connections.contains(ConnectivityResult.wifi);
   }
 }
 
@@ -2212,7 +2212,8 @@ class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() { wifiOnly = prefs.getBool('shamflix_wifi_only') ?? false; language = prefs.getString('shamflix_language') ?? 'ar'; loading = false; });
+    final savedLanguage = prefs.getString('shamflix_language') ?? 'ar';
+    setState(() { wifiOnly = prefs.getBool('shamflix_wifi_only') ?? false; language = ['ar', 'en', 'tr'].contains(savedLanguage) ? savedLanguage : 'ar'; loading = false; });
   }
   Future<void> _setWifiOnly(bool value) async { await ShamFlixAppPreferences.setWifiOnly(value); if (mounted) setState(() => wifiOnly = value); }
   Future<void> _setLanguage(String? value) async { if (value == null) return; await ShamFlixAppPreferences.setLanguage(value); if (mounted) setState(() => language = value); }
@@ -3731,3 +3732,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تحديث تعليقات المصدر بعد إزالة ميزة الملفات الشخصية من الواجهة والمزامنة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// التحقق من رموز اللغة المحفوظة وقصر التشغيل عند تفعيل الخيار على شبكة Wi-Fi فقط.
