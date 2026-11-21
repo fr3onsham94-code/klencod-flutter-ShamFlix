@@ -3330,8 +3330,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                         onTap: _cycleVideoFit,
                                                       ),
                                                       _toolButton(
-                                                        icon: Icons.screen_rotation_alt_rounded,
-                                                        label: 'تدوير',
+                                                        icon: widget.embedded ? Icons.fullscreen_rounded : Icons.screen_rotation_alt_rounded,
+                                                        label: widget.embedded ? 'ملء الشاشة' : 'تدوير',
                                                         onTap: _toggleFullscreen,
                                                       ),
                                                       _toolButton(
@@ -3842,3 +3842,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تسجيل القناة في سجل المشاهدة بعد نجاح تشغيلها فعلياً وليس بمجرد تحديدها.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توضيح زر ملء الشاشة في المشغل المضمن أعلى قائمة القنوات.
