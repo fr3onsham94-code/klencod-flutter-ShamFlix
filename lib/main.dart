@@ -2627,43 +2627,98 @@ class _DetailsPageState extends State<DetailsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: double.infinity, height: 350, child: Stack(fit: StackFit.expand, children: [
-                (backdrop.isNotEmpty || poster.isNotEmpty)
-                    ? Image.network(
-                        backdrop.isNotEmpty ? backdrop : poster,
-                        fit: isChannel ? BoxFit.contain : BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)),
-                      )
-                    : Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 90)),
-                const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x22000000), Color(0xF5090909)],
-                  stops: [0.05, 1.0],
-                ))),
-                Positioned(
-                  right: 18,
-                  left: 18,
-                  bottom: 18,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (!isChannel && poster.isNotEmpty)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(9),
-                          child: Image.network(poster, width: 92, height: 132, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(width: 92, height: 132, color: panel, child: const Icon(Icons.movie, color: gold))),
+              Builder(
+                builder: (context) {
+                  final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+                  // مقاس البوستر ثابت في الاتجاهين ولا يتأثر بعرض الشاشة.
+                  const posterWidth = 104.0;
+                  const posterHeight = 148.0;
+                  final heroHeight = isLandscape ? 220.0 : 292.0;
+                  final heroImage = backdrop.isNotEmpty ? backdrop : (isChannel ? poster : '');
+                  return SizedBox(
+                    width: double.infinity,
+                    height: heroHeight,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (heroImage.isNotEmpty)
+                          Image.network(
+                            heroImage,
+                            fit: isChannel ? BoxFit.contain : BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(color: panel),
+                          )
+                        else
+                          const DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Color(0xFF24201A), Color(0xFF090909)],
+                              ),
+                            ),
+                          ),
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0x22000000), Color(0xF5090909)],
+                              stops: [0.05, 1.0],
+                            ),
+                          ),
                         ),
-                      if (!isChannel && poster.isNotEmpty) const SizedBox(width: 13),
-                      Expanded(
-                        child: Text(title, maxLines: 3, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
-                            shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
-                      ),
-                    ],
-                  ),
-                ),
-              ])),
+                        Positioned(
+                          right: 18,
+                          left: 18,
+                          bottom: 16,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (!isChannel)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(9),
+                                  child: SizedBox(
+                                    width: posterWidth,
+                                    height: posterHeight,
+                                    child: poster.isEmpty
+                                        ? Container(
+                                            color: panel,
+                                            child: const Icon(Icons.movie, color: gold, size: 42),
+                                          )
+                                        : Image.network(
+                                            poster,
+                                            width: posterWidth,
+                                            height: posterHeight,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              color: panel,
+                                              child: const Icon(Icons.movie, color: gold, size: 42),
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              if (!isChannel) const SizedBox(width: 13),
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  maxLines: isLandscape ? 2 : 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 25,
+                                    fontWeight: FontWeight.bold,
+                                    shadows: [Shadow(color: Colors.black, blurRadius: 12)],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -4366,3 +4421,5 @@ class ShamFlixSearch extends SearchDelegate {
 // ShamFlix - آخر تحديث: 21-11-2026: دمج المفضلة والسجل من الملفات القديمة في ملف واحد وإزالة تعدد الملفات.
 
 // ShamFlix - آخر تحديث: 21-11-2026: إضافة خيار قفل التطبيق بالكامل على الوضع العرضي من الإعدادات العامة.
+
+// ShamFlix - آخر تحديث: 21-11-2026: تثبيت مقاس بوستر تفاصيل الأفلام والمسلسلات على 104×148 بكسل في الوضعين العمودي والأفقي، ومنع استخدام البوستر كخلفية مكبرة عند غياب صورة الخلفية.
