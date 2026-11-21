@@ -5,6 +5,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:media_kit/media_kit.dart';
@@ -18,12 +25,40 @@ import 'admin_auth_service.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
-import 'shamflix_download_service.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
 final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
+final ValueNotifier<int> contentRefreshNotifier = ValueNotifier<int>(0);
+
+class ShamFlixAppPreferences {
+  static final ValueNotifier<Locale> locale = ValueNotifier<Locale>(const Locale('ar'));
+  static Future<void> initialize() async {
+    final prefs = await SharedPreferences.getInstance();
+    locale.value = Locale(prefs.getString('shamflix_language') ?? 'ar');
+  }
+  static Future<void> setLanguage(String language) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('shamflix_language', language);
+    locale.value = Locale(language);
+  }
+  static Future<bool> getWifiOnly() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('shamflix_wifi_only') ?? false;
+  }
+  static Future<void> setWifiOnly(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('shamflix_wifi_only', value);
+  }
+  static Future<bool> canPlayOverCurrentNetwork() async {
+    if (!await getWifiOnly()) return true;
+    final connections = await Connectivity().checkConnectivity();
+    return connections.contains(ConnectivityResult.wifi) ||
+        connections.contains(ConnectivityResult.ethernet);
+  }
+}
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +70,7 @@ Future<void> main() async {
     const Duration(seconds: 20),
   );
   await ShamFlixLocalStore.initialize();
+  await ShamFlixAppPreferences.initialize();
   unawaited(syncShamFlixCloudData());
 
   runApp(const ShamFlixApp());
@@ -400,7 +436,11 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return ValueListenableBuilder<Locale>(valueListenable: ShamFlixAppPreferences.locale,
+      builder: (context, appLocale, _) => MaterialApp(
+      locale: appLocale,
+      supportedLocales: const [Locale('ar'), Locale('en'), Locale('tr')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       title: 'ShamFlix',
@@ -412,7 +452,7 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
         ),
       ),
       home: const HomePage(),
-    );
+    ));
   }
 }
 
@@ -3702,3 +3742,5 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تقليل طلبات مزامنة تقدم المشاهدة السحابية إلى مرة كل 30 ثانية لكل محتوى.
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة تفضيلات اللغة وسياسة التشغيل عبر Wi-Fi.
