@@ -932,6 +932,11 @@ class _AdminPageState extends State<AdminPage> {
                                       if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                       posterController.text = data['poster_url']?.toString() ?? '';
                                       descriptionController.text = data['description']?.toString() ?? '';
+                                      directorController.text = data['director']?.toString() ?? '';
+                                      final castData = data['cast'];
+                                      castController.text = castData is List
+                                          ? castData.map((person) => person is Map ? person['name']?.toString() ?? '' : person.toString()).where((name) => name.isNotEmpty).join('، ')
+                                          : castData?.toString() ?? '';
                                       categoryController.text = data['category']?.toString() ?? '';
                                       yearController.text = data['release_year']?.toString() ?? '';
                                       final rating = data['rating'];
@@ -1077,6 +1082,8 @@ class _AdminPageState extends State<AdminPage> {
                     data.addAll({
                       'tmdb_id': int.tryParse(tmdbController.text.trim()),
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                      'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                      'cast': castController.text.trim().isEmpty ? null : castController.text.trim(),
                       'release_year': int.tryParse(yearController.text.trim()),
                       'rating': double.tryParse(ratingController.text.trim()),
                     });
@@ -1099,6 +1106,8 @@ class _AdminPageState extends State<AdminPage> {
     titleController.dispose();
     posterController.dispose();
     descriptionController.dispose();
+    directorController.dispose();
+    castController.dispose();
     categoryController.dispose();
     yearController.dispose();
     ratingController.dispose();
@@ -2974,6 +2983,12 @@ class _AdminPageState extends State<AdminPage> {
     final descriptionController = TextEditingController(
       text: existing?['description']?.toString() ?? '',
     );
+    final directorController = TextEditingController(
+      text: existing?['director']?.toString() ?? '',
+    );
+    final castController = TextEditingController(
+      text: existing?['cast']?.toString() ?? '',
+    );
 
     final categoryController = TextEditingController(
       text: existing?['category']?.toString() ?? '',
@@ -3064,6 +3079,11 @@ class _AdminPageState extends State<AdminPage> {
                                         if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                         posterController.text = data['poster_url']?.toString() ?? '';
                                         descriptionController.text = data['description']?.toString() ?? '';
+                                        directorController.text = data['director']?.toString() ?? '';
+                                        final castData = data['cast'];
+                                        castController.text = castData is List
+                                            ? castData.map((person) => person is Map ? person['name']?.toString() ?? '' : person.toString()).where((name) => name.isNotEmpty).join('، ')
+                                            : castData?.toString() ?? '';
                                         categoryController.text = data['category']?.toString() ?? '';
                                         yearController.text = data['release_year']?.toString() ?? '';
                                         final rating = data['rating'];
@@ -3157,6 +3177,8 @@ class _AdminPageState extends State<AdminPage> {
                           'وصف الفيلم',
                           maxLines: 4,
                         ),
+                        adminField(directorController, 'المخرج', required: false),
+                        adminField(castController, 'الممثلون', maxLines: 3, required: false),
                         adminField(
                           categoryController,
                           'التصنيف',
@@ -3273,6 +3295,8 @@ class _AdminPageState extends State<AdminPage> {
                             posterController.text.trim(),
                         'description':
                             descriptionController.text.trim(),
+                        'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                        'cast': castController.text.trim().isEmpty ? null : castController.text.trim(),
                         'category':
                             categoryController.text.trim(),
                         'release_year': int.tryParse(
@@ -3300,6 +3324,8 @@ class _AdminPageState extends State<AdminPage> {
     tmdbController.dispose();
     posterController.dispose();
     descriptionController.dispose();
+    directorController.dispose();
+    castController.dispose();
     categoryController.dispose();
     yearController.dispose();
     ratingController.dispose();
@@ -4012,3 +4038,5 @@ class _AdminPageState extends State<AdminPage> {
 // ShamFlix - آخر تحديث: 21-11-2026: إضافة وإدارة سيرفرات الحلقة من نموذج الحلقة نفسه.
 
 // ShamFlix - آخر تحديث: 21-11-2026: إعداد رابط دعوة الأصدقاء وإدارة ملف APK للتحديث الداخلي.
+
+// ShamFlix - آخر تحديث: 21-11-2026: حفظ وعرض المخرج والممثلين في تفاصيل الأفلام والمسلسلات.
