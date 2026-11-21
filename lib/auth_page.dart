@@ -5,10 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin_auth_service.dart';
+import 'app_theme.dart';
 
-const Color bg = Color(0xFF090909);
-const Color gold = Color(0xFFE50914);
-const Color panel = Color(0xFF191919);
+Color get bg => AppTheme.background;
+Color get gold => AppTheme.primary;
+Color get panel => AppTheme.panel;
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -238,13 +239,13 @@ class _AuthPageState extends State<AuthPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.movie_creation_outlined,
                     color: gold,
                     size: 75,
                   ),
                   const SizedBox(height: 15),
-                  const Text(
+                  Text(
                     'SHAM FLIX',
                     style: TextStyle(
                       color: gold,
@@ -308,7 +309,7 @@ class _AuthPageState extends State<AuthPage> {
                       alignment: Alignment.centerLeft,
                       child: TextButton(
                         onPressed: isLoading ? null : resetPassword,
-                        child: const Text(
+                        child: Text(
                           'نسيت كلمة المرور؟',
                           style: TextStyle(color: gold),
                         ),
@@ -356,7 +357,7 @@ class _AuthPageState extends State<AuthPage> {
                       height: 52,
                       child: OutlinedButton.icon(
                         onPressed: isLoading ? null : signInGoogle,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.g_mobiledata,
                           color: gold,
                           size: 30,
@@ -369,7 +370,7 @@ class _AuthPageState extends State<AuthPage> {
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: gold),
+                          side: BorderSide(color: gold),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -392,7 +393,7 @@ class _AuthPageState extends State<AuthPage> {
                             ? 'ليس لديك حساب؟ أنشئ حساباً جديداً'
                             : 'لديك حساب بالفعل؟ سجّل الدخول',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: gold,
                           fontSize: 14,
                         ),
@@ -425,10 +426,10 @@ class _AuthPageState extends State<AuthPage> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: gold),
+        borderSide: BorderSide(color: gold),
       ),
     );
   }
 }
 
-// آخر تعديل: اعتماد اللون الأحمر وتحديث اسم التطبيق إلى SHAM FLIX في شاشة تسجيل الدخول | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
+// آخر تعديل: ربط ألوان الواجهات الفعلية بإعدادات لوحة الإدارة لتطبيق التغييرات فوراً | التاريخ: 2026-11-21 | الوقت: 22:00:00 بتوقيت تركيا
