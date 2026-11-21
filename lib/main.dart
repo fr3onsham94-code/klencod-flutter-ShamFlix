@@ -650,7 +650,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget posterImage(String? url, {double height = 175}) {
+  Widget posterImage(String? url, {double height = 142}) {
     if (url == null || url.isEmpty) {
       return Container(
         height: height,
@@ -703,16 +703,16 @@ class _HomePageState extends State<HomePage> {
     return GestureDetector(
       onTap: () => openDetails(item, isSeries: isSeries),
       child: Container(
-        width: 135,
-        margin: const EdgeInsets.only(left: 12),
+        width: 108,
+        margin: const EdgeInsets.only(left: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: SizedBox(
-                width: 135,
-                height: 175,
+                width: 108,
+                height: 142,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -780,7 +780,7 @@ class _HomePageState extends State<HomePage> {
       children: [
         sectionTitle(title),
         SizedBox(
-          height: 220,
+          height: 188,
           child: FutureBuilder<List<Map<String, dynamic>>>(
             future: future,
             builder: (context, snapshot) {
@@ -1254,8 +1254,8 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                                 : GridView.builder(
                                     padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
                                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 2,
-                                      childAspectRatio: 0.58,
+                                      crossAxisCount: 3,
+                                      childAspectRatio: 0.54,
                                       crossAxisSpacing: 10,
                                       mainAxisSpacing: 12,
                                     ),
@@ -4423,3 +4423,4 @@ class ShamFlixSearch extends SearchDelegate {
 // ShamFlix - آخر تحديث: 21-11-2026: إضافة خيار قفل التطبيق بالكامل على الوضع العرضي من الإعدادات العامة.
 
 // ShamFlix - آخر تحديث: 21-11-2026: تثبيت مقاس بوستر تفاصيل الأفلام والمسلسلات على 104×148 بكسل في الوضعين العمودي والأفقي، ومنع استخدام البوستر كخلفية مكبرة عند غياب صورة الخلفية.
+// ShamFlix - آخر تحديث: تصغير بوسترات الصفحة الرئيسية وقوائم الأفلام والمسلسلات مع الحفاظ على بوسترات صفحات التفاصيل.
