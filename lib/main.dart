@@ -544,15 +544,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> refreshData() async {
-    setState(() { loadData(); recentHistory = ShamFlixLocalStore.getHistory(); });
-
+    setState(() { recentHistory = ShamFlixLocalStore.getHistory(); });
+    contentRefreshNotifier.value++;
     await Future.wait([
       movies.then((_) {}).catchError((_) {}),
       series.then((_) {}).catchError((_) {}),
       channels.then((_) {}).catchError((_) {}),
       loadCategoryBadgeSetting(),
     ]);
-    contentRefreshNotifier.value++;
   }
 
   Widget sectionTitle(String title) {
@@ -3726,3 +3725,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تضمين تصنيفات Animation والرسوم المتحركة في قسم الأنمي.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توحيد تحديث بيانات الرئيسية وقوائم المحتوى عبر إشعار تحديث واحد دون تكرار طلبات الشبكة.
