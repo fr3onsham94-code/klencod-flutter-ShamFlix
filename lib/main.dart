@@ -2938,8 +2938,17 @@ class _DetailsPageState extends State<DetailsPage> {
 
     // روابط HTTP(S): نوجّه ملفات الفيديو والصوت وقوائم البث للمشغل،
     // مع الاعتماد على uri.path حتى تعمل الروابط التي تحتوي query parameters.
-    return RegExp(
-      r'\.(mp4|m4v|mkv|mov|webm|avi|wmv|flv|mpg|mpeg|mpe|m1v|m2v|3gp|3g2|ts|m2ts|mts|vob|ogv|asf|rm|rmvb|f4v|divx|mxf|nut|y4m|mp4v|m3u|m3u8|mpd|m4s|mp3|aac|m4a|ogg|oga|opus|wav|flac|ac3|eac3)
+    const mediaExtensions = <String>{
+      '.mp4', '.m4v', '.mkv', '.mov', '.webm', '.avi', '.wmv', '.flv',
+      '.mpg', '.mpeg', '.mpe', '.m1v', '.m2v', '.3gp', '.3g2', '.ts',
+      '.m2ts', '.mts', '.vob', '.ogv', '.asf', '.rm', '.rmvb', '.f4v',
+      '.divx', '.mxf', '.nut', '.y4m', '.mp4v', '.m3u', '.m3u8', '.mpd',
+      '.m4s', '.mp3', '.aac', '.m4a', '.ogg', '.oga', '.opus', '.wav',
+      '.flac', '.ac3', '.eac3',
+    };
+    final path = uri.path.toLowerCase();
+    return mediaExtensions.any((extension) => path.endsWith(extension));
+  }
 
   Future<void> _startPlayback(
     String url,
