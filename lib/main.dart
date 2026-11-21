@@ -1524,7 +1524,7 @@ class _AccountPageState extends State<AccountPage> {
               ),
               onPressed: openLogin,
               icon: const Icon(Icons.login),
-              label: const Text(
+              label: Text(
                 appText('تسجيل الدخول أو إنشاء حساب', 'Sign in or create an account', 'Giriş yap veya hesap oluştur'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
