@@ -458,7 +458,8 @@ class _AdminPageState extends State<AdminPage> {
     await loadMovies();
     if (savedId == null) {
       final title = movie['title']?.toString();
-      savedId = movies.where((row) => row['title']?.toString() == title).firstOrNull?['id']?.toString();
+      final matches = movies.where((row) => row['title']?.toString() == title).toList();
+      if (matches.isNotEmpty) savedId = matches.first['id']?.toString();
     }
     return savedId;
   }
@@ -555,24 +556,30 @@ class _AdminPageState extends State<AdminPage> {
     if (mounted) setState(() => catalogLoading = false);
   }
 
-  Future<void> saveCatalogItem(
+  Future<String?> saveCatalogItem(
     String section,
     Map<String, dynamic> item, {
     String? id,
   }) async {
     final table = section == 'series' ? 'series' : 'channels';
-    final uri = id == null
-        ? catalogUrl(table)
-        : catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'});
+    final uri = id == null ? catalogUrl(table) : catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'});
     final response = id == null
         ? await http.post(uri, headers: headers, body: jsonEncode(item))
         : await http.patch(uri, headers: headers, body: jsonEncode(item));
-    if (response.statusCode != 200 &&
-        response.statusCode != 201 &&
-        response.statusCode != 204) {
-      throw Exception(_readError(response));
+    if (response.statusCode != 200 && response.statusCode != 201 && response.statusCode != 204) throw Exception(_readError(response));
+    String? savedId = id;
+    if (savedId == null && response.body.trim().isNotEmpty) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is List && decoded.isNotEmpty) savedId = decoded.first['id']?.toString();
+      if (decoded is Map) savedId = decoded['id']?.toString();
     }
     await loadCatalog(section);
+    if (savedId == null) {
+      final key = section == 'series' ? 'title' : 'name';
+      final matches = (section == 'series' ? series : channels).where((row) => row[key]?.toString() == item[key]?.toString()).toList();
+      if (matches.isNotEmpty) savedId = matches.first['id']?.toString();
+    }
+    return savedId;
   }
 
     Future<void> deleteCatalogItem(String section, String id) async {
@@ -655,6 +662,13 @@ class _AdminPageState extends State<AdminPage> {
     );
     bool published = existing?['is_published'] == true;
     bool isLive = existing?['is_live'] != false;
+    final backdropController = TextEditingController(text: existing?['backdrop_url']?.toString() ?? '');
+    final directorController = TextEditingController(text: existing?['director']?.toString() ?? '');
+    final castController = TextEditingController(text: existing?['cast_names']?.toString() ?? '');
+    final packageType = isSeries ? 'series' : 'channel';
+    final packageOptions = await _loadPackages(packageType);
+    final selectedPackageIds = <String>{};
+    if (existing?['id'] != null) selectedPackageIds.addAll(await _loadSelectedPackages(packageType, existing!['id'].toString()));
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
 
@@ -703,6 +717,9 @@ class _AdminPageState extends State<AdminPage> {
                                       final fetchedTitle = data['title']?.toString() ?? '';
                                       if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                       posterController.text = data['poster_url']?.toString() ?? '';
+                                      backdropController.text = data['backdrop_url']?.toString() ?? '';
+                                      directorController.text = data['director']?.toString() ?? '';
+                                      castController.text = (data['cast'] as List? ?? []).map((person) => person['name']?.toString() ?? '').where((name) => name.isNotEmpty).join('، ');
                                       descriptionController.text = data['description']?.toString() ?? '';
                                       categoryController.text = data['category']?.toString() ?? '';
                                       yearController.text = data['release_year']?.toString() ?? '';
@@ -773,8 +790,30 @@ class _AdminPageState extends State<AdminPage> {
                       ],
                       adminField(posterController, 'رابط صورة البوستر'),
                       adminField(descriptionController, 'وصف المسلسل', maxLines: 4),
-                      adminField(categoryController, 'التصنيف'),
+                      adminField(categoryController, 'النوع / التصنيف'),
+                      adminField(backdropController, 'رابط صورة الخلفية العريضة'),
+                      adminField(directorController, 'المخرج'),
+                      adminField(castController, 'الممثلون', maxLines: 2),
                       adminField(yearController, 'سنة الإصدار', keyboard: TextInputType.number),
+                      const SizedBox(height: 6),
+                      Align(alignment: Alignment.centerRight, child: Text('إضافة المحتوى إلى الباقات', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                      if (packageOptions.isEmpty)
+                        const Padding(padding: EdgeInsets.all(8), child: Text('أنشئ باقة أولاً من زر إدارة الباقات', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                      ...packageOptions.map((package) => CheckboxListTile(
+                        dense: true, value: selectedPackageIds.contains(package['id'].toString()), activeColor: adminGold,
+                        title: Text(package['name']?.toString() ?? '', style: const TextStyle(color: Colors.white)),
+                        onChanged: (checked) => setDialogState(() {
+                          final packageId = package['id'].toString();
+                          if (checked == true) { selectedPackageIds.add(packageId); } else { selectedPackageIds.remove(packageId); }
+                        }),
+                      )),
+                      if (!isSeries && existing?['id'] != null)
+                        OutlinedButton.icon(
+                          onPressed: () => _managePlaybackServers(type: 'channel', contentId: existing!['id'].toString(), legacyUrl: streamController.text.trim()),
+                          icon: const Icon(Icons.dns_outlined), label: const Text('إدارة سيرفرات التشغيل'),
+                          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+                        ),
+                      
                       adminField(ratingController, 'التقييم', keyboard: const TextInputType.numberWithOptions(decimal: true)),
                     ] else ...[
                       adminField(posterController, 'رابط شعار القناة'),
@@ -822,6 +861,9 @@ class _AdminPageState extends State<AdminPage> {
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
                       'release_year': int.tryParse(yearController.text.trim()),
                       'rating': double.tryParse(ratingController.text.trim()),
+                      'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
+                      'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
+                      'cast_names': castController.text.trim().isEmpty ? null : castController.text.trim(),
                     });
                   } else {
                     data.addAll({
@@ -847,9 +889,14 @@ class _AdminPageState extends State<AdminPage> {
     ratingController.dispose();
     streamController.dispose();
     tmdbController.dispose();
+    backdropController.dispose(); directorController.dispose(); castController.dispose();
     if (result == null) return;
     try {
-      await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      final savedId = await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      if (savedId != null) {
+        await _savePackageAssignments(packageType, savedId, selectedPackageIds);
+        if (!isSeries && existing == null) await _managePlaybackServers(type: 'channel', contentId: savedId, legacyUrl: result['stream_url']?.toString());
+      }
       showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
     } catch (e) {
       showMessage(e.toString(), isError: true);
@@ -3588,3 +3635,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // نموذج الفيلم يدعم بيانات صفحة التفاصيل وربط الفيلم بأكثر من باقة وإدارة السيرفرات من نفس شاشة الإضافة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// نماذج المسلسلات والقنوات تدعم ربط عدة باقات وبيانات تفاصيل إضافية وإدارة سيرفر القناة من صفحة الإضافة.
