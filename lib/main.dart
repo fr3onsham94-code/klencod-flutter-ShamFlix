@@ -767,7 +767,7 @@ class _HomePageState extends State<HomePage> {
                           child: Text(
                             category,
                             style: const TextStyle(
-                              color: Colors.black,
+                              color: Colors.white,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
@@ -4794,6 +4794,8 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: إضافة إعداد موحّد لعدد أعمدة بوسترات الباقات للأفلام والمسلسلات | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
+
 
 // آخر تعديل: اعتماد ألوان Netflix الحمراء، تصغير شريط التنقل، وتحديث اسم التطبيق إلى SHAM FLIX | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
+
+// آخر تعديل: جعل كتابة ليبل التصنيف باللون الأبيض فوق الخلفية الحمراء | التاريخ: 2026-11-21 | الوقت: 20:08:00 بتوقيت تركيا
