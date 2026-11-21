@@ -320,7 +320,7 @@ class _AdminPageState extends State<AdminPage> {
     final channel = AuthService.client.channel('shamflix:online-users');
     onlineChannel = channel;
     channel.onPresenceSync((_) => _syncOnlineUsers(channel));
-    channel.subscribe((status, error) {
+    channel.subscribe((status, [error]) {
       if (status == RealtimeSubscribeStatus.subscribed) _syncOnlineUsers(channel);
     });
   }
@@ -3753,3 +3753,6 @@ class _AdminPageState extends State<AdminPage> {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // عرض عدد المتصلين وأيقونة مخصصة في رأس صفحة المتصلين.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توافق توقيع متابعة Realtime مع إصدارات Supabase Flutter التي تجعل كائن الخطأ اختيارياً.
