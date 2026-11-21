@@ -51,7 +51,8 @@ class ShamFlixDownloadService {
       throw Exception('رابط التنزيل غير صالح');
     }
     final directory = await _directory();
-    final safeTitle = title.replaceAll(RegExp(r'[^a-zA-Z0-9\u0600-\u06FF_-]'), '_').substring(0, title.length.clamp(1, 40));
+    final cleanedTitle = title.replaceAll(RegExp(r'[^a-zA-Z0-9\u0600-\u06FF_-]'), '_');
+    final safeTitle = cleanedTitle.length > 40 ? cleanedTitle.substring(0, 40) : cleanedTitle;
     final file = File('${directory.path}/${safeTitle}_${contentId.hashCode.abs()}.$extension');
     final client = http.Client();
     try {
