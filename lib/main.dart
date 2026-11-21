@@ -1519,6 +1519,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             ),
                           )
                         : Row(
+                            textDirection: TextDirection.ltr,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _sidebar(),
