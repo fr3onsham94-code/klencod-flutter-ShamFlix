@@ -1083,7 +1083,6 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
     body: FutureBuilder<List<Map<String, dynamic>>>(future: widget.channelsFuture, builder: (context, channelSnapshot) {
       if (channelSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
       if (channelSnapshot.hasError) return const Center(child: Text('تعذر تحميل القنوات', style: TextStyle(color: Colors.white54)));
-      final all = channelSnapshot.data ?? [];
       return Column(children: [
         Container(height: 205, margin: const EdgeInsets.fromLTRB(12, 10, 12, 12), decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(14),
           border: Border.all(color: gold.withOpacity(0.4))),
@@ -1181,7 +1180,7 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
         if (contentSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
         if (contentSnapshot.hasError) return const Center(child: Text('تعذر تحميل المحتوى', style: TextStyle(color: Colors.white54)));
         final all = contentSnapshot.data ?? [];
-        return FutureBuilder<List<Map<String, dynamic>>>(future: _filterPackage(all), builder: (context, filteredSnapshot) {
+        return FutureBuilder<List<Map<String, dynamic>>>(future: filteredFuture, builder: (context, filteredSnapshot) {
           if (filteredSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
           final items = (filteredSnapshot.data ?? []).where((item) => search.isEmpty || valueOf(item['title']).toLowerCase().contains(search.toLowerCase())).toList();
           return Row(children: [
@@ -3718,3 +3717,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تثبيت Future الباقات والمحتوى لمنع إعادة تحميل غير منتهية عند تغيير الاختيار أو البحث.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// استخدام نتائج التصفية المخزنة في القوائم لتجنب إعادة إنشاء Future أثناء البناء.
