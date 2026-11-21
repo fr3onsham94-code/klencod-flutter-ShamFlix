@@ -870,7 +870,7 @@ class _HomePageState extends State<HomePage> {
               child: snapshot.connectionState == ConnectionState.waiting
                   ? const Center(child: CircularProgressIndicator(color: gold))
                   : records.isEmpty
-                      ? const Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: Colors.white54)))
+                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: Colors.white54)))
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
                           reverse: true,
@@ -1199,7 +1199,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Column(
         children: [
           Padding(
@@ -1667,7 +1667,7 @@ class _AccountPageState extends State<AccountPage> {
                       ),
                     )
                   : const Icon(Icons.logout),
-              label: const Text(appText('تسجيل الخروج', 'Sign out', 'Çıkış yap')),
+              label: Text(appText('تسجيل الخروج', 'Sign out', 'Çıkış yap')),
             ),
           ),
         ],
@@ -1896,10 +1896,10 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   Widget build(BuildContext context) {
     if (loading) return const Scaffold(backgroundColor: bg, body: Center(child: CircularProgressIndicator(color: gold)));
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: const Text(appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'))),
+        appBar: AppBar(backgroundColor: bg, title: Text(appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'))),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           _tile(Icons.tune, appText('إعدادات ضبط المشغل', 'Player Settings', 'Oynatıcı Ayarları'), 'اختيار المشغل الداخلي أو VLC أو MX Player', () {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage()));
@@ -1911,7 +1911,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
               child: Row(children: [
                 const Icon(Icons.language, color: gold),
                 const SizedBox(width: 12),
-                const Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
                 DropdownButton<String>(
                   value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
                   style: const TextStyle(color: Colors.white),
@@ -1929,8 +1929,8 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             color: panel,
             child: SwitchListTile(
               value: wifiOnly, activeColor: gold, secondary: const Icon(Icons.wifi, color: gold),
-              title: const Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: Colors.white)),
-              subtitle: const Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: Colors.white54, fontSize: 12)),
+              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: Colors.white)),
+              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: Colors.white54, fontSize: 12)),
               onChanged: _setWifiOnly,
             ),
           ),
@@ -1949,11 +1949,11 @@ class PrivacyPage extends StatelessWidget {
   const PrivacyPage({super.key});
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text(appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'))),
-      body: ListView(padding: const EdgeInsets.all(20), children: const [
+      appBar: AppBar(backgroundColor: bg, title: Text(appText('حقوق التطبيق والخصوصية', 'Copyright & Privacy', 'Telif Hakkı ve Gizlilik'))),
+      body: ListView(padding: const EdgeInsets.all(20), children: [
         Text('SHAMFLIX', style: TextStyle(color: gold, fontSize: 25, fontWeight: FontWeight.bold)),
         SizedBox(height: 14),
         Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
@@ -1981,7 +1981,7 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
       backgroundColor: bg,
       appBar: AppBar(backgroundColor: bg, title: const Text('إشعارات ShamFlix'),
@@ -2042,9 +2042,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
-      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
+      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
@@ -2090,10 +2090,10 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
+      appBar: AppBar(backgroundColor: bg, title: Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
         actions: [IconButton(tooltip: 'مسح السجل', icon: const Icon(Icons.delete_sweep_outlined, color: gold),
           onPressed: () async => ShamFlixLocalStore.clearHistory())]),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
@@ -2386,7 +2386,7 @@ class _DetailsPageState extends State<DetailsPage> {
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
           child: SafeArea(
             child: Center(
               widthFactor: 1,
@@ -2603,7 +2603,7 @@ class _DetailsPageState extends State<DetailsPage> {
     final description = valueOf(item['description'], 'لا يوجد وصف لهذا المحتوى حالياً.');
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: bg,
         appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
@@ -2755,7 +2755,7 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: bg,
         appBar: AppBar(backgroundColor: bg, title: const Text('إعدادات المشغل')),
@@ -2942,7 +2942,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Column(
         children: [
           Padding(
@@ -2950,7 +2950,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             child: Row(children: [
               Container(width: 4, height: 22, color: gold),
               const SizedBox(width: 9),
-              const Text(appText('البث المباشر', 'Live TV', 'Canlı TV'), style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+              Text(appText('البث المباشر', 'Live TV', 'Canlı TV'), style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
               const Spacer(),
               IconButton(onPressed: _load, icon: const Icon(Icons.refresh, color: gold)),
             ]),
@@ -2967,7 +2967,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                         child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                           const Icon(Icons.live_tv, color: gold, size: 48),
                           const SizedBox(height: 8),
-                          const Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'), style: TextStyle(color: Colors.white70)),
+                          Text(appText('اختر قناة لبدء المشاهدة', 'Choose a channel to start watching', 'İzlemek için bir kanal seçin'), style: TextStyle(color: Colors.white70)),
                           if (starting) const Padding(padding: EdgeInsets.only(top: 8), child: CircularProgressIndicator(color: gold)),
                         ])),
                       )
@@ -3018,7 +3018,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                 : error != null
                     ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
                     : channels.isEmpty
-                        ? const Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'), style: TextStyle(color: Colors.white54)))
+                        ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'), style: TextStyle(color: Colors.white54)))
                         : RefreshIndicator(
                             color: gold,
                             onRefresh: _load,
@@ -3614,7 +3614,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: Colors.black,
         body: error != null
@@ -4018,7 +4018,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
