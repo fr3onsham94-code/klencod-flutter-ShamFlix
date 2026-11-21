@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'admin_auth_service.dart';
+import 'app_theme.dart';
 import 'admin_packages_page.dart';
 import 'supabase_service.dart';
 
@@ -54,6 +55,11 @@ class _AdminPageState extends State<AdminPage> {
   int catalogGridColumns = 5;
   bool catalogGridColumnsLoading = true;
   bool catalogGridColumnsSaving = false;
+  final Map<String, TextEditingController> themeColorControllers = {
+    for (final entry in AppTheme.defaults.entries)
+      entry.key: TextEditingController(text: entry.value),
+  };
+  bool themeSaving = false;
 
   String currentSection = 'home';
   String userCategory = 'normal';
@@ -99,6 +105,7 @@ class _AdminPageState extends State<AdminPage> {
     loadCategoryBadgeSetting();
     loadCatalogGridColumnsSetting();
     loadAppLinksAndUpdateSettings();
+    loadThemePaletteSetting();
   }
 
   @override
@@ -110,6 +117,7 @@ class _AdminPageState extends State<AdminPage> {
     updateBuildController.dispose();
     updateApkController.dispose();
     updateNotesController.dispose();
+    for (final controller in themeColorControllers.values) { controller.dispose(); }
     super.dispose();
   }
 
@@ -335,6 +343,121 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> loadThemePaletteSetting() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+    try {
+      final row = await AuthService.client.from('app_settings')
+          .select('setting_value').eq('setting_key', 'app_theme_palette').maybeSingle();
+      final value = row?['setting_value'];
+      final palette = AppTheme.normalize(value is Map ? Map<String, dynamic>.from(value) : null);
+      for (final entry in palette.entries) {
+        themeColorControllers[entry.key]?.text = entry.value;
+      }
+      AppTheme.preview(palette);
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) showMessage('تعذر تحميل ألوان التطبيق: $e', isError: true);
+    }
+  }
+
+  Map<String, String> readThemePalette() => {
+    for (final entry in AppTheme.defaults.entries)
+      entry.key: AppTheme.normalizeHex(themeColorControllers[entry.key]?.text ?? '', entry.value),
+  };
+
+  void previewThemePalette() {
+    final palette = readThemePalette();
+    AppTheme.preview(palette);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> saveThemePalette() async {
+    if (themeSaving) return;
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
+      showMessage('ليس لديك صلاحية تعديل ألوان التطبيق', isError: true);
+      return;
+    }
+    final palette = readThemePalette();
+    setState(() => themeSaving = true);
+    try {
+      await AppTheme.save(palette);
+      for (final entry in palette.entries) {
+        themeColorControllers[entry.key]?.text = entry.value;
+      }
+      showMessage('تم حفظ ألوان التطبيق وتطبيقها على إعدادات الواجهة العامة');
+    } catch (e) {
+      showMessage('تعذر حفظ ألوان التطبيق: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => themeSaving = false);
+    }
+  }
+
+  Future<void> restoreNetflixTheme() async {
+    for (final entry in AppTheme.defaults.entries) {
+      themeColorControllers[entry.key]?.text = entry.value;
+    }
+    AppTheme.restorePreview();
+    await saveThemePalette();
+  }
+
+  Widget themePaletteSection() {
+    const labels = {
+      'background': 'خلفية التطبيق',
+      'primary': 'اللون الأساسي / الأحمر',
+      'panel': 'خلفية البطاقات واللوحات',
+      'text': 'لون النص الرئيسي',
+      'secondaryText': 'لون النص الثانوي',
+      'button': 'لون الأزرار',
+    };
+    return Card(
+      color: adminPanel,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('تخصيص ألوان التطبيق', style: TextStyle(color: adminGold, fontSize: 17, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            const Text('غيّر الألوان باستخدام HEX مع معاينة فورية قبل الحفظ. الإعداد موحّد لجميع المستخدمين.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 12),
+            for (final entry in labels.entries)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Container(width: 30, height: 30, decoration: BoxDecoration(color: AppTheme.color(entry.key), borderRadius: BorderRadius.circular(7), border: Border.all(color: Colors.white24))),
+                    const SizedBox(width: 10),
+                    Expanded(child: TextField(
+                      controller: themeColorControllers[entry.key],
+                      textCapitalization: TextCapitalization.characters,
+                      onChanged: (_) => previewThemePalette(),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(labelText: entry.value, hintText: '#RRGGBB', labelStyle: const TextStyle(color: Colors.white70), isDense: true),
+                    )),
+                  ],
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: AppTheme.background, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppTheme.primary)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text('معاينة SHAM FLIX', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 17)),
+                const SizedBox(height: 8),
+                Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: AppTheme.panel, borderRadius: BorderRadius.circular(9)), child: Text('هذا مثال للنص داخل بطاقة', style: TextStyle(color: AppTheme.text))),
+                const SizedBox(height: 8),
+                FilledButton(onPressed: null, style: FilledButton.styleFrom(backgroundColor: AppTheme.button), child: Text('زر تجريبي', style: TextStyle(color: AppTheme.text))),
+                Text('نص ثانوي للمعاينة', style: TextStyle(color: AppTheme.secondaryText)),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(onPressed: themeSaving ? null : saveThemePalette, icon: const Icon(Icons.save), label: Text(themeSaving ? 'جارٍ الحفظ...' : 'حفظ الألوان'), style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: Colors.white)),
+            TextButton.icon(onPressed: themeSaving ? null : restoreNetflixTheme, icon: const Icon(Icons.restart_alt), label: const Text('استعادة ألوان Netflix الافتراضية', style: TextStyle(color: Colors.white70))),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget settingsSection() {
     if (badgeSettingLoading) {
       return const Center(
@@ -349,6 +472,7 @@ class _AdminPageState extends State<AdminPage> {
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
+        themePaletteSection(),
         Card(
           color: adminPanel,
           child: SwitchListTile(
@@ -366,7 +490,7 @@ class _AdminPageState extends State<AdminPage> {
             ),
             subtitle: Text(
               showCategoryBadge
-                  ? 'الليبل الذهبي ظاهر على بوسترات الأفلام والمسلسلات والقنوات'
+                  ? 'الليبل الأساسي ظاهر على بوسترات الأفلام والمسلسلات والقنوات'
                   : 'الليبل مخفي عن جميع المستخدمين',
               style: const TextStyle(color: Colors.white60),
             ),
@@ -4171,4 +4295,4 @@ class _AdminPageState extends State<AdminPage> {
 
 // ==========================================
 
-// آخر تعديل: إضافة حقل صورة الخلفية للأفلام والمسلسلات وإزالة قسم تقييمك للمحتوى من صفحة التفاصيل | التاريخ: 2026-11-21 | الوقت: 21:00:00 بتوقيت تركيا
+// آخر تعديل: إضافة نظام تخصيص ألوان التطبيق ومعاينتها وحفظها من لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 21:30:00 بتوقيت تركيا
