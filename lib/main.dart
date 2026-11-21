@@ -1033,14 +1033,15 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
   late Future<List<Map<String, dynamic>>> filteredFuture;
   String? selectedPackageId;
   Map<String, dynamic>? selectedChannel;
+  Future<List<Map<String, dynamic>>>? selectedServersFuture;
   @override
   void initState() { super.initState(); packagesFuture = SupabaseService.getPackages('channel'); filteredFuture = _loadFiltered(); contentRefreshNotifier.addListener(_refreshChannelContent); }
   @override
   void didUpdateWidget(covariant ShamFlixChannelCatalogPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.channelsFuture != widget.channelsFuture) { selectedChannel = null; filteredFuture = _loadFiltered(); }
+    if (oldWidget.channelsFuture != widget.channelsFuture) { selectedChannel = null; selectedServersFuture = null; filteredFuture = _loadFiltered(); }
   }
-  void _refreshChannelContent() { if (mounted) setState(() { selectedChannel = null; filteredFuture = _loadFiltered(); }); }
+  void _refreshChannelContent() { if (mounted) setState(() { selectedChannel = null; selectedServersFuture = null; filteredFuture = _loadFiltered(); }); }
   @override
   void dispose() { contentRefreshNotifier.removeListener(_refreshChannelContent); super.dispose(); }
   Future<List<Map<String, dynamic>>> _loadFiltered() async {
@@ -1049,8 +1050,14 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
     final ids = await SupabaseService.getPackageContentIds(selectedPackageId!);
     return all.where((item) => ids.contains(item['id']?.toString())).toList();
   }
-  void _play(Map<String, dynamic> channel) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(item: channel, isChannel: true, autoPlay: true)));
+  void _selectChannel(Map<String, dynamic> channel) {
+    setState(() {
+      selectedChannel = channel;
+      selectedServersFuture = SupabaseService.getPlaybackServers(
+        contentType: 'channel',
+        contentId: channel['id'].toString(),
+      );
+    });
   }
   @override
   Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
@@ -1059,39 +1066,49 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
       if (channelSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
       if (channelSnapshot.hasError) return const Center(child: Text('تعذر تحميل القنوات', style: TextStyle(color: Colors.white54)));
       return Column(children: [
-        Container(height: 205, margin: const EdgeInsets.fromLTRB(12, 10, 12, 12), decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: gold.withOpacity(0.4))),
-          child: Stack(fit: StackFit.expand, children: [
-            if (selectedChannel != null && valueOf(selectedChannel!['logo_url']).isNotEmpty)
-              Opacity(opacity: 0.20, child: Image.network(valueOf(selectedChannel!['logo_url']), fit: BoxFit.contain)),
-            Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.live_tv, color: gold, size: 35),
-              const SizedBox(height: 8),
-              Text(selectedChannel == null ? 'اختر قناة للمشاهدة' : valueOf(selectedChannel!['name'], 'قناة'),
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
-                onPressed: selectedChannel == null ? null : () => _play(selectedChannel!),
-                icon: const Icon(Icons.play_arrow), label: const Text('تشغيل القناة')),
-            ]),
-          ]),
+        Container(height: 205, margin: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(14), border: Border.all(color: gold.withOpacity(0.4))),
+          clipBehavior: Clip.antiAlias,
+          child: selectedChannel == null
+              ? Center(child: Text(ShamFlixAppPreferences.tr('اختر قناة للمشاهدة'), style: const TextStyle(color: Colors.white70)))
+              : FutureBuilder<List<Map<String, dynamic>>>(
+                  future: selectedServersFuture,
+                  builder: (context, serverSnapshot) {
+                    if (serverSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+                    final servers = serverSnapshot.data ?? [];
+                    final legacyUrl = valueOf(selectedChannel!['stream_url']).trim();
+                    final streamUrl = servers.isNotEmpty ? valueOf(servers.first['stream_url']).trim() : legacyUrl;
+                    if (streamUrl.isEmpty) return const Center(child: Text('لا يوجد رابط تشغيل لهذه القناة', style: TextStyle(color: Colors.white70)));
+                    return ShamFlixPlayerPage(
+                      key: ValueKey('embedded_channel_\${selectedChannel!['id']}'),
+                      url: streamUrl,
+                      title: valueOf(selectedChannel!['name'], 'قناة'),
+                      servers: servers,
+                      progressKey: 'channel_\${selectedChannel!['id']}',
+                      embedded: true,
+                    );
+                  },
+                ),
         ),
         Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(future: packagesFuture, builder: (context, packageSnapshot) {
           final packages = packageSnapshot.data ?? [];
           return FutureBuilder<List<Map<String, dynamic>>>(future: filteredFuture, builder: (context, filteredSnapshot) {
             if (filteredSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
             final items = filteredSnapshot.data ?? [];
-            if (selectedChannel == null && items.isNotEmpty) selectedChannel = items.first;
+            if (selectedChannel == null && items.isNotEmpty) {
+              selectedChannel = items.first;
+              selectedServersFuture = SupabaseService.getPlaybackServers(contentType: 'channel', contentId: selectedChannel!['id'].toString());
+            }
             return Row(children: [
               SizedBox(width: 112, child: Container(color: panel, child: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
                 _packageTile('الكل', null),
                 ...packages.map((p) => _packageTile(valueOf(p['name']), p['id']?.toString())),
               ]))),
-              Expanded(child: items.isEmpty ? const Center(child: Text(ShamFlixAppPreferences.tr('لا توجد قنوات في هذه الباقة'), style: TextStyle(color: Colors.white54))) :
+              Expanded(child: items.isEmpty ? Center(child: Text(ShamFlixAppPreferences.tr('لا توجد قنوات في هذه الباقة'), style: const TextStyle(color: Colors.white54))) :
                 ListView.builder(itemCount: items.length, itemBuilder: (context, index) {
                   final channel = items[index]; final selected = selectedChannel?['id']?.toString() == channel['id']?.toString();
                   return Card(color: selected ? const Color(0xFF352B1C) : panel, margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: ListTile(onTap: () => setState(() => selectedChannel = channel),
+                    child: ListTile(onTap: () => _selectChannel(channel),
                       leading: CircleAvatar(backgroundColor: bg, backgroundImage: valueOf(channel['logo_url']).isEmpty ? null : NetworkImage(valueOf(channel['logo_url'])),
                         child: valueOf(channel['logo_url']).isEmpty ? const Icon(Icons.live_tv, color: gold) : null),
                       title: Text(valueOf(channel['name'], 'قناة'), style: const TextStyle(color: Colors.white)),
@@ -1104,7 +1121,7 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
       ]);
     }),
   ));
-  Widget _packageTile(String name, String? id) => InkWell(onTap: () => setState(() { selectedPackageId = id; selectedChannel = null; filteredFuture = _loadFiltered(); }),
+  Widget _packageTile(String name, String? id) => InkWell(onTap: () => setState(() { selectedPackageId = id; selectedChannel = null; selectedServersFuture = null; filteredFuture = _loadFiltered(); }),
     child: Container(margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
       decoration: BoxDecoration(color: selectedPackageId == id ? const Color(0xFF493B25) : Colors.transparent, borderRadius: BorderRadius.circular(9),
         border: Border.all(color: selectedPackageId == id ? gold : Colors.white10)),
@@ -1168,7 +1185,7 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
                 ...packages.map((package) => _packageTile(valueOf(package['name']), package['id']?.toString(), selectedPackageId == package['id']?.toString())),
               ],
             ))),
-            Expanded(child: items.isEmpty ? const Center(child: Text(ShamFlixAppPreferences.tr('لا يوجد محتوى في هذه الباقة'), style: TextStyle(color: Colors.white54))) :
+            Expanded(child: items.isEmpty ? Center(child: Text(ShamFlixAppPreferences.tr('لا يوجد محتوى في هذه الباقة'), style: const TextStyle(color: Colors.white54))) :
               GridView.builder(padding: const EdgeInsets.all(12), gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: MediaQuery.of(context).size.width > 700 ? 4 : 2, childAspectRatio: 0.61, crossAxisSpacing: 12, mainAxisSpacing: 14),
                 itemCount: items.length, itemBuilder: (context, index) {
@@ -3775,3 +3792,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // منع تغيير اتجاه الجهاز أو إخفاء شريط النظام عند تشغيل المشغل المضمن في صفحة القنوات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// وضع مشغل الفيديو الحقيقي أعلى صفحة القنوات مع تبديل السيرفرات وأزرار المشغل والانتقال لملء الشاشة.
