@@ -97,3 +97,6 @@ class ShamFlixDownloadService {
     await prefs.setString(_key, jsonEncode(items));
   }
 }
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تنزيل الملفات المرئية المباشرة إلى مساحة التطبيق الخاصة وإدارتها محلياً.
