@@ -1,6 +1,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,7 @@ import 'admin_auth_service.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
+import 'shamflix_download_service.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -25,6 +27,8 @@ final ValueNotifier<int> authRefreshNotifier = ValueNotifier<int>(0);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PaintingBinding.instance.imageCache.maximumSize = 300;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
   MediaKit.ensureInitialized();
 
   await AuthService.initialize().timeout(
@@ -794,6 +798,11 @@ class _HomePageState extends State<HomePage> {
                   icon: const Icon(Icons.search, color: Colors.white),
                 ),
                 IconButton(
+                  tooltip: 'التنزيلات',
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixDownloadsPage())),
+                  icon: const Icon(Icons.download_for_offline_outlined, color: gold),
+                ),
+                IconButton(
                   tooltip: 'الإشعارات',
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
                   icon: const Icon(Icons.notifications_none, color: gold),
@@ -1535,6 +1544,62 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
   );
 }
 
+class ShamFlixDownloadsPage extends StatefulWidget {
+  const ShamFlixDownloadsPage({super.key});
+  @override
+  State<ShamFlixDownloadsPage> createState() => _ShamFlixDownloadsPageState();
+}
+class _ShamFlixDownloadsPageState extends State<ShamFlixDownloadsPage> {
+  late Future<List<Map<String, dynamic>>> downloads;
+  @override
+  void initState() { super.initState(); downloads = ShamFlixDownloadService.list(); }
+  void reload() => setState(() => downloads = ShamFlixDownloadService.list());
+
+  String _size(dynamic bytes) {
+    final value = (bytes as num?)?.toDouble() ?? 0;
+    if (value >= 1024 * 1024 * 1024) return '${(value / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    return '${(value / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) => Directionality(
+    textDirection: TextDirection.rtl,
+    child: Scaffold(
+      backgroundColor: bg,
+      appBar: AppBar(backgroundColor: bg, title: const Text('التنزيلات')),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: downloads,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
+          final items = snapshot.data ?? [];
+          if (items.isEmpty) return const Center(child: Text('لا توجد ملفات محفوظة دون إنترنت', style: TextStyle(color: Colors.white54)));
+          return ListView.builder(
+            padding: const EdgeInsets.all(12), itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Card(color: panel, child: ListTile(
+                leading: const Icon(Icons.movie, color: gold, size: 34),
+                title: Text(valueOf(item['title'], 'فيديو'), style: const TextStyle(color: Colors.white)),
+                subtitle: Text(_size(item['size']), style: const TextStyle(color: Colors.white54)),
+                trailing: PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white54),
+                  onSelected: (value) async {
+                    if (value == 'delete') { await ShamFlixDownloadService.remove(item); if (mounted) reload(); }
+                  },
+                  itemBuilder: (_) => const [PopupMenuItem(value: 'delete', child: Text('حذف التنزيل'))],
+                ),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(
+                  url: item['path'].toString(), title: valueOf(item['title'], 'فيديو'),
+                ))),
+              ));
+            },
+          );
+        },
+      ),
+    ),
+  );
+}
+
 class ShamFlixNotificationsPage extends StatefulWidget {
   const ShamFlixNotificationsPage({super.key});
   @override
@@ -1742,6 +1807,15 @@ class _DetailsPageState extends State<DetailsPage> {
     }
   }
 
+  Future<void> _downloadItem(String url, String title, String id) async {
+    try {
+      await ShamFlixDownloadService.download(url: url, title: title, contentId: id);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تنزيل المحتوى للمشاهدة دون إنترنت')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    }
+  }
+
   Future<void> _loadEngagement() async {
     final type = widget.isChannel ? 'channel' : widget.isSeries ? 'series' : 'movie';
     final id = widget.item['id']?.toString() ?? '';
@@ -1904,6 +1978,15 @@ class _DetailsPageState extends State<DetailsPage> {
       return;
     }
     if (!mounted) return;
+    final serverPrefs = await SharedPreferences.getInstance();
+    final preferredServer = serverPrefs.getString('shamflix_preferred_server_$contentType-$contentId');
+    if (preferredServer != null && preferredServer.isNotEmpty) {
+      servers.sort((a, b) {
+        final aKey = valueOf(a['id'] ?? a['server_name']);
+        final bKey = valueOf(b['id'] ?? b['server_name']);
+        return (aKey == preferredServer ? 0 : 1).compareTo(bKey == preferredServer ? 0 : 1);
+      });
+    }
 
     if (servers.isEmpty) {
       final fallback = legacyUrl?.trim() ?? '';
@@ -1968,7 +2051,7 @@ class _DetailsPageState extends State<DetailsPage> {
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         contentPadding: EdgeInsets.zero,
-                        title: Text(valueOf(server['server_name'], 'سيرفر'),
+                        title: Text('${valueOf(server['server_name'], 'سيرفر')}${valueOf(server['id'] ?? server['server_name']) == preferredServer ? ' • المفضل' : ''}',
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.white, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, server),
@@ -2125,7 +2208,12 @@ class _DetailsPageState extends State<DetailsPage> {
                     ),
               title: Text('$number - $episodeTitle', style: const TextStyle(color: Colors.white)),
               subtitle: const Text('تشغيل الحلقة', style: TextStyle(color: Colors.white54)),
-              trailing: const Icon(Icons.play_circle_outline, color: gold),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (ShamFlixDownloadService.extensionFor(valueOf(episode['stream_url'])) != null)
+                  IconButton(tooltip: 'تنزيل الحلقة', icon: const Icon(Icons.download_outlined, color: gold),
+                    onPressed: () => _downloadItem(valueOf(episode['stream_url']), episodeTitle, episode['id'].toString())),
+                const Icon(Icons.play_circle_outline, color: gold),
+              ]),
               onTap: () async {
                 final episodeRecord = Map<String, dynamic>.from(episode);
                 if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
@@ -2195,6 +2283,16 @@ class _DetailsPageState extends State<DetailsPage> {
                     _engagementPanel(),
                     _recommendationsSection(),
                     const SizedBox(height: 25),
+                    if (!isChannel && ShamFlixDownloadService.extensionFor(valueOf(item['stream_url'])) != null)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _downloadItem(valueOf(item['stream_url']), title, item['id'].toString()),
+                          icon: const Icon(Icons.download, color: gold),
+                          label: const Text('تنزيل للمشاهدة دون إنترنت', style: TextStyle(color: gold)),
+                          style: OutlinedButton.styleFrom(side: const BorderSide(color: gold), padding: const EdgeInsets.all(14)),
+                        ),
+                      ),
                     if (!isSeries)
                       SizedBox(
                         width: double.infinity,
@@ -2415,6 +2513,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     try {
       await player.open(Media(url ?? widget.url)).timeout(const Duration(seconds: 20));
       if (!mounted) return;
+      await _savePreferredServer();
       final prefs = await SharedPreferences.getInstance();
       final savedRate = prefs.getDouble('${_settingsPrefix}_rate') ?? 1.0;
       final savedFit = prefs.getInt('${_settingsPrefix}_fit') ?? 0;
@@ -2430,6 +2529,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     } catch (e) {
       _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
     }
+  }
+
+  Future<void> _savePreferredServer() async {
+    if (widget.servers.isEmpty || currentServerIndex < 0 || currentServerIndex >= widget.servers.length || widget.progressKey.isEmpty) return;
+    final server = widget.servers[currentServerIndex];
+    final key = valueOf(server['id'] ?? server['server_name']);
+    if (key.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('shamflix_preferred_server_${widget.progressKey}', key);
   }
 
   Future<void> _restorePlaybackPosition(SharedPreferences prefs) async {
@@ -2515,6 +2623,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         try {
           await player.open(Media(nextUrl)).timeout(const Duration(seconds: 20));
           if (!mounted) return;
+          await _savePreferredServer();
           _failedServers.clear();
           setState(() => opening = false);
           _failoverInProgress = false;
@@ -3577,3 +3686,6 @@ class ShamFlixSearch extends SearchDelegate {
 // إضافة مسار احتياطي لاستكمال المشاهدة عند تعذر جلب قائمة السيرفرات بتاريخ 21-11-2026.
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة مزامنة سحابية للملفات والمفضلة وسجل المشاهدة، تقييمات وتوصيات ومركز إشعارات داخل التطبيق.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة التنزيل المحلي للملفات المباشرة، تفضيل آخر سيرفر ناجح، وتحسين ذاكرة تخزين الصور.
