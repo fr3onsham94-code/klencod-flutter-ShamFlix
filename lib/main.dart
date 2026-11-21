@@ -1234,6 +1234,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   bool loading = true;
   String? error;
   String? selectedPackageId;
+  int gridColumns = 5;
   List<Map<String, dynamic>> packages = [];
   final Map<String, List<Map<String, dynamic>>> packageContents = {};
 
@@ -1254,6 +1255,16 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
       });
     }
     try {
+      final gridSetting = await AuthService.client
+          .from('app_settings')
+          .select('setting_value')
+          .eq('setting_key', 'catalog_grid_columns')
+          .maybeSingle();
+      final savedColumns = int.tryParse(
+        gridSetting?['setting_value']?.toString() ?? '',
+      );
+      gridColumns = (savedColumns ?? 5).clamp(2, 6);
+
       final rows = await AuthService.client
           .from('content_packages')
           .select('id,name,sort_order')
@@ -1602,9 +1613,9 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 )
               : GridView.builder(
                   padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    // خمس بوسترات في كل صف، وتستمر الصفوف عمودياً حسب عدد عناصر الباقة.
-                    crossAxisCount: 5,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    // عدد البوسترات في الصف يتحكم به إعداد الإدارة العام.
+                    crossAxisCount: gridColumns,
                     childAspectRatio: 0.54,
                     crossAxisSpacing: 7,
                     mainAxisSpacing: 12,
@@ -4763,4 +4774,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: تحسين قائمة باقات الأفلام والمسلسلات وتحديث حالة ربط Google | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
+// آخر تعديل: إضافة إعداد موحّد لعدد أعمدة بوسترات الباقات للأفلام والمسلسلات | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
