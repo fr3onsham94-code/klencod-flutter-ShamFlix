@@ -1158,7 +1158,6 @@ class _HomePageState extends State<HomePage> {
       moviesPage(),
       tvPage(),
       channelsPage(),
-      const FavoritesPage(),
       const AccountPage(),
     ];
 
@@ -1206,10 +1205,6 @@ class _HomePageState extends State<HomePage> {
             NavigationDestination(
               icon: Icon(Icons.live_tv_outlined, color: Colors.white60, size: 19),
               label: appText('مباشر', 'Live TV', 'Canlı TV'),
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.favorite_outline, color: Colors.white60, size: 19),
-              label: appText('المفضلة', 'Favorites', 'Favoriler'),
             ),
             NavigationDestination(
               icon: Icon(Icons.person_outline, color: Colors.white60, size: 19),
@@ -2611,6 +2606,7 @@ class _DetailsPageState extends State<DetailsPage> {
   String myReaction = 'none';
   Map<String, dynamic> ratingSummary = {'average': 0.0, 'count': 0, 'likes': 0, 'dislikes': 0};
   List<Map<String, dynamic>> seasons = [];
+  int selectedSeasonIndex = 0;
   String? seasonsError;
 
   @override
@@ -3014,31 +3010,36 @@ class _DetailsPageState extends State<DetailsPage> {
       future: SupabaseService.getEpisodes(seasonId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: gold)));
+          return const Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: gold)));
         }
         if (snapshot.hasError) {
           return const Padding(padding: EdgeInsets.all(12), child: Text('تعذر تحميل الحلقات', style: TextStyle(color: Colors.redAccent)));
         }
         final episodes = snapshot.data ?? [];
         if (episodes.isEmpty) {
-          return const Padding(padding: EdgeInsets.all(12), child: Text('لا توجد حلقات منشورة في هذا الموسم', style: TextStyle(color: Colors.white54)));
+          return Padding(padding: const EdgeInsets.all(12), child: Text(
+            appText('لا توجد حلقات منشورة في هذا الموسم', 'No episodes published in this season', 'Bu sezonda yayınlanmış bölüm yok'),
+            style: const TextStyle(color: Colors.white54)));
         }
-        return Column(
-          children: episodes.map((episode) {
-            final number = episode['episode_number']?.toString() ?? '';
-            final episodeTitle = valueOf(episode['title'], 'الحلقة $number');
-            final poster = valueOf(episode['poster_url']);
-            return ListTile(
-              leading: poster.isEmpty
-                  ? const CircleAvatar(backgroundColor: panel, child: Icon(Icons.play_arrow, color: gold))
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Image.network(poster, width: 54, height: 58, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.play_circle, color: gold)),
-                    ),
-              title: Text('$number - $episodeTitle', style: const TextStyle(color: Colors.white)),
-              subtitle: const Text('تشغيل الحلقة', style: TextStyle(color: Colors.white54)),
-              trailing: const Icon(Icons.play_circle_outline, color: gold),
+        return Column(children: episodes.asMap().entries.map((entry) {
+          final episode = entry.value;
+          final number = episode['episode_number']?.toString() ?? '${entry.key + 1}';
+          final episodeTitle = valueOf(episode['title'], 'الحلقة $number');
+          final duration = valueOf(episode['duration'] ?? episode['runtime']);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(color: const Color(0xFF202020), borderRadius: BorderRadius.circular(10)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+              leading: Container(
+                width: 46, height: 46, alignment: Alignment.center,
+                decoration: BoxDecoration(color: gold.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
+                child: Text(number, style: const TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 16))),
+              title: Text(episodeTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: Text(duration.isEmpty ? appText('تشغيل الحلقة', 'Play episode', 'Bölümü oynat') : '$duration • ${appText('دقيقة', 'min', 'dk')}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              trailing: const Icon(Icons.play_circle_fill_rounded, color: gold, size: 30),
               onTap: () async {
                 final episodeRecord = Map<String, dynamic>.from(episode);
                 if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
@@ -3047,76 +3048,84 @@ class _DetailsPageState extends State<DetailsPage> {
                 await _chooseAndPlay(contentType: 'episode', contentId: episode['id'].toString(),
                   title: episodeTitle, legacyUrl: episode['stream_url']?.toString());
               },
-            );
-          }).toList(),
-        );
+            ),
+          );
+        }).toList());
       },
     );
   }
-
 
   Widget _detailsHero(String title, String poster, String backdrop, {required bool isChannel}) {
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     const posterWidth = 104.0;
     const posterHeight = 148.0;
-    final heroHeight = isLandscape ? 220.0 : 292.0;
-    final heroImage = backdrop.isNotEmpty ? backdrop : (isChannel ? poster : '');
+    final heroHeight = isLandscape ? 230.0 : 310.0;
+    final heroImage = backdrop.isNotEmpty ? backdrop : poster;
     return SizedBox(
-      width: double.infinity,
-      height: heroHeight,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (heroImage.isNotEmpty)
-            Image.network(heroImage, fit: isChannel ? BoxFit.contain : BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(color: panel))
-          else
-            const DecoratedBox(decoration: BoxDecoration(
-              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [Color(0xFF24201A), Color(0xFF090909)]))),
-          const DecoratedBox(decoration: BoxDecoration(
-            gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
-              colors: [Color(0x22000000), Color(0xF5090909)], stops: [0.05, 1.0]))),
-          Positioned(
-            right: 18, left: 18, bottom: 16,
-            child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              if (!isChannel)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: SizedBox(
-                    width: posterWidth, height: posterHeight,
-                    child: poster.isEmpty
-                      ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 42))
-                      : Image.network(poster, width: posterWidth, height: posterHeight, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 42))),
-                  ),
-                ),
-              if (!isChannel) const SizedBox(width: 13),
-              Expanded(child: Text(title, maxLines: isLandscape ? 2 : 3, overflow: TextOverflow.ellipsis,
+      width: double.infinity, height: heroHeight,
+      child: Stack(fit: StackFit.expand, children: [
+        if (heroImage.isNotEmpty)
+          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const ColoredBox(color: panel))
+        else const ColoredBox(color: panel),
+        const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [Color(0x22000000), Color(0x55000000), Color(0xFF090909)],
+          stops: [0.0, 0.52, 1.0]))),
+        Positioned(
+          right: 18, left: 18, bottom: 16,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            if (!isChannel) ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: SizedBox(width: posterWidth, height: posterHeight,
+                child: poster.isEmpty
+                  ? Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 42))
+                  : Image.network(poster, width: posterWidth, height: posterHeight, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: panel, child: const Icon(Icons.movie, color: gold, size: 42))))),
+            if (!isChannel) const SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4)),
+                child: Text(isChannel ? appText('مباشر', 'LIVE', 'CANLI') : 'SHAM FLIX',
+                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+              const SizedBox(height: 8),
+              Text(title, maxLines: isLandscape ? 2 : 3, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
-                  shadows: [Shadow(color: Colors.black, blurRadius: 12)]))),
-            ]),
-          ),
-        ],
-      ),
+                  shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
+            ])),
+          ]),
+        ),
+      ]),
     );
   }
 
   Widget _detailsInformation(Map<String, dynamic> item, {required bool isSeries, required bool isChannel,
     required String description, required String director, required String cast}) {
+    final year = valueOf(item['release_year']);
+    final category = valueOf(item['category']);
+    final rating = valueOf(item['rating']);
+    final duration = valueOf(item['duration'] ?? item['runtime']);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Wrap(spacing: 16, runSpacing: 8, children: [
-        if (valueOf(item['release_year']).isNotEmpty) _detailTag(Icons.calendar_today, valueOf(item['release_year'])),
-        if (valueOf(item['category']).isNotEmpty) _detailTag(Icons.category, valueOf(item['category'])),
-        if (valueOf(item['rating']).isNotEmpty) _detailTag(Icons.star, valueOf(item['rating'])),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        if (rating.isNotEmpty) _detailTag(Icons.star, rating),
+        if (year.isNotEmpty) _detailTag(Icons.calendar_today, year),
+        if (duration.isNotEmpty && !isSeries) _detailTag(Icons.schedule, duration),
         _detailTag(isChannel ? Icons.live_tv : isSeries ? Icons.tv : Icons.movie,
           isChannel ? appText('قناة', 'Channel', 'Kanal') : isSeries ? appText('مسلسل', 'Series', 'Dizi') : appText('فيلم', 'Movie', 'Film')),
       ]),
-      const SizedBox(height: 22),
-      Text(appText('القصة والوصف', 'Story & Description', 'Hikâye ve Açıklama'),
-        style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 10),
-      Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
+      if (category.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Wrap(spacing: 8, runSpacing: 8, children: category.split(RegExp(r'[,،|]')).map((genre) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          decoration: BoxDecoration(color: const Color(0xFF292929), borderRadius: BorderRadius.circular(20)),
+          child: Text(genre.trim(), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        )).toList()),
+      ],
+      const SizedBox(height: 20),
+      Text(appText('القصة والوصف', 'About this title', 'Hikâye ve Açıklama'),
+        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 9),
+      Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 14)),
       if (director.isNotEmpty) ...[
         const SizedBox(height: 14),
         Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: const TextStyle(color: Colors.white70, fontSize: 13)),
@@ -3132,60 +3141,58 @@ class _DetailsPageState extends State<DetailsPage> {
   }
 
   Widget _moviePlaySection(Map<String, dynamic> item, String title, {required bool isChannel}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: gold.withOpacity(0.28))),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(isChannel ? Icons.live_tv_rounded : Icons.play_circle_fill_rounded, color: gold, size: 42),
-        const SizedBox(height: 10),
-        Text(isChannel ? appText('تشغيل القناة', 'Play Channel', 'Kanalı Oynat') : appText('مشاهدة الفيلم', 'Watch Movie', 'Filmi İzle'),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-        const SizedBox(height: 12),
-        SizedBox(width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 14)),
-            onPressed: () => _chooseAndPlay(contentType: isChannel ? 'channel' : 'movie',
-              contentId: item['id'].toString(), title: title, legacyUrl: item['stream_url']?.toString()),
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: Text(appText('تشغيل الآن', 'Play Now', 'Şimdi Oynat'), style: const TextStyle(fontWeight: FontWeight.bold)),
-          )),
-      ]),
-    );
+    return SizedBox(width: double.infinity, child: FilledButton.icon(
+      style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+      onPressed: () => _chooseAndPlay(contentType: isChannel ? 'channel' : 'movie',
+        contentId: item['id'].toString(), title: title, legacyUrl: item['stream_url']?.toString()),
+      icon: const Icon(Icons.play_arrow_rounded, size: 25),
+      label: Text(isChannel ? appText('تشغيل القناة الآن', 'Watch Live', 'Canlı İzle') : appText('مشاهدة الآن', 'Watch Now', 'Şimdi İzle'),
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+    ));
   }
 
   Widget _seriesEpisodesSection() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(14)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final selectedSeason = seasons.isNotEmpty ? seasons[selectedSeasonIndex.clamp(0, seasons.length - 1)] : null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Container(width: 4, height: 22, decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4))),
+        const SizedBox(width: 9),
         Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'),
-          style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        if (seasonsLoading)
-          const Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: gold)))
-        else if (seasonsError != null)
-          Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
-        else if (seasons.isEmpty)
-          Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'),
-            style: const TextStyle(color: Colors.white54))
-        else
-          ...seasons.map((season) => Card(
-            color: const Color(0xFF202020),
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ExpansionTile(
-              iconColor: gold, collapsedIconColor: gold,
-              title: Text(valueOf(season['name'], 'الموسم ${season['season_number']}'),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              children: [_episodeList(season)],
-            ),
-          )),
+          style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
       ]),
-    );
+      const SizedBox(height: 14),
+      if (seasonsLoading)
+        const Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: gold)))
+      else if (seasonsError != null)
+        Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
+      else if (seasons.isEmpty)
+        Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'),
+          style: const TextStyle(color: Colors.white54))
+      else ...[
+        SizedBox(height: 42, child: ListView.separated(
+          scrollDirection: Axis.horizontal, reverse: true, itemCount: seasons.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final season = seasons[index];
+            final selected = index == selectedSeasonIndex;
+            final label = valueOf(season['name'], appText('الموسم ${season['season_number']}', 'Season ${season['season_number']}', 'Sezon ${season['season_number']}'));
+            return ChoiceChip(
+              label: Text(label), selected: selected,
+              onSelected: (_) => setState(() => selectedSeasonIndex = index),
+              selectedColor: gold, backgroundColor: const Color(0xFF292929),
+              labelStyle: TextStyle(color: Colors.white, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+              side: BorderSide.none, showCheckmark: false,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            );
+          },
+        )),
+        const SizedBox(height: 12),
+        if (selectedSeason != null) _episodeList(selectedSeason),
+      ],
+    ]);
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -3212,39 +3219,25 @@ class _DetailsPageState extends State<DetailsPage> {
             onPressed: _toggleFavorite,
             icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : Colors.white)),
         ]),
-        body: (!isChannel && isLandscape)
-          ? SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(flex: 5, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  _detailsHero(title, poster, backdrop, isChannel: false),
-                  const SizedBox(height: 14),
-                  information,
-                ])),
-                const SizedBox(width: 16),
-                Expanded(flex: 6, child: isSeries
-                  ? _seriesEpisodesSection()
-                  : _moviePlaySection(item, title, isChannel: false)),
-              ]),
-            )
-          : SingleChildScrollView(
+        body: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _detailsHero(title, poster, backdrop, isChannel: isChannel),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                _detailsHero(title, poster, backdrop, isChannel: isChannel),
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    information,
-                    if (isSeries) ...[
-                      const SizedBox(height: 24),
-                      _seriesEpisodesSection(),
-                    ] else ...[
-                      const SizedBox(height: 22),
-                      _moviePlaySection(item, title, isChannel: isChannel),
-                    ],
-                  ]),
-                ),
+                if (!isSeries) ...[
+                  _moviePlaySection(item, title, isChannel: isChannel),
+                  const SizedBox(height: 20),
+                ],
+                information,
+                if (isSeries) ...[
+                  const SizedBox(height: 24),
+                  _seriesEpisodesSection(),
+                ],
               ]),
             ),
+          ]),
+        ),
       ),
     );
   }
@@ -4788,4 +4781,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: إصلاح توافق شريط التنقل مع Flutter بإزالة iconTheme وتحديد أحجام وألوان الأيقونات مباشرة | التاريخ: 2026-11-21 | الوقت: 20:10:00 بتوقيت تركيا
+// آخر تعديل: إعادة تصميم صفحات تفاصيل الأفلام والمسلسلات وإزالة تبويب المفضلة من الشريط السفلي مع إبقاء المفضلة داخل التفاصيل | التاريخ: 2026-11-21 | الوقت: 20:25:00 بتوقيت تركيا
