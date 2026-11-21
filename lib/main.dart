@@ -1024,7 +1024,7 @@ class _HomePageState extends State<HomePage> {
               selectedTab = index;
             });
           },
-          destinations: const [
+          destinations: [
             NavigationDestination(
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home, color: gold),
