@@ -1058,13 +1058,7 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
         contentId: channel['id'].toString(),
       );
     });
-    unawaited(saveWatchRecord(
-      contentType: 'channel',
-      item: channel,
-      title: valueOf(channel['name'], 'قناة'),
-      isChannel: true,
-      fallbackPoster: valueOf(channel['logo_url']),
-    ));
+
   }
   @override
   Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
@@ -1095,6 +1089,7 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
                       servers: servers,
                       progressKey: "channel_${selectedChannel!['id']}",
                       embedded: true,
+                      historyItem: selectedChannel,
                     );
                   },
                 ),
@@ -2436,6 +2431,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
   final int initialServerIndex;
   final String progressKey;
   final bool embedded;
+  final Map<String, dynamic>? historyItem;
 
   const ShamFlixPlayerPage({
     super.key,
@@ -2445,6 +2441,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
     this.initialServerIndex = 0,
     this.progressKey = '',
     this.embedded = false,
+    this.historyItem,
   });
 
   @override
@@ -2518,6 +2515,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     try {
       await player.open(Media(url ?? widget.url)).timeout(const Duration(seconds: 20));
       if (!mounted) return;
+      if (widget.embedded && widget.historyItem != null) {
+        await saveWatchRecord(contentType: 'channel', item: widget.historyItem!, title: widget.title,
+          isChannel: true, fallbackPoster: valueOf(widget.historyItem!['logo_url']));
+      }
       await _savePreferredServer();
       final prefs = await SharedPreferences.getInstance();
       final savedRate = prefs.getDouble('${_settingsPrefix}_rate') ?? 1.0;
@@ -3838,3 +3839,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة تحديث يدوي للباقات والمحتوى مع إعادة تحميل الباقات عند تحديث بيانات التطبيق.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تسجيل القناة في سجل المشاهدة بعد نجاح تشغيلها فعلياً وليس بمجرد تحديدها.
