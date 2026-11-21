@@ -121,3 +121,37 @@ execute function public.notify_users_new_content('episode');
 drop trigger if exists notify_new_channel on public.channels;
 create trigger notify_new_channel after insert on public.channels for each row when (new.is_published = true)
 execute function public.notify_users_new_content('channel');
+
+
+create or replace function public.get_content_rating_summary(p_content_type text, p_content_id text)
+returns table(average numeric, rating_count bigint, likes bigint, dislikes bigint)
+language sql
+security definer
+set search_path = ''
+as $$
+  select coalesce(avg(r.rating), 0)::numeric,
+         count(*)::bigint,
+         count(*) filter (where r.reaction = 'like')::bigint,
+         count(*) filter (where r.reaction = 'dislike')::bigint
+  from public.user_ratings r
+  where r.content_type = p_content_type and r.content_id = p_content_id;
+$$;
+revoke all on function public.get_content_rating_summary(text, text) from public;
+grant execute on function public.get_content_rating_summary(text, text) to anon, authenticated;
+
+drop trigger if exists notify_published_movie on public.movies;
+create trigger notify_published_movie after update of is_published on public.movies
+for each row when (new.is_published = true and old.is_published is distinct from new.is_published)
+execute function public.notify_users_new_content('movie');
+drop trigger if exists notify_published_series on public.series;
+create trigger notify_published_series after update of is_published on public.series
+for each row when (new.is_published = true and old.is_published is distinct from new.is_published)
+execute function public.notify_users_new_content('series');
+drop trigger if exists notify_published_episode on public.episodes;
+create trigger notify_published_episode after update of is_published on public.episodes
+for each row when (new.is_published = true and old.is_published is distinct from new.is_published)
+execute function public.notify_users_new_content('episode');
+drop trigger if exists notify_published_channel on public.channels;
+create trigger notify_published_channel after update of is_published on public.channels
+for each row when (new.is_published = true and old.is_published is distinct from new.is_published)
+execute function public.notify_users_new_content('channel');
