@@ -1063,11 +1063,13 @@ class ShamFlixChannelCatalogPage extends StatefulWidget {
 
 class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage> {
   late Future<List<Map<String, dynamic>>> packagesFuture;
+  late Future<List<Map<String, dynamic>>> filteredFuture;
   String? selectedPackageId;
   Map<String, dynamic>? selectedChannel;
   @override
-  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages('channel'); }
-  Future<List<Map<String, dynamic>>> _filter(List<Map<String, dynamic>> all) async {
+  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages('channel'); filteredFuture = _loadFiltered(); }
+  Future<List<Map<String, dynamic>>> _loadFiltered() async {
+    final all = await widget.channelsFuture;
     if (selectedPackageId == null) return all;
     final ids = await SupabaseService.getPackageContentIds(selectedPackageId!);
     return all.where((item) => ids.contains(item['id']?.toString())).toList();
@@ -1082,7 +1084,6 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
       if (channelSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
       if (channelSnapshot.hasError) return const Center(child: Text('تعذر تحميل القنوات', style: TextStyle(color: Colors.white54)));
       final all = channelSnapshot.data ?? [];
-      if (selectedChannel == null && all.isNotEmpty) selectedChannel = all.first;
       return Column(children: [
         Container(height: 205, margin: const EdgeInsets.fromLTRB(12, 10, 12, 12), decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(14),
           border: Border.all(color: gold.withOpacity(0.4))),
@@ -1103,9 +1104,10 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
         ),
         Expanded(child: FutureBuilder<List<Map<String, dynamic>>>(future: packagesFuture, builder: (context, packageSnapshot) {
           final packages = packageSnapshot.data ?? [];
-          return FutureBuilder<List<Map<String, dynamic>>>(future: _filter(all), builder: (context, filteredSnapshot) {
+          return FutureBuilder<List<Map<String, dynamic>>>(future: filteredFuture, builder: (context, filteredSnapshot) {
             if (filteredSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
             final items = filteredSnapshot.data ?? [];
+            if (selectedChannel == null && items.isNotEmpty) selectedChannel = items.first;
             return Row(children: [
               SizedBox(width: 112, child: Container(color: panel, child: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
                 _packageTile('الكل', null),
@@ -1128,7 +1130,7 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
       ]);
     }),
   ));
-  Widget _packageTile(String name, String? id) => InkWell(onTap: () => setState(() => selectedPackageId = id),
+  Widget _packageTile(String name, String? id) => InkWell(onTap: () => setState(() { selectedPackageId = id; selectedChannel = null; filteredFuture = _loadFiltered(); }),
     child: Container(margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
       decoration: BoxDecoration(color: selectedPackageId == id ? const Color(0xFF493B25) : Colors.transparent, borderRadius: BorderRadius.circular(9),
         border: Border.all(color: selectedPackageId == id ? gold : Colors.white10)),
@@ -1147,11 +1149,13 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
   String search = '';
   late Future<List<Map<String, dynamic>>> packagesFuture;
   late Future<List<Map<String, dynamic>>> contentFuture;
+  late Future<List<Map<String, dynamic>>> filteredFuture;
   @override
-  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages(widget.contentType); contentFuture = _loadContent(); }
+  void initState() { super.initState(); packagesFuture = SupabaseService.getPackages(widget.contentType); contentFuture = _loadContent(); filteredFuture = _loadFiltered(); }
   Future<List<Map<String, dynamic>>> _loadContent() => widget.contentType == 'movie' ? SupabaseService.getMovies() : SupabaseService.getSeries();
   String get pageTitle => widget.contentType == 'movie' ? 'الأفلام' : 'المسلسلات';
-  Future<List<Map<String, dynamic>>> _filterPackage(List<Map<String, dynamic>> all) async {
+  Future<List<Map<String, dynamic>>> _loadFiltered() async {
+    final all = await contentFuture;
     if (selectedPackageId == null) return all;
     final ids = await SupabaseService.getPackageContentIds(selectedPackageId!);
     return all.where((item) => ids.contains(item['id']?.toString())).toList();
@@ -1210,7 +1214,7 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
     }),
   ));
   Widget _packageTile(String name, String? id, bool selected) => InkWell(
-    onTap: () => setState(() => selectedPackageId = id),
+    onTap: () => setState(() { selectedPackageId = id; filteredFuture = _loadFiltered(); }),
     child: Container(margin: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
       decoration: BoxDecoration(color: selected ? const Color(0xFF493B25) : Colors.transparent, borderRadius: BorderRadius.circular(9),
         border: Border.all(color: selected ? gold : Colors.white10)),
@@ -3711,3 +3715,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تطبيق قيد Wi-Fi فقط أيضاً على استكمال المشاهدة من سجل المشاهدة والقنوات الأخيرة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تثبيت Future الباقات والمحتوى لمنع إعادة تحميل غير منتهية عند تغيير الاختيار أو البحث.
