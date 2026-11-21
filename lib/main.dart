@@ -25,6 +25,7 @@ import 'admin_auth_service.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
+import 'shamflix_presence_service.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -71,6 +72,7 @@ Future<void> main() async {
   );
   await ShamFlixLocalStore.initialize();
   await ShamFlixAppPreferences.initialize();
+  unawaited(ShamFlixPresenceService.start());
   unawaited(syncShamFlixCloudData());
 
   runApp(const ShamFlixApp());
@@ -401,6 +403,7 @@ class _ShamFlixAppState extends State<ShamFlixApp> {
         AuthService.client.auth.onAuthStateChange.listen(
       (data) {
         authRefreshNotifier.value++;
+        unawaited(ShamFlixPresenceService.refreshIdentity());
         if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.initialSession) {
           unawaited(syncShamFlixCloudData());
         }
@@ -3543,3 +3546,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إنشاء قوائم أفلام ومسلسلات بباقات جانبية ومحتوى شبكي قابل للبحث.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تشغيل تتبع المتصلين تلقائياً للزائر والحساب المسجل وتحديث الهوية عند الدخول والخروج.
