@@ -1831,15 +1831,17 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       }
       final latest = value['version'].toString().trim();
       final apkUrl = value['apk_url'].toString().trim();
+      final latestBuild = int.tryParse(value['build_number']?.toString() ?? '') ?? 0;
       final packageInfo = await PackageInfo.fromPlatform();
-      final comparison = _compareVersions(packageInfo.version, latest);
-      if (comparison >= 0) {
+      final currentBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
+      if (latestBuild <= currentBuild || _compareVersions(packageInfo.version, latest) > 0) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('أنت تستخدم أحدث إصدار (${packageInfo.version}).')),
+          SnackBar(content: Text('أنت تستخدم أحدث إصدار (${packageInfo.version} / ${packageInfo.buildNumber}).')),
         );
         return;
       }
       if (!mounted) return;
+      var installAfterDialog = false;
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -1864,14 +1866,15 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
               onPressed: () {
+                installAfterDialog = true;
                 Navigator.pop(dialogContext);
-                unawaited(_downloadAndInstallUpdate(apkUrl));
               },
               child: const Text('تنزيل وتثبيت'),
             ),
           ],
         ),
       );
+      if (installAfterDialog) await _downloadAndInstallUpdate(apkUrl);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('تعذر التحقق من التحديث: $e')),
