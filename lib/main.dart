@@ -2493,7 +2493,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _watchWifiPolicy() async {
     final prefs = await SharedPreferences.getInstance();
-    if (!(prefs.getBool('shamflix_wifi_only') ?? false)) return;
+    if (!mounted || !(prefs.getBool('shamflix_wifi_only') ?? false)) return;
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((connections) {
       if (!connections.contains(ConnectivityResult.wifi)) {
         player.pause();
@@ -3882,3 +3882,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إيقاف الفيديو تلقائياً إذا انقطعت شبكة Wi-Fi أثناء تفعيل خيار Wi-Fi فقط.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// منع إنشاء مستمع الشبكة بعد التخلص من صفحة المشغل.
