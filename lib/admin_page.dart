@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'admin_auth_service.dart';
+import 'admin_packages_page.dart';
 import 'supabase_service.dart';
 
 const Color adminBg = Color(0xFF090909);
@@ -247,6 +248,14 @@ class _AdminPageState extends State<AdminPage> {
   // التنقل بين الأقسام
   // =========================
 
+  Future<void> openPackageManager(String section) async {
+    final contentType = section == 'movies' ? 'movie' : section == 'series' ? 'series' : 'channel';
+    final title = section == 'movies' ? 'الأفلام' : section == 'series' ? 'المسلسلات' : 'القنوات';
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => AdminPackagesPage(contentType: contentType, title: title),
+    ));
+  }
+
   void navigateTo(String section) {
     setState(() {
       currentSection = section;
@@ -376,7 +385,17 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> saveMovie(
+  String? _returnedRowId(String body) {
+    if (body.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is List && decoded.isNotEmpty) return decoded.first['id']?.toString();
+      if (decoded is Map) return decoded['id']?.toString();
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String?> saveMovie(
     Map<String, dynamic> movie, {
     String? id,
   }) async {
@@ -406,7 +425,9 @@ class _AdminPageState extends State<AdminPage> {
       throw Exception(_readError(response));
     }
 
+    final savedId = id ?? _returnedRowId(response.body);
     await loadMovies();
+    return savedId;
   }
 
   Future<void> deleteMovie(String id) async {
@@ -501,7 +522,7 @@ class _AdminPageState extends State<AdminPage> {
     if (mounted) setState(() => catalogLoading = false);
   }
 
-  Future<void> saveCatalogItem(
+  Future<String?> saveCatalogItem(
     String section,
     Map<String, dynamic> item, {
     String? id,
@@ -518,7 +539,9 @@ class _AdminPageState extends State<AdminPage> {
         response.statusCode != 204) {
       throw Exception(_readError(response));
     }
+    final savedId = id ?? _returnedRowId(response.body);
     await loadCatalog(section);
+    return savedId;
   }
 
     Future<void> deleteCatalogItem(String section, String id) async {
@@ -603,6 +626,13 @@ class _AdminPageState extends State<AdminPage> {
     bool isLive = existing?['is_live'] != false;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
+    final packageType = isSeries ? 'series' : 'channel';
+    final packageOptions = await _extraLoad('content_packages', {
+      'content_type': 'eq.$packageType',
+    }, order: 'sort_order.asc,created_at.asc');
+    final selectedPackageIds = existing == null
+        ? <String>[]
+        : await _loadAssignedPackageIds(packageType, existing['id'].toString());
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -733,6 +763,35 @@ class _AdminPageState extends State<AdminPage> {
                         onChanged: (value) => setDialogState(() => isLive = value),
                       ),
                     ],
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text('الباقات التي يظهر فيها هذا المحتوى',
+                          style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+                      subtitle: Text('تم اختيار ${selectedPackageIds.length} باقة',
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      children: packageOptions.isEmpty
+                          ? [const Padding(padding: EdgeInsets.all(12),
+                              child: Text('لا توجد باقات لهذا القسم. أنشئ باقة أولاً من صفحة إدارة الباقات.',
+                                  style: TextStyle(color: Colors.white54)))]
+                          : packageOptions.map((package) {
+                              final packageId = package['id'].toString();
+                              return CheckboxListTile(
+                                dense: true,
+                                value: selectedPackageIds.contains(packageId),
+                                activeColor: adminGold,
+                                checkColor: Colors.black,
+                                title: Text(package['name']?.toString() ?? 'باقة',
+                                    style: const TextStyle(color: Colors.white)),
+                                onChanged: (checked) => setDialogState(() {
+                                  if (checked == true) {
+                                    if (!selectedPackageIds.contains(packageId)) selectedPackageIds.add(packageId);
+                                  } else {
+                                    selectedPackageIds.remove(packageId);
+                                  }
+                                }),
+                              );
+                            }).toList(),
+                    ),
                     SwitchListTile(
                       value: published,
                       activeColor: adminGold,
@@ -795,7 +854,10 @@ class _AdminPageState extends State<AdminPage> {
     tmdbController.dispose();
     if (result == null) return;
     try {
-      await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      final savedId = await saveCatalogItem(section, result, id: existing?['id']?.toString());
+      if (savedId != null) {
+        await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
+      }
       showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
     } catch (e) {
       showMessage(e.toString(), isError: true);
@@ -901,6 +963,15 @@ class _AdminPageState extends State<AdminPage> {
     final isSeries = section == 'series';
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          child: SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            onPressed: () => openPackageManager(section),
+            icon: const Icon(Icons.folder_open),
+            label: Text(isSeries ? 'إدارة باقات المسلسلات' : 'إدارة باقات القنوات'),
+            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+          )),
+        ),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
           child: list.isEmpty
@@ -932,6 +1003,40 @@ class _AdminPageState extends State<AdminPage> {
 
   Uri _extraTableUrl(String table) =>
       Uri.parse(SupabaseService.projectUrl + '/rest/v1/' + table);
+
+  Future<List<String>> _loadAssignedPackageIds(String contentType, String contentId) async {
+    final rows = await _extraLoad('content_package_items', {
+      'content_type': 'eq.$contentType',
+      'content_id': 'eq.$contentId',
+    });
+    return rows.map((row) => row['package_id'].toString()).toList();
+  }
+
+  Future<void> _saveContentPackageAssignments(
+    String contentType,
+    String contentId,
+    List<String> packageIds,
+  ) async {
+    final uri = _extraTableUrl('content_package_items').replace(queryParameters: {
+      'content_type': 'eq.$contentType',
+      'content_id': 'eq.$contentId',
+    });
+    final removed = await http.delete(uri, headers: headers);
+    if (removed.statusCode != 200 && removed.statusCode != 204) throw Exception(_readError(removed));
+    if (packageIds.isEmpty) return;
+    final response = await http.post(
+      _extraTableUrl('content_package_items'),
+      headers: headers,
+      body: jsonEncode(packageIds.map((packageId) => {
+        'package_id': packageId,
+        'content_type': contentType,
+        'content_id': contentId,
+      }).toList()),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201 && response.statusCode != 204) {
+      throw Exception(_readError(response));
+    }
+  }
 
   Future<List<Map<String, dynamic>>> _extraLoad(
     String table,
@@ -2467,6 +2572,13 @@ class _AdminPageState extends State<AdminPage> {
         existing?['is_published'] == true;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
+    const packageType = 'movie';
+    final packageOptions = await _extraLoad('content_packages', {
+      'content_type': 'eq.movie',
+    }, order: 'sort_order.asc,created_at.asc');
+    final selectedPackageIds = existing == null
+        ? <String>[]
+        : await _loadAssignedPackageIds(packageType, existing['id'].toString());
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -2639,6 +2751,35 @@ class _AdminPageState extends State<AdminPage> {
                           'رابط التشغيل',
                         ),
                         const SizedBox(height: 10),
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('الباقات التي يظهر فيها الفيلم',
+                              style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+                          subtitle: Text('تم اختيار ${selectedPackageIds.length} باقة',
+                              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          children: packageOptions.isEmpty
+                              ? [const Padding(padding: EdgeInsets.all(12),
+                                  child: Text('لا توجد باقات للأفلام. أنشئ باقة أولاً من إدارة الباقات.',
+                                      style: TextStyle(color: Colors.white54)))]
+                              : packageOptions.map((package) {
+                                  final packageId = package['id'].toString();
+                                  return CheckboxListTile(
+                                    dense: true,
+                                    value: selectedPackageIds.contains(packageId),
+                                    activeColor: adminGold,
+                                    checkColor: Colors.black,
+                                    title: Text(package['name']?.toString() ?? 'باقة',
+                                        style: const TextStyle(color: Colors.white)),
+                                    onChanged: (checked) => setDialogState(() {
+                                      if (checked == true) {
+                                        if (!selectedPackageIds.contains(packageId)) selectedPackageIds.add(packageId);
+                                      } else {
+                                        selectedPackageIds.remove(packageId);
+                                      }
+                                    }),
+                                  );
+                                }).toList(),
+                        ),
                         CheckboxListTile(
                           value: published,
                           activeColor: adminGold,
@@ -2741,7 +2882,10 @@ class _AdminPageState extends State<AdminPage> {
       final rawId = existing?['id'];
       final String? id = rawId?.toString();
 
-      await saveMovie(result, id: id);
+      final savedId = await saveMovie(result, id: id);
+      if (savedId != null) {
+        await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
+      }
 
       showMessage(
         existing == null
@@ -3314,6 +3458,15 @@ class _AdminPageState extends State<AdminPage> {
 
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          child: SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            onPressed: () => openPackageManager('movies'),
+            icon: const Icon(Icons.folder_open),
+            label: const Text('إدارة باقات الأفلام'),
+            style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+          )),
+        ),
         searchBox(
           hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
         ),
@@ -3402,3 +3555,4 @@ class _AdminPageState extends State<AdminPage> {
 // تم استعادة إدارة المواسم والحلقات والسيرفرات
 // مع الحفاظ على نسخة saveCatalogItem الحالية.
 // ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026: ربط إدارة المحتوى بالباقات مع دعم إسناد العنصر لأكثر من باقة.
