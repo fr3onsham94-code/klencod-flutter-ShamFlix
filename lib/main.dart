@@ -1087,11 +1087,11 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
                     final streamUrl = servers.isNotEmpty ? valueOf(servers.first['stream_url']).trim() : legacyUrl;
                     if (streamUrl.isEmpty) return const Center(child: Text('لا يوجد رابط تشغيل لهذه القناة', style: TextStyle(color: Colors.white70)));
                     return ShamFlixPlayerPage(
-                      key: ValueKey('embedded_channel_${selectedChannel!['id']}'),
+                      key: ValueKey("embedded_channel_${selectedChannel!['id']}"),
                       url: streamUrl,
                       title: valueOf(selectedChannel!['name'], 'قناة'),
                       servers: servers,
-                      progressKey: 'channel_${selectedChannel!['id']}',
+                      progressKey: "channel_${selectedChannel!['id']}",
                       embedded: true,
                     );
                   },
@@ -3829,3 +3829,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إصلاح مفاتيح المشغل المضمن ومعرّف سجل القناة لاستخدام معرّف القناة الفعلي.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// استخدام علامات اقتباس واضحة حول معرّف القناة في مفاتيح Flutter.
