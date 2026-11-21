@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="NormalTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowBackground">#090909</item>
     </style>
 </resources>
+
+<!-- آخر تعديل: تغيير خلفية إقلاع Android من الأبيض إلى الأسود لهوية SHAM FLIX | التاريخ: 2026-11-21 | الوقت: 22:52:00 بتوقيت تركيا -->
