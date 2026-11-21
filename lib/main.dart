@@ -1239,32 +1239,42 @@ class _DetailsPageState extends State<DetailsPage> {
     final selected = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: panel,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
         return Directionality(
           textDirection: TextDirection.rtl,
           child: SafeArea(
             child: Center(
+              widthFactor: 1,
+              heightFactor: 1,
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 112, maxHeight: size.height * 0.30),
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    const Text('اختر سيرفر التشغيل', textAlign: TextAlign.center,
-                      style: TextStyle(color: gold, fontSize: 15, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    ...servers.map((server) => ListTile(
-                      dense: true,
-                      visualDensity: const VisualDensity(vertical: -2),
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(valueOf(server['server_name'], 'سيرفر'),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white, fontSize: 12)),
-                      onTap: () => Navigator.pop(sheetContext, server),
-                    )),
-                  ],
+                constraints: BoxConstraints(maxWidth: 220, maxHeight: size.height * 0.30),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xF2171717),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      const Text('اختر سيرفر التشغيل', textAlign: TextAlign.center,
+                        style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      ...servers.map((server) => ListTile(
+                        dense: true,
+                        visualDensity: const VisualDensity(vertical: -2),
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(valueOf(server['server_name'], 'سيرفر'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        onTap: () => Navigator.pop(sheetContext, server),
+                      )),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -2661,3 +2671,4 @@ class ShamFlixSearch extends SearchDelegate {
 // توحيد عرض قوائم السيرفرات والصوت والترجمة مع قائمة السرعة (112 بكسل) بتاريخ 21-11-2026.
 // اعتماد مصدر واحد لقيم سرعات التشغيل في الوضعين العمودي والأفقي بتاريخ 21-11-2026.
 // تصغير قوائم السرعة والصوت والترجمة لتلتف حول الخيارات بدل تمددها على كامل الشاشة بتاريخ 21-11-2026.
+// تطبيق التصميم المدمج نفسه على قائمة اختيار سيرفر التشغيل بتاريخ 21-11-2026.
