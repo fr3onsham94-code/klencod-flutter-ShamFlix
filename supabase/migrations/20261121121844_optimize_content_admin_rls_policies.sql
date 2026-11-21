@@ -105,3 +105,5 @@ create policy "Admins and managers update playback servers" on public.playback_s
   for update to authenticated using (public.is_app_admin()) with check (public.is_app_admin());
 create policy "Admins and managers delete playback servers" on public.playback_servers
   for delete to authenticated using (public.is_app_admin());
+
+-- ShamFlix - آخر تحديث: 21-11-2026: تحسين سياسات قراءة المحتوى وكتابته.
