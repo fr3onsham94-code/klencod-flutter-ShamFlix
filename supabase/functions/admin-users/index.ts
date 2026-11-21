@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
 
     const caller = authData.user;
     const callerRole = caller.app_metadata?.role;
-    if (callerRole !== "admin" && callerRole !== "manager") {
+    if (caller.id !== OWNER_USER_ID && callerRole !== "admin" && callerRole !== "manager") {
       return json({ error: "Admin access required" }, 403);
     }
 
@@ -155,4 +155,4 @@ Deno.serve(async (req: Request) => {
   }
 });
 // ShamFlix - آخر تحديث: 21-11-2026
-// المدير والأدمن بصلاحيات متطابقة، مع بقاء إجراءات ملكية التطبيق للمالك الأساسي فقط.
+// المالك الأساسي يحتفظ بالدخول الكامل، والمدير والأدمن لهما صلاحيات متطابقة.
