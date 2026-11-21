@@ -1206,6 +1206,159 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Map<String, dynamic> _newServerDraft({
+    String name = '',
+    String url = '',
+    bool active = true,
+  }) => {
+    'name': TextEditingController(text: name),
+    'url': TextEditingController(text: url),
+    'active': active,
+  };
+
+  Future<List<Map<String, dynamic>>> _loadServerDrafts(
+    String type, {
+    Map<String, dynamic>? existing,
+    String? legacyUrl,
+  }) async {
+    String foreignKey = type == 'movie' ? 'movie_id' : 'channel_id';
+    final rows = existing == null
+        ? <Map<String, dynamic>>[]
+        : await _extraLoad('playback_servers', {
+            foreignKey: 'eq.${existing['id']}',
+          }, order: 'sort_order.asc,created_at.asc');
+    if (rows.isNotEmpty) {
+      return rows.map((row) => _newServerDraft(
+        name: row['server_name']?.toString() ?? '',
+        url: row['stream_url']?.toString() ?? '',
+        active: row['is_active'] != false,
+      )).toList();
+    }
+    return [
+      _newServerDraft(
+        name: 'السيرفر الأساسي',
+        url: legacyUrl?.trim() ?? '',
+      ),
+    ];
+  }
+
+  void _disposeServerDrafts(List<Map<String, dynamic>> drafts) {
+    for (final draft in drafts) {
+      (draft['name'] as TextEditingController).dispose();
+      (draft['url'] as TextEditingController).dispose();
+    }
+  }
+
+  Widget _serverDraftsEditor({
+    required List<Map<String, dynamic>> drafts,
+    required StateSetter setDialogState,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 12, bottom: 6),
+          child: Text('سيرفرات التشغيل', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+        ),
+        ...drafts.asMap().entries.map((entry) {
+          final index = entry.key;
+          final draft = entry.value;
+          final name = draft['name'] as TextEditingController;
+          final url = draft['url'] as TextEditingController;
+          return Card(
+            color: adminBg,
+            margin: const EdgeInsets.only(bottom: 9),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: Text('السيرفر ${index + 1}', style: const TextStyle(color: adminGold, fontWeight: FontWeight.bold))),
+                      Switch(
+                        value: draft['active'] == true,
+                        activeColor: adminGold,
+                        onChanged: (value) => setDialogState(() => draft['active'] = value),
+                      ),
+                      IconButton(
+                        tooltip: 'حذف السيرفر',
+                        onPressed: () => setDialogState(() {
+                          drafts.removeAt(index);
+                          name.dispose();
+                          url.dispose();
+                        }),
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      ),
+                    ],
+                  ),
+                  adminField(name, 'اسم السيرفر'),
+                  adminField(url, 'رابط التشغيل', required: false),
+                ],
+              ),
+            ),
+          );
+        }),
+        OutlinedButton.icon(
+          onPressed: () => setDialogState(() => drafts.add(
+            _newServerDraft(name: 'السيرفر ${drafts.length + 1}'),
+          )),
+          icon: const Icon(Icons.add),
+          label: const Text('إضافة سيرفر آخر'),
+          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold)),
+        ),
+      ],
+    );
+  }
+
+  String _firstServerUrl(List<Map<String, dynamic>> drafts) {
+    for (final draft in drafts) {
+      final url = (draft['url'] as TextEditingController).text.trim();
+      if (url.isNotEmpty) return url;
+    }
+    return '';
+  }
+
+  Future<void> _saveServerDrafts(
+    String type,
+    String contentId,
+    List<Map<String, dynamic>> drafts,
+  ) async {
+    final foreignKey = type == 'movie' ? 'movie_id' : 'channel_id';
+    final deleted = await http.delete(
+      _extraTableUrl('playback_servers').replace(queryParameters: {
+        foreignKey: 'eq.$contentId',
+      }),
+      headers: headers,
+    );
+    if (deleted.statusCode != 200 && deleted.statusCode != 204) {
+      throw Exception(_readError(deleted));
+    }
+
+    final rows = <Map<String, dynamic>>[];
+    for (var index = 0; index < drafts.length; index++) {
+      final draft = drafts[index];
+      final url = (draft['url'] as TextEditingController).text.trim();
+      if (url.isEmpty) continue;
+      final name = (draft['name'] as TextEditingController).text.trim();
+      rows.add({
+        foreignKey: contentId,
+        'server_name': name.isEmpty ? 'السيرفر ${index + 1}' : name,
+        'stream_url': url,
+        'sort_order': index,
+        'is_active': draft['active'] == true,
+      });
+    }
+    if (rows.isEmpty) return;
+    final saved = await http.post(
+      _extraTableUrl('playback_servers'),
+      headers: headers,
+      body: jsonEncode(rows),
+    );
+    if (saved.statusCode != 200 && saved.statusCode != 201 && saved.statusCode != 204) {
+      throw Exception(_readError(saved));
+    }
+  }
+
   Future<void> _editPlaybackServer({
     required String type,
     required String contentId,
