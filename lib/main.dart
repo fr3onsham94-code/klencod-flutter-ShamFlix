@@ -1533,7 +1533,7 @@ class _AccountPageState extends State<AccountPage> {
           const SizedBox(height: 15),
           accountTile(icon: Icons.favorite_outline, title: appText('المفضلة', 'Favorites', 'Favoriler'), subtitle: appText('أفلامك ومسلسلاتك المحفوظة', 'Your saved movies and series', 'Kaydettiğiniz film ve diziler'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-          accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'),
+          accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText(appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'), 'What you watched recently', 'Son izledikleriniz'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
           accountTile(icon: Icons.settings_outlined, title: appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'), subtitle: appText('المشغل واللغة والشبكة والتخزين', 'Player, language, network and storage', 'Oynatıcı, dil, ağ ve depolama'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppSettingsPage()))),
@@ -1604,7 +1604,7 @@ class _AccountPageState extends State<AccountPage> {
 
           accountTile(icon: Icons.favorite_outline, title: appText('المفضلة', 'Favorites', 'Favoriler'), subtitle: appText('أفلامك ومسلسلاتك المحفوظة', 'Your saved movies and series', 'Kaydettiğiniz film ve diziler'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
-          accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'),
+          accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText(appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'), 'What you watched recently', 'Son izledikleriniz'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WatchHistoryPage()))),
           accountTile(icon: Icons.settings_outlined, title: appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'), subtitle: appText('المشغل واللغة والشبكة والتخزين', 'Player, language, network and storage', 'Oynatıcı, dil, ağ ve depolama'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppSettingsPage()))),
@@ -1930,11 +1930,11 @@ class PrivacyPage extends StatelessWidget {
         SizedBox(height: 14),
         Text(appText('حقوق النشر', 'Copyright', 'Telif Hakkı'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', style: TextStyle(color: Colors.white70, height: 1.7)),
+        Text(appText('حقوق تصميم تطبيق ShamFlix واسمه وواجهته محفوظة لأصحاب التطبيق. المحتوى وروابط البث تخضع لحقوق أصحابها ومصادرها.', 'The ShamFlix name, design and interface are protected by their owners. Displayed content and streaming links remain subject to their respective rights holders.', 'ShamFlix adı, tasarımı ve arayüzü sahiplerine aittir. Gösterilen içerikler ve yayın bağlantıları ilgili hak sahiplerinin koşullarına tabidir.'), style: TextStyle(color: Colors.white70, height: 1.7)),
         SizedBox(height: 20),
         Text(appText('الخصوصية', 'Privacy', 'Gizlilik'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text('يستخدم التطبيق بيانات أساسية لتشغيل الحسابات وحفظ المفضلة وسجل المشاهدة وتحسين الخدمة.', style: TextStyle(color: Colors.white70, height: 1.7)),
+        Text(appText('يستخدم التطبيق بيانات أساسية لتشغيل الحسابات وحفظ المفضلة وسجل المشاهدة وتحسين الخدمة.', 'The app uses basic data to operate accounts, save favorites and watch history, and improve the service.', 'Uygulama; hesapları çalıştırmak, favorileri ve izleme geçmişini kaydetmek ve hizmeti geliştirmek için temel verileri kullanır.'), style: TextStyle(color: Colors.white70, height: 1.7)),
       ]),
     ),
   );
@@ -1956,15 +1956,15 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
     textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text('إشعارات ShamFlix'),
+      appBar: AppBar(backgroundColor: bg, title: Text(appText('إشعارات ShamFlix', 'ShamFlix Notifications', 'ShamFlix Bildirimleri')),
         actions: [IconButton(onPressed: reload, icon: const Icon(Icons.refresh, color: gold))]),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: notifications,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
-          if (snapshot.hasError) return const Center(child: Text('تعذر تحميل الإشعارات. سجّل الدخول وحاول مجدداً.', style: TextStyle(color: Colors.white54)));
+          if (snapshot.hasError) return Center(child: Text(appText('تعذر تحميل الإشعارات. سجّل الدخول وحاول مجدداً.', 'Could not load notifications. Sign in and try again.', 'Bildirimler yüklenemedi. Giriş yapıp tekrar deneyin.'), style: TextStyle(color: Colors.white54)));
           final items = snapshot.data ?? [];
-          if (items.isEmpty) return const Center(child: Text('لا توجد إشعارات جديدة حالياً', style: TextStyle(color: Colors.white54)));
+          if (items.isEmpty) return Center(child: Text(appText('لا توجد إشعارات جديدة حالياً', 'No new notifications', 'Yeni bildirim yok'), style: TextStyle(color: Colors.white54)));
           return ListView.builder(
             padding: const EdgeInsets.all(12), itemCount: items.length,
             itemBuilder: (context, index) {
@@ -1972,7 +1972,7 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
               final read = item['is_read'] == true;
               return Card(color: panel, child: ListTile(
                 leading: Icon(item['content_type'] == 'episode' ? Icons.video_library : Icons.notifications_active, color: gold),
-                title: Text(valueOf(item['title'], 'محتوى جديد'), style: TextStyle(color: Colors.white, fontWeight: read ? FontWeight.normal : FontWeight.bold)),
+                title: Text(valueOf(item['title'], appText('محتوى جديد', 'New Content', 'Yeni İçerik')), style: TextStyle(color: Colors.white, fontWeight: read ? FontWeight.normal : FontWeight.bold)),
                 subtitle: Text(valueOf(item['body']), style: const TextStyle(color: Colors.white54)),
                 trailing: PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.white54),
@@ -1982,8 +1982,8 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
                     if (mounted) reload();
                   },
                   itemBuilder: (_) => [
-                    if (!read) const PopupMenuItem(value: 'read', child: Text('تحديد كمقروء')),
-                    const PopupMenuItem(value: 'delete', child: Text('حذف')),
+                    if (!read) PopupMenuItem(value: 'read', child: Text(appText('تحديد كمقروء', 'Mark as Read', 'Okundu Olarak İşaretle'))),
+                    PopupMenuItem(value: 'delete', child: Text(appText('حذف', 'Delete', 'Sil'))),
                   ],
                 ),
                 onTap: () async {
@@ -2079,7 +2079,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => const Icon(Icons.play_circle, color: gold)))),
             title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: const TextStyle(color: Colors.white)),
-            subtitle: Text('آخر مشاهدة: ${formatWatchPosition(record['position'])}', style: const TextStyle(color: Colors.white54)),
+            subtitle: Text('${appText('آخر مشاهدة:', 'Last watched:', 'Son izleme:')} ${formatWatchPosition(record['position'])}', style: const TextStyle(color: Colors.white54)),
             trailing: IconButton(icon: const Icon(Icons.close, color: Colors.white54),
               onPressed: () async => ShamFlixLocalStore.removeHistory(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => openWatchRecord(context, record),
