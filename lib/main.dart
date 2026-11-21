@@ -64,6 +64,7 @@ class ShamFlixAppPreferences {
     },
   };
   static String tr(String value) => _translations[locale.value.languageCode]?[value] ?? value;
+  static TextDirection get textDirection => locale.value.languageCode == 'ar' ? ShamFlixAppPreferences.textDirection : TextDirection.ltr;
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
@@ -998,7 +999,7 @@ class _HomePageState extends State<HomePage> {
     ];
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: ShamFlixAppPreferences.textDirection,
       child: Scaffold(
         body: SafeArea(
           child: IndexedStack(
@@ -1071,7 +1072,7 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
     Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(item: channel, isChannel: true, autoPlay: true)));
   }
   @override
-  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
+  Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
     backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('مباشر'))),
     body: FutureBuilder<List<Map<String, dynamic>>>(future: widget.channelsFuture, builder: (context, channelSnapshot) {
       if (channelSnapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
@@ -1152,7 +1153,7 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
     return all.where((item) => ids.contains(item['id']?.toString())).toList();
   }
   @override
-  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
+  Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
     backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr(pageTitle)), actions: [
       IconButton(icon: const Icon(Icons.search, color: gold), onPressed: () async {
         final controller = TextEditingController(text: search);
@@ -1462,7 +1463,7 @@ class _ShamFlixNotificationsPageState extends State<ShamFlixNotificationsPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: ShamFlixAppPreferences.textDirection,
     child: Scaffold(
       backgroundColor: bg,
       appBar: AppBar(backgroundColor: bg, title: const Text('إشعارات ShamFlix'),
@@ -1523,7 +1524,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: ShamFlixAppPreferences.textDirection,
     child: Scaffold(
       backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('المفضلة')),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
@@ -1571,7 +1572,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
 
   @override
   Widget build(BuildContext context) => Directionality(
-    textDirection: TextDirection.rtl,
+    textDirection: ShamFlixAppPreferences.textDirection,
     child: Scaffold(
       backgroundColor: bg,
       appBar: AppBar(backgroundColor: bg, title: const Text('سجل المشاهدة'),
@@ -1879,7 +1880,7 @@ class _DetailsPageState extends State<DetailsPage> {
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: ShamFlixAppPreferences.textDirection,
           child: SafeArea(
             child: Center(
               widthFactor: 1,
@@ -2089,7 +2090,7 @@ class _DetailsPageState extends State<DetailsPage> {
     final castNames = valueOf(item['cast_names']);
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: ShamFlixAppPreferences.textDirection,
       child: Scaffold(
         backgroundColor: bg,
         appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
@@ -2298,7 +2299,7 @@ class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
     color: panel, child: ListTile(leading: Icon(icon, color: gold), title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)), trailing: const Icon(Icons.chevron_left, color: gold), onTap: working ? null : onTap));
   @override
-  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
+  Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
     backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('إعدادات التطبيق'))),
     body: loading ? const Center(child: CircularProgressIndicator(color: gold)) : ListView(padding: const EdgeInsets.all(14), children: [
       Card(color: panel, child: ListTile(leading: const Icon(Icons.video_settings_outlined, color: gold),
@@ -2324,7 +2325,7 @@ class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
 class ShamFlixLegalPage extends StatelessWidget {
   const ShamFlixLegalPage({super.key});
   @override
-  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl, child: Scaffold(
+  Widget build(BuildContext context) => Directionality(textDirection: ShamFlixAppPreferences.textDirection, child: Scaffold(
     backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('حقوق النشر والخصوصية'))),
     body: ListView(padding: const EdgeInsets.all(18), children: const [
       Text('حقوق النشر', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)), SizedBox(height: 8),
@@ -2371,7 +2372,7 @@ class _ShamFlixPlayerSettingsPageState extends State<ShamFlixPlayerSettingsPage>
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: ShamFlixAppPreferences.textDirection,
       child: Scaffold(
         backgroundColor: bg,
         appBar: AppBar(backgroundColor: bg, title: const Text('إعدادات المشغل')),
@@ -2977,7 +2978,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: ShamFlixAppPreferences.textDirection,
       child: Scaffold(
         backgroundColor: Colors.black,
         body: error != null
@@ -3381,7 +3382,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: ShamFlixAppPreferences.textDirection,
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -3697,3 +3698,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // توسيع الترجمة الأساسية لقائمة الزائر وإعدادات التطبيق وصفحات التفاصيل والقنوات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// عكس اتجاه الواجهة تلقائياً عند اختيار العربية أو الإنجليزية أو التركية.
