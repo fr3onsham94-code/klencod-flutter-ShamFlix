@@ -10,6 +10,8 @@ class AppTheme {
     'text': '#FFFFFF',
     'secondaryText': '#B3B3B3',
     'button': '#E50914',
+    'border': '#333333',
+    'badge': '#E50914',
 
     // ألوان مستقلة لكل قسم: خلفية، أساسي، بطاقات، نص، نص ثانوي، أزرار.
     'home_background': '#090909',
@@ -18,6 +20,8 @@ class AppTheme {
     'home_text': '#FFFFFF',
     'home_secondaryText': '#B3B3B3',
     'home_button': '#E50914',
+    'home_border': '#333333',
+    'home_badge': '#E50914',
 
     'movies_background': '#090909',
     'movies_primary': '#E50914',
@@ -25,6 +29,8 @@ class AppTheme {
     'movies_text': '#FFFFFF',
     'movies_secondaryText': '#B3B3B3',
     'movies_button': '#E50914',
+    'movies_border': '#333333',
+    'movies_badge': '#E50914',
 
     'series_background': '#090909',
     'series_primary': '#E50914',
@@ -32,6 +38,8 @@ class AppTheme {
     'series_text': '#FFFFFF',
     'series_secondaryText': '#B3B3B3',
     'series_button': '#E50914',
+    'series_border': '#333333',
+    'series_badge': '#E50914',
 
     'live_background': '#090909',
     'live_primary': '#E50914',
@@ -39,6 +47,8 @@ class AppTheme {
     'live_text': '#FFFFFF',
     'live_secondaryText': '#B3B3B3',
     'live_button': '#E50914',
+    'live_border': '#333333',
+    'live_badge': '#E50914',
 
     'settings_background': '#090909',
     'settings_primary': '#E50914',
@@ -46,6 +56,8 @@ class AppTheme {
     'settings_text': '#FFFFFF',
     'settings_secondaryText': '#B3B3B3',
     'settings_button': '#E50914',
+    'settings_border': '#333333',
+    'settings_badge': '#E50914',
   };
 
   static const Map<String, String> sectionLabels = {
@@ -63,6 +75,8 @@ class AppTheme {
     'text': 'النص الرئيسي',
     'secondaryText': 'النص الثانوي',
     'button': 'الأزرار',
+    'border': 'الحدود والفواصل',
+    'badge': 'الشارات والليبل',
   };
 
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
@@ -136,4 +150,4 @@ class AppTheme {
   }
 }
 
-// آخر تعديل: إضافة لوحات ألوان مستقلة للرئيسية والأفلام والمسلسلات والمباشر والإعدادات | التاريخ: 2026-11-21 | الوقت: 22:35:00 بتوقيت تركيا
+// آخر تعديل: إضافة تحكم مستقل بلون الحدود والشارات لكل قسم | التاريخ: 2026-11-21 | الوقت: 23:10:00 بتوقيت تركيا
