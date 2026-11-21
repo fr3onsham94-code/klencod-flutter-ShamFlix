@@ -139,6 +139,8 @@ class ShamFlixLocalStore {
       }
     } catch (_) {}
     final ids = oldProfiles.map((p) => p['id']?.toString() ?? '').where((id) => id.isNotEmpty && id != 'main').toSet();
+    final previouslyActive = prefs.getString(_activeProfileKey) ?? 'main';
+    if (previouslyActive != 'main') ids.add(previouslyActive);
     for (final id in ids) {
       for (final collection in ['favorites', 'history']) {
         final mainItems = await getListForProfile('main', collection);
@@ -156,6 +158,7 @@ class ShamFlixLocalStore {
     await prefs.setString(_profilesKey, jsonEncode([{'id': 'main', 'name': 'ملفي الرئيسي'}]));
     for (final key in prefs.getKeys().toList()) {
       if (key.startsWith('shamflix_profile_') && !key.startsWith('shamflix_profile_main_')) await prefs.remove(key);
+      if (ids.any((id) => key.startsWith('shamflix_player_${id}_'))) await prefs.remove(key);
     }
   }
   static String _key(String suffix) => 'shamflix_profile_${activeProfileId}_$suffix';
@@ -3717,3 +3720,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // تثبيت مخزن الملفات على ملف رئيسي واحد وإزالة مفاتيح الملفات القديمة بعد دمج بياناتها.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// ترحيل الملف النشط حتى لو لم يعد موجوداً في قائمة الملفات القديمة، وتنظيف إعدادات المشغلات المرتبطة بها.
