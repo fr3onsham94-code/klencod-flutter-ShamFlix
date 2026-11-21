@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
+        android:allowBackup="false"
         android:label="SHAM FLIX"
         android:icon="@drawable/ic_launcher"
         android:theme="@style/NormalTheme">
@@ -60,3 +61,4 @@
 </manifest>
 
 <!-- آخر تعديل: تحديث اسم التطبيق الظاهر على Android إلى SHAM FLIX | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا -->
+<!-- ShamFlix - آخر تعديل: تعطيل النسخ الاحتياطي التلقائي لحماية بيانات الجلسات المحلية | التاريخ والوقت: 22/11/2026، 00:55 بتوقيت تركيا -->
