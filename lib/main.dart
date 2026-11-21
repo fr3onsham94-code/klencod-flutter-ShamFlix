@@ -1745,7 +1745,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
             ])
               ListTile(
                 title: Text(
-                  '\${option.key}x',
+                  '${option.key}x',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: player.state.rate == option.key ? gold : Colors.white),
                 ),
@@ -1785,7 +1785,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     }
     if (readableLanguage.isNotEmpty) return readableLanguage;
     if (title.isNotEmpty) return title;
-    return 'مسار \${index + 1}';
+    return 'مسار ${index + 1}';
   }
 
   Future<void> _pickAudioTrack() async {
@@ -1879,7 +1879,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Widget _serverButton(int index) {
     final active = index == currentServerIndex;
-    final name = valueOf(widget.servers[index]['server_name'], 'السيرفر \${index + 1}');
+    final name = valueOf(widget.servers[index]['server_name'], 'السيرفر ${index + 1}');
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Tooltip(
@@ -1894,7 +1894,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               width: 36,
               height: 36,
               child: Center(
-                child: Text('S\${index + 1}',
+                child: Text('S${index + 1}',
                   style: TextStyle(
                     color: active ? Colors.black : Colors.white,
                     fontSize: 12,
