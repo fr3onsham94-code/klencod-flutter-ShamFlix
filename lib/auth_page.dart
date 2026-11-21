@@ -22,6 +22,7 @@ class _AuthPageState extends State<AuthPage> {
   final _passwordController = TextEditingController();
 
   StreamSubscription<AuthState>? _authSubscription;
+  bool _googleSignInPending = false;
 
   bool isLogin = true;
   bool isLoading = false;
@@ -34,6 +35,13 @@ class _AuthPageState extends State<AuthPage> {
 
     _authSubscription =
         AuthService.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn && _googleSignInPending) {
+        _googleSignInPending = false;
+        if (!mounted) return;
+        Navigator.of(context).pop(true);
+        return;
+      }
+
       if (data.event == AuthChangeEvent.passwordRecovery) {
         if (!mounted) return;
 
@@ -142,15 +150,19 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   Future<void> signInGoogle() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      _googleSignInPending = true;
+    });
 
     try {
       await AuthService.signInWithGoogle();
 
       if (!mounted) return;
 
-      showMessage('تم فتح صفحة تسجيل الدخول بواسطة Google');
+      showMessage('أكمل تسجيل الدخول عبر Google، وسيتم الرجوع تلقائياً بعد نجاحه.');
     } catch (e) {
+      _googleSignInPending = false;
       if (!mounted) return;
 
       showMessage(
