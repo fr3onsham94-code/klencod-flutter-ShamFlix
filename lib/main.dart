@@ -3730,7 +3730,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
   late int currentServerIndex;
   final Set<int> _failedServers = <int>{};
-  String? _externalSubtitlePath;
   bool _failoverInProgress = false;
   StreamSubscription<Duration>? _positionSubscription;
   int _lastSavedSecond = -1;
@@ -3824,21 +3823,22 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final audioId = prefs.getString('${_settingsPrefix}_audio');
     final subtitleId = prefs.getString('${_settingsPrefix}_subtitle');
     final externalSubtitle = prefs.getString('${_settingsPrefix}_external_subtitle');
+    var restoredExternalSubtitle = false;
     if (externalSubtitle != null && externalSubtitle.trim().isNotEmpty) {
       final externalUri = Uri.tryParse(externalSubtitle);
       final isRemote = externalUri != null &&
           (externalUri.scheme == 'http' || externalUri.scheme == 'https');
       if (isRemote || await File(externalSubtitle).exists()) {
-        _externalSubtitlePath = externalSubtitle;
         final subtitleName = isRemote && externalUri!.pathSegments.isNotEmpty
             ? externalUri.pathSegments.last
             : externalSubtitle.split(Platform.pathSeparator).last;
         await player.setSubtitleTrack(
           SubtitleTrack.uri(externalSubtitle, title: subtitleName),
         );
-        return;
+        restoredExternalSubtitle = true;
+      } else {
+        await prefs.remove('${_settingsPrefix}_external_subtitle');
       }
-      await prefs.remove('${_settingsPrefix}_external_subtitle');
     }
     if (audioId != null) {
       for (final track in player.state.tracks.audio) {
@@ -3848,7 +3848,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         }
       }
     }
-    if (subtitleId != null) {
+    if (subtitleId != null && !restoredExternalSubtitle) {
       if (subtitleId == 'no') {
         await player.setSubtitleTrack(SubtitleTrack.no());
       } else {
@@ -4162,7 +4162,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     }
     if (selected is SubtitleTrack) {
       await player.setSubtitleTrack(selected);
-      _externalSubtitlePath = null;
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('${_settingsPrefix}_external_subtitle');
       await _savePlayerSetting('subtitle', selected.id.toString());
@@ -4204,7 +4203,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       await player.setSubtitleTrack(
         SubtitleTrack.uri(subtitleFile.path, title: picked.name),
       );
-      _externalSubtitlePath = subtitleFile.path;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         '${_settingsPrefix}_external_subtitle',
@@ -4267,7 +4265,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               : 'External Subtitle',
         ),
       );
-      _externalSubtitlePath = uri.toString();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         '${_settingsPrefix}_external_subtitle',
