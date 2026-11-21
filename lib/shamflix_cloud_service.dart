@@ -8,7 +8,7 @@ class ShamFlixCloudService {
   static SupabaseClient get _client => AuthService.client;
   static String? get _userId => _client.auth.currentUser?.id;
 
-  static bool get isAvailable => _userId != null;
+  static bool get isAvailable => AuthService.isInitialized && _userId != null;
 
   static Future<List<Map<String, dynamic>>> syncProfiles(
     List<Map<String, dynamic>> localProfiles,
@@ -244,3 +244,4 @@ class ShamFlixCloudService {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // خدمة مزامنة الملفات الشخصية والمفضلة وسجل المشاهدة والتقييمات والإشعارات مع Supabase.
+// ShamFlix - آخر تعديل: منع استدعاء عميل السحابة قبل نجاح تهيئة Supabase | التاريخ والوقت: 22/11/2026، 01:00 بتوقيت تركيا.
