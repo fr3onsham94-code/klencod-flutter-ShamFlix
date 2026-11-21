@@ -802,7 +802,7 @@ class _HomePageState extends State<HomePage> {
           final items = (snapshot.data ?? []).where((item) {
             final category = valueOf(item['category']).toLowerCase();
             final title = valueOf(item['title']).toLowerCase();
-            return category.contains('anime') || category.contains('أنمي') || category.contains('انمي') || title.contains('أنمي') || title.contains('انمي');
+            return category.contains('anime') || category.contains('animation') || category.contains('أنمي') || category.contains('انمي') || category.contains('رسوم متحركة') || title.contains('أنمي') || title.contains('انمي');
           }).toList();
           if (items.isEmpty) return const Center(child: Text('لا يوجد أنمي منشور حالياً', style: TextStyle(color: Colors.white54)));
           return ListView.builder(scrollDirection: Axis.horizontal, reverse: true, padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -3723,3 +3723,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // ترحيل الملف النشط حتى لو لم يعد موجوداً في قائمة الملفات القديمة، وتنظيف إعدادات المشغلات المرتبطة بها.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تضمين تصنيفات Animation والرسوم المتحركة في قسم الأنمي.
