@@ -258,8 +258,8 @@ class _AuthPageState extends State<AuthPage> {
                   Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white70,
+                    style: TextStyle(
+                      color: AppTheme.secondaryText,
                       fontSize: 15,
                     ),
                   ),
@@ -269,7 +269,7 @@ class _AuthPageState extends State<AuthPage> {
                     TextField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: AppTheme.text),
                       decoration: inputDecoration(
                         'البريد الإلكتروني',
                         Icons.email_outlined,
@@ -281,7 +281,7 @@ class _AuthPageState extends State<AuthPage> {
                   TextField(
                     controller: _passwordController,
                     obscureText: hidePassword,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: AppTheme.text),
                     decoration: inputDecoration(
                       isPasswordRecovery
                           ? 'كلمة المرور الجديدة'
@@ -326,7 +326,7 @@ class _AuthPageState extends State<AuthPage> {
                       onPressed: isLoading ? null : submit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: gold,
-                        foregroundColor: Colors.black,
+                        foregroundColor: AppTheme.text,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -362,10 +362,10 @@ class _AuthPageState extends State<AuthPage> {
                           color: gold,
                           size: 30,
                         ),
-                        label: const Text(
+                        label: Text(
                           'المتابعة باستخدام Google',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: AppTheme.text,
                             fontSize: 16,
                           ),
                         ),
@@ -412,7 +412,7 @@ class _AuthPageState extends State<AuthPage> {
   InputDecoration inputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white60),
+      labelStyle: TextStyle(color: AppTheme.secondaryText),
       prefixIcon: Icon(icon, color: gold),
       filled: true,
       fillColor: panel,
@@ -432,4 +432,4 @@ class _AuthPageState extends State<AuthPage> {
   }
 }
 
-// آخر تعديل: ربط ألوان الواجهات الفعلية بإعدادات لوحة الإدارة لتطبيق التغييرات فوراً | التاريخ: 2026-11-21 | الوقت: 22:00:00 بتوقيت تركيا
+// آخر تعديل: ربط ألوان النصوص والأزرار والواجهات بإعدادات لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 22:05:00 بتوقيت تركيا
