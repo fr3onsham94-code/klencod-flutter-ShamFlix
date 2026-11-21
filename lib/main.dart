@@ -1087,7 +1087,7 @@ class _ShamFlixChannelCatalogPageState extends State<ShamFlixChannelCatalogPage>
                 _packageTile('الكل', null),
                 ...packages.map((p) => _packageTile(valueOf(p['name']), p['id']?.toString())),
               ]))),
-              Expanded(child: items.isEmpty ? const Center(child: Text('لا توجد قنوات في هذه الباقة', style: TextStyle(color: Colors.white54))) :
+              Expanded(child: items.isEmpty ? const Center(child: Text(ShamFlixAppPreferences.tr('لا توجد قنوات في هذه الباقة'), style: TextStyle(color: Colors.white54))) :
                 ListView.builder(itemCount: items.length, itemBuilder: (context, index) {
                   final channel = items[index]; final selected = selectedChannel?['id']?.toString() == channel['id']?.toString();
                   return Card(color: selected ? const Color(0xFF352B1C) : panel, margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1168,7 +1168,7 @@ class _ShamFlixCatalogPageState extends State<ShamFlixCatalogPage> {
                 ...packages.map((package) => _packageTile(valueOf(package['name']), package['id']?.toString(), selectedPackageId == package['id']?.toString())),
               ],
             ))),
-            Expanded(child: items.isEmpty ? const Center(child: Text('لا يوجد محتوى في هذه الباقة', style: TextStyle(color: Colors.white54))) :
+            Expanded(child: items.isEmpty ? const Center(child: Text(ShamFlixAppPreferences.tr('لا يوجد محتوى في هذه الباقة'), style: TextStyle(color: Colors.white54))) :
               GridView.builder(padding: const EdgeInsets.all(12), gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: MediaQuery.of(context).size.width > 700 ? 4 : 2, childAspectRatio: 0.61, crossAxisSpacing: 12, mainAxisSpacing: 14),
                 itemCount: items.length, itemBuilder: (context, index) {
@@ -3748,3 +3748,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إزالة مفاتيح الترجمة المكررة من قاموس اللغات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// تطبيق الترجمة على رسائل الباقات وقسم القنوات وعناوين تفاصيل المحتوى.
