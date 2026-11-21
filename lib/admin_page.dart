@@ -901,6 +901,10 @@ class _AdminPageState extends State<AdminPage> {
     final isSeries = section == 'series';
     return Column(
       children: [
+        Align(alignment: Alignment.centerRight, child: Padding(padding: const EdgeInsets.fromLTRB(14, 4, 14, 4), child: OutlinedButton.icon(
+          onPressed: () => _manageContentPackages(isSeries ? 'series' : 'channel'), icon: const Icon(Icons.folder_open, size: 18),
+          label: Text(isSeries ? 'إدارة باقات المسلسلات' : 'إدارة باقات القنوات'),
+          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold))))),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
           child: list.isEmpty
@@ -3383,6 +3387,9 @@ class _AdminPageState extends State<AdminPage> {
 
     return Column(
       children: [
+        Align(alignment: Alignment.centerRight, child: Padding(padding: const EdgeInsets.fromLTRB(14, 4, 14, 4), child: OutlinedButton.icon(
+          onPressed: () => _manageContentPackages('movie'), icon: const Icon(Icons.folder_open, size: 18), label: const Text('إدارة باقات الأفلام'),
+          style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: const BorderSide(color: adminGold))))),
         searchBox(
           hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
         ),
@@ -3473,3 +3480,6 @@ class _AdminPageState extends State<AdminPage> {
 // ==========================================
 // ShamFlix - آخر تحديث: 21-11-2026
 // إضافة إدارة باقات مستقلة للأفلام والمسلسلات والقنوات وربط المحتوى بعدة باقات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// إضافة زر إدارة الباقات داخل أقسام إدارة الأفلام والمسلسلات والقنوات.
