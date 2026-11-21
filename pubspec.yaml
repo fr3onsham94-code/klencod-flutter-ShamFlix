@@ -21,6 +21,7 @@ dependencies:
   media_kit_libs_video: ^1.0.7
   webview_flutter: ^4.13.1
   url_launcher: ^6.1.9
+  path_provider: ^2.1.5
 
 flutter:
   uses-material-design: true
@@ -28,3 +29,5 @@ flutter:
 # تمت إضافة اعتمادي video_player و url_launcher للمشغل الداخلي والخارجي.
 # ShamFlix - آخر تحديث: 21-11-2026
 # إضافة media_kit/libmpv لدعم صيغ فيديو متعددة، وWebView لصفحات مواقع المشاهدة.
+# ShamFlix - آخر تحديث: 21-11-2026
+# إضافة path_provider لحفظ التنزيلات داخل مساحة التطبيق الخاصة.
