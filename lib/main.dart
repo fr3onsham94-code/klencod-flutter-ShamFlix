@@ -48,6 +48,13 @@ class ShamFlixAppPreferences {
       'إرسال رابط التطبيق مباشرة':'Share the app link','المشغل واللغة والشبكة والتخزين':'Player, language, network and storage',
       'منع تشغيل الفيديو عبر بيانات الهاتف لتوفير الباقة':'Block mobile data playback to save your data plan',
       'العربية أو English أو Türkçe':'Arabic, English or Turkish','أنت تستخدم أحدث إصدار من ShamFlix':'You are using the latest ShamFlix version',
+      'حقوق النشر':'Copyright','سياسة الخصوصية':'Privacy policy','إدارة ShamFlix':'Manage ShamFlix','لوحة المدير والأدمن':'Admin dashboard',
+      'أهلاً بك في ShamFlix':'Welcome to ShamFlix','تسجيل الدخول أو إنشاء حساب':'Sign in or create an account','تسجيل الخروج':'Sign out',
+      'حذف الملفات المؤقتة دون حذف إعدادات التطبيق':'Remove temporary files without clearing app settings','حذف سجل المشاهدة كاملاً':'Delete the entire watch history',
+      'جلب أحدث القنوات المنشورة':'Fetch the latest published channels','تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix':'Download and install the new version inside ShamFlix',
+      'اختيار المشغل الداخلي أو VLC أو MX Player':'Choose the built-in player, VLC or MX Player','حقوق تطبيق ShamFlix وسياسة الخصوصية':'ShamFlix copyright and privacy policy',
+      'لا يوجد محتوى في هذه الباقة':'No content in this package','لا توجد قنوات في هذه الباقة':'No channels in this package','اختر قناة للمشاهدة':'Choose a channel to watch',
+      'سنة الإصدار':'Release year','التصنيف':'Category','التقييم':'Rating','المواسم والحلقات':'Seasons & episodes','القصة والوصف':'Story & description',
     },
     'tr': {
       'الرئيسية':'Ana Sayfa','الأفلام':'Filmler','المسلسلات':'Diziler','مباشر':'Canlı TV','المفضلة':'Favoriler','حسابي':'Hesabım',
@@ -61,6 +68,13 @@ class ShamFlixAppPreferences {
       'إرسال رابط التطبيق مباشرة':'Uygulama bağlantısını paylaş','المشغل واللغة والشبكة والتخزين':'Oynatıcı, dil, ağ ve depolama',
       'منع تشغيل الفيديو عبر بيانات الهاتف لتوفير الباقة':'Mobil veri kullanımını engelleyerek paketinizi koruyun',
       'العربية أو English أو Türkçe':'Arapça, İngilizce veya Türkçe','أنت تستخدم أحدث إصدار من ShamFlix':'ShamFlix’in en güncel sürümünü kullanıyorsunuz',
+      'حقوق النشر':'Telif hakları','سياسة الخصوصية':'Gizlilik politikası','إدارة ShamFlix':'ShamFlix yönetimi','لوحة المدير والأدمن':'Yönetici paneli',
+      'أهلاً بك في ShamFlix':'ShamFlix’e hoş geldiniz','تسجيل الدخول أو إنشاء حساب':'Giriş yap veya hesap oluştur','تسجيل الخروج':'Çıkış yap',
+      'حذف الملفات المؤقتة دون حذف إعدادات التطبيق':'Uygulama ayarlarını silmeden geçici dosyaları temizle','حذف سجل المشاهدة كاملاً':'Tüm izleme geçmişini sil',
+      'جلب أحدث القنوات المنشورة':'Yayınlanan en yeni kanalları getir','تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix':'Yeni sürümü ShamFlix içinden indir ve yükle',
+      'اختيار المشغل الداخلي أو VLC أو MX Player':'Dahili oynatıcı, VLC veya MX Player seç','حقوق تطبيق ShamFlix وسياسة الخصوصية':'ShamFlix telif hakları ve gizlilik politikası',
+      'لا يوجد محتوى في هذه الباقة':'Bu pakette içerik yok','لا توجد قنوات في هذه الباقة':'Bu pakette kanal yok','اختر قناة للمشاهدة':'İzlemek için kanal seç',
+      'سنة الإصدار':'Yayın yılı','التصنيف':'Kategori','التقييم':'Puan','المواسم والحلقات':'Sezonlar ve bölümler','القصة والوصف':'Hikâye ve açıklama',
     },
   };
   static String tr(String value) => _translations[locale.value.languageCode]?[value] ?? value;
@@ -1497,7 +1511,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget build(BuildContext context) => Directionality(
     textDirection: ShamFlixAppPreferences.textDirection,
     child: Scaffold(
-      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: const Text('المفضلة')),
+      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('المفضلة'))),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
@@ -1546,7 +1560,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
     textDirection: ShamFlixAppPreferences.textDirection,
     child: Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: const Text('سجل المشاهدة'),
+      appBar: AppBar(backgroundColor: bg, title: Text(ShamFlixAppPreferences.tr('سجل المشاهدة')),
         actions: [IconButton(tooltip: 'مسح السجل', icon: const Icon(Icons.delete_sweep_outlined, color: gold),
           onPressed: () async => ShamFlixLocalStore.clearHistory())]),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
@@ -2108,7 +2122,7 @@ class _DetailsPageState extends State<DetailsPage> {
                       if (castNames.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 7), child: Text('الممثلون: $castNames', style: const TextStyle(color: Colors.white70, height: 1.5))),
                     ],
                     const SizedBox(height: 25),
-                    const Text('القصة والوصف', style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(ShamFlixAppPreferences.tr('القصة والوصف'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     Text(description, style: const TextStyle(color: Colors.white70, height: 1.7, fontSize: 15)),
                     const SizedBox(height: 18),
@@ -2283,7 +2297,7 @@ class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
     body: loading ? const Center(child: CircularProgressIndicator(color: gold)) : ListView(padding: const EdgeInsets.all(14), children: [
       Card(color: panel, child: ListTile(leading: const Icon(Icons.video_settings_outlined, color: gold),
         title: Text(ShamFlixAppPreferences.tr('إعدادات المشغل'), style: const TextStyle(color: Colors.white)),
-        subtitle: const Text('اختيار المشغل الداخلي أو VLC أو MX Player', style: TextStyle(color: Colors.white54)),
+        subtitle: Text(ShamFlixAppPreferences.tr('اختيار المشغل الداخلي أو VLC أو MX Player'), style: const TextStyle(color: Colors.white54)),
         trailing: const Icon(Icons.chevron_left, color: gold), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage())))),
       Card(color: panel, child: ListTile(leading: const Icon(Icons.language, color: gold),
         title: Text(ShamFlixAppPreferences.tr('لغة التطبيق'), style: const TextStyle(color: Colors.white)),
@@ -2292,10 +2306,10 @@ class _ShamFlixAppSettingsPageState extends State<ShamFlixAppSettingsPage> {
           items: const [DropdownMenuItem(value: 'ar', child: Text('العربية')), DropdownMenuItem(value: 'en', child: Text('English')), DropdownMenuItem(value: 'tr', child: Text('Türkçe'))], onChanged: _setLanguage))),
       Card(color: panel, child: SwitchListTile(value: wifiOnly, onChanged: _setWifiOnly, activeColor: gold, secondary: const Icon(Icons.wifi, color: gold),
         title: Text(ShamFlixAppPreferences.tr('التشغيل عبر Wi-Fi فقط'), style: const TextStyle(color: Colors.white)), subtitle: Text(ShamFlixAppPreferences.tr('منع تشغيل الفيديو عبر بيانات الهاتف لتوفير الباقة'), style: const TextStyle(color: Colors.white54)))),
-      _tile(icon: Icons.cleaning_services_outlined, title: ShamFlixAppPreferences.tr('مسح التخزين المؤقت'), subtitle: 'حذف الملفات المؤقتة دون حذف إعدادات التطبيق', onTap: _clearCache),
-      _tile(icon: Icons.history_toggle_off, title: ShamFlixAppPreferences.tr('مسح السجل بالكامل'), subtitle: 'حذف سجل المشاهدة كاملاً', onTap: _clearHistory),
-      _tile(icon: Icons.refresh, title: ShamFlixAppPreferences.tr('تحديث قائمة القنوات'), subtitle: 'جلب أحدث القنوات المنشورة', onTap: _refreshChannels),
-      _tile(icon: Icons.system_update_alt, title: ShamFlixAppPreferences.tr('البحث عن تحديث للتطبيق'), subtitle: 'تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix', onTap: _checkForUpdate),
+      _tile(icon: Icons.cleaning_services_outlined, title: ShamFlixAppPreferences.tr('مسح التخزين المؤقت'), subtitle: ShamFlixAppPreferences.tr('حذف الملفات المؤقتة دون حذف إعدادات التطبيق'), onTap: _clearCache),
+      _tile(icon: Icons.history_toggle_off, title: ShamFlixAppPreferences.tr('مسح السجل بالكامل'), subtitle: ShamFlixAppPreferences.tr('حذف سجل المشاهدة كاملاً'), onTap: _clearHistory),
+      _tile(icon: Icons.refresh, title: ShamFlixAppPreferences.tr('تحديث قائمة القنوات'), subtitle: ShamFlixAppPreferences.tr('جلب أحدث القنوات المنشورة'), onTap: _refreshChannels),
+      _tile(icon: Icons.system_update_alt, title: ShamFlixAppPreferences.tr('البحث عن تحديث للتطبيق'), subtitle: ShamFlixAppPreferences.tr('تنزيل وتثبيت الإصدار الجديد من داخل ShamFlix'), onTap: _checkForUpdate),
       if (working) const Padding(padding: EdgeInsets.all(14), child: Center(child: CircularProgressIndicator(color: gold))),
     ]),
   ));
@@ -3728,3 +3742,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // إزالة آخر واجهات برمجية لإضافة وتبديل وحذف الملفات الشخصية.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// استكمال ترجمة عناوين القوائم والتفاصيل والإعدادات بالإنجليزية والتركية.
