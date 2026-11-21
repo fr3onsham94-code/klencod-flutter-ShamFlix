@@ -1134,6 +1134,7 @@ class _AdminPageState extends State<AdminPage> {
                         ),
                       ],
                       adminField(posterController, 'رابط صورة البوستر'),
+                      adminField(backdropController, 'رابط صورة الخلفية (اختياري)'),
                       adminField(descriptionController, 'وصف المسلسل', maxLines: 4),
                       adminField(categoryController, 'التصنيف'),
                       adminField(yearController, 'سنة الإصدار', keyboard: TextInputType.number),
@@ -1210,6 +1211,7 @@ class _AdminPageState extends State<AdminPage> {
                   if (isSeries) {
                     data.addAll({
                       'tmdb_id': int.tryParse(tmdbController.text.trim()),
+                      'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
                       'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
                       'cast': castController.text.trim().isEmpty ? null : castController.text.trim(),
@@ -3111,6 +3113,9 @@ class _AdminPageState extends State<AdminPage> {
     final posterController = TextEditingController(
       text: existing?['poster_url']?.toString() ?? '',
     );
+    final backdropController = TextEditingController(
+      text: existing?['backdrop_url']?.toString() ?? '',
+    );
 
     final descriptionController = TextEditingController(
       text: existing?['description']?.toString() ?? '',
@@ -3212,6 +3217,7 @@ class _AdminPageState extends State<AdminPage> {
                                         final fetchedTitle = data['title']?.toString() ?? '';
                                         if (fetchedTitle.isNotEmpty) titleController.text = fetchedTitle;
                                         posterController.text = data['poster_url']?.toString() ?? '';
+                                        backdropController.text = data['backdrop_url']?.toString() ?? '';
                                         descriptionController.text = data['description']?.toString() ?? '';
                                         directorController.text = data['director']?.toString() ?? '';
                                         final castData = data['cast'];
@@ -3306,6 +3312,7 @@ class _AdminPageState extends State<AdminPage> {
                           posterController,
                           'رابط صورة الفيلم',
                         ),
+                        adminField(backdropController, 'رابط صورة الخلفية (اختياري)'),
                         adminField(
                           descriptionController,
                           'وصف الفيلم',
@@ -3427,6 +3434,7 @@ class _AdminPageState extends State<AdminPage> {
                         'tmdb_id': tmdbId,
                         'poster_url':
                             posterController.text.trim(),
+                        'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
                         'description':
                             descriptionController.text.trim(),
                         'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
@@ -3457,6 +3465,7 @@ class _AdminPageState extends State<AdminPage> {
     titleController.dispose();
     tmdbController.dispose();
     posterController.dispose();
+    backdropController.dispose();
     descriptionController.dispose();
     directorController.dispose();
     castController.dispose();
@@ -4162,4 +4171,4 @@ class _AdminPageState extends State<AdminPage> {
 
 // ==========================================
 
-// آخر تعديل: اعتماد اللون الأحمر بهوية SHAM FLIX في لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
+// آخر تعديل: إضافة حقل صورة الخلفية للأفلام والمسلسلات وإزالة قسم تقييمك للمحتوى من صفحة التفاصيل | التاريخ: 2026-11-21 | الوقت: 21:00:00 بتوقيت تركيا
