@@ -1016,7 +1016,7 @@ class _HomePageState extends State<HomePage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: const gold,
+                    color: gold,
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: const Text(
@@ -1050,7 +1050,7 @@ class _HomePageState extends State<HomePage> {
                           ElevatedButton.icon(
                             onPressed: () => openDetails(featured, isSeries: false),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const gold,
+                              backgroundColor: gold,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
@@ -1087,7 +1087,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget homeContent() {
     return RefreshIndicator(
-      color: const gold,
+      color: gold,
       backgroundColor: panel,
       onRefresh: refreshData,
       child: ListView(
@@ -4793,4 +4793,4 @@ class ShamFlixSearch extends SearchDelegate {
 // ShamFlix - آخر تحديث: 21-11-2026
 // تمت إضافة تبديل نسبة عرض الفيديو بين الاحتواء والملء والتمديد من داخل المشغّل.
 
-// آخر تعديل: تطوير Sidebar لقسمي الأفلام والمسلسلات مع فتح أول باقة تلقائياً وعرض خمسة بوسترات في كل صف | التاريخ: 2026-11-21 | الوقت: 19:15:00 بتوقيت تركيا
+// آخر تعديل: إصلاح أخطاء البناء بإزالة const غير الصالحة من متغير اللون gold في ثلاثة مواضع | التاريخ: 2026-11-21 | الوقت: 20:00:00 بتوقيت تركيا
