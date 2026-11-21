@@ -2613,7 +2613,6 @@ class _DetailsPageState extends State<DetailsPage> {
   void initState() {
     super.initState();
     _loadFavoriteState();
-    _loadEngagement();
     if (widget.isSeries) _loadSeasons();
   }
 
@@ -3135,7 +3134,6 @@ class _DetailsPageState extends State<DetailsPage> {
         Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
       ],
       const SizedBox(height: 18),
-      _engagementPanel(),
       _recommendationsSection(),
     ]);
   }
@@ -4779,4 +4777,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: إعادة تصميم صفحات تفاصيل الأفلام والمسلسلات وإزالة تبويب المفضلة من الشريط السفلي مع إبقاء المفضلة داخل التفاصيل | التاريخ: 2026-11-21 | الوقت: 20:25:00 بتوقيت تركيا
+// آخر تعديل: إضافة حقل صورة الخلفية للأفلام والمسلسلات وإزالة قسم تقييمك للمحتوى من صفحة التفاصيل | التاريخ: 2026-11-21 | الوقت: 21:00:00 بتوقيت تركيا
