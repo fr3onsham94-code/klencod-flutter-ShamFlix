@@ -1300,8 +1300,8 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         bottomNavigationBar: NavigationBar(
-          backgroundColor: const Color(0xFF151515),
-          indicatorColor: const Color(0x33E50914),
+          backgroundColor: AppTheme.sectionColor('home', 'panel'),
+          indicatorColor: AppTheme.sectionColor('home', 'primary').withOpacity(0.20),
           height: 62,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
@@ -3739,7 +3739,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                     top: 4, right: 4,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(color: const Color(0xFFE50914), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: AppTheme.sectionColor('live', 'badge'), borderRadius: BorderRadius.circular(4)),
                       child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
                     ),
                   ),
@@ -3765,7 +3765,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       width: 126,
       decoration: BoxDecoration(
         color: AppTheme.sectionColor('live', 'background'),
-        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+        border: Border(right: BorderSide(color: AppTheme.sectionColor('live', 'border'))),
       ),
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
@@ -5085,4 +5085,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: إكمال ألوان خلفيات الأقسام وإظهار حالة عدم وجود نتائج في بحث القنوات | التاريخ: 2026-11-21 | الوقت: 23:02:00 بتوقيت تركيا
+// آخر تعديل: ربط ألوان الحدود والشارات والتنقل بلوحات تخصيص كل قسم | التاريخ: 2026-11-21 | الوقت: 23:12:00 بتوقيت تركيا
