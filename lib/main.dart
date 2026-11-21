@@ -1305,7 +1305,7 @@ class _DetailsPageState extends State<DetailsPage> {
           type: 'video/*',
           package: packageName,
         );
-        if (await intent.canResolveActivity()) {
+        if (await intent.canResolveActivity() == true) {
           await intent.launch();
           launched = true;
           break;
