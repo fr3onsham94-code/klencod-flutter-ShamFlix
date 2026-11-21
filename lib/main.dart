@@ -2325,7 +2325,7 @@ class ShamFlixLegalPage extends StatelessWidget {
       Text('حقوق النشر', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)), SizedBox(height: 8),
       Text('جميع الحقوق محفوظة لتطبيق ShamFlix. أسماء وشعارات ومحتويات الجهات المالكة تبقى ملكاً لأصحابها.', style: TextStyle(color: Colors.white70, height: 1.7)),
       SizedBox(height: 22), Text('سياسة الخصوصية', style: TextStyle(color: gold, fontSize: 19, fontWeight: FontWeight.bold)), SizedBox(height: 8),
-      Text('يستخدم التطبيق بيانات الحساب عند تسجيل الدخول، ويحفظ المفضلة وسجل المشاهدة لتحسين تجربة الاستخدام. لا يطلب التطبيق إنشاء حساب لمشاهدة المحتوى العام.', style: TextStyle(color: Colors.white70, height: 1.7)),
+      Text('يستخدم التطبيق بيانات الحساب عند تسجيل الدخول، ويحفظ المفضلة وسجل المشاهدة لتحسين تجربة الاستخدام. لا يطلب التطبيق إنشاء حساب لمشاهدة المحتوى العام. قد يعالج التطبيق معرّف جلسة عشوائياً ونوع الاتصال ووقت الاتصال لعرض المتصلين للمدير، كما يُخفى جزء من بريد الحساب عند عرضه. لا يُعرض بريد الزائر لأنه لا يملك حساباً.', style: TextStyle(color: Colors.white70, height: 1.7)),
     ]),
   ));
 }
@@ -3728,3 +3728,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // توحيد تحديث بيانات الرئيسية وقوائم المحتوى عبر إشعار تحديث واحد دون تكرار طلبات الشبكة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// توضيح استخدام معرّف جلسة الزائر وعرض بيانات الاتصال بشكل محدود ضمن سياسة الخصوصية.
