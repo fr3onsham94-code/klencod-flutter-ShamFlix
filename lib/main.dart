@@ -1751,7 +1751,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _sidebar(),
-                              const VerticalDivider(
+                              VerticalDivider(
                                 width: 1,
                                 color: sectionBorder,
                               ),
@@ -4886,4 +4886,4 @@ class ShamFlixSearch extends SearchDelegate {
   }
 }
 
-// آخر تعديل: تفعيل تحديث معاينة ألوان الأقسام فورياً وربط الفواصل والأزرار بألوان القسم | التاريخ: 2026-11-21 | الوقت: 20:05:00 بتوقيت تركيا
+// آخر تعديل: إزالة const من الفاصل العمودي ليقبل لون القسم المتغير | التاريخ: 2026-11-21 | الوقت: 20:07:00 بتوقيت تركيا
