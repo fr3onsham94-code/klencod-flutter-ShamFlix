@@ -2454,8 +2454,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
     player = Player();
     controller = VideoController(player);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    _setLandscape(true);
+    landscape = !widget.embedded;
+    if (!widget.embedded) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      _setLandscape(true);
+    }
     player.stream.error.listen(_handlePlaybackError);
     _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
     _open();
@@ -3769,3 +3772,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // دعم تشغيل المشغل الكامل داخل أعلى صفحة القنوات مع زر للانتقال إلى وضع ملء الشاشة.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// منع تغيير اتجاه الجهاز أو إخفاء شريط النظام عند تشغيل المشغل المضمن في صفحة القنوات.
