@@ -70,3 +70,5 @@ create policy "Admins and managers manage package items"
   on public.content_package_items for all to authenticated
   using (public.is_app_admin())
   with check (public.is_app_admin());
+
+-- ShamFlix - آخر تحديث: 21-11-2026: توحيد صلاحيات المدير والأدمن.
