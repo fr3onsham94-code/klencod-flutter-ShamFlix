@@ -3047,8 +3047,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         const SizedBox(height: 18),
                         FilledButton(
                           style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('رجوع'),
+                          onPressed: widget.embedded ? () { setState(() { error = null; opening = true; }); _openEmbedded(); } : () => Navigator.pop(context),
+                          child: Text(widget.embedded ? 'إعادة المحاولة' : 'رجوع'),
                         ),
                       ],
                     ),
@@ -3851,3 +3851,6 @@ class ShamFlixSearch extends SearchDelegate {
 
 // ShamFlix - آخر تحديث: 21-11-2026
 // ضبط حجم أيقونات وتسميات أدوات المشغل المضمن بما يناسب مساحة القنوات.
+
+// ShamFlix - آخر تحديث: 21-11-2026
+// زر إعادة المحاولة داخل المشغل المضمن دون إغلاق صفحة القنوات عند فشل البث.
