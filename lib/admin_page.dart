@@ -55,6 +55,10 @@ class _AdminPageState extends State<AdminPage> {
   int catalogGridColumns = 5;
   bool catalogGridColumnsLoading = true;
   bool catalogGridColumnsSaving = false;
+  int channelGridColumns = 5;
+  bool channelGridColumnsLoading = true;
+  bool channelGridColumnsSaving = false;
+  String selectedThemeSection = 'global';
   final Map<String, TextEditingController> themeColorControllers = {
     for (final entry in AppTheme.defaults.entries)
       entry.key: TextEditingController(text: entry.value),
@@ -104,6 +108,7 @@ class _AdminPageState extends State<AdminPage> {
     super.initState();
     loadCategoryBadgeSetting();
     loadCatalogGridColumnsSetting();
+    loadChannelGridColumnsSetting();
     loadAppLinksAndUpdateSettings();
     loadThemePaletteSetting();
   }
@@ -265,6 +270,43 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> loadChannelGridColumnsSetting() async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+    if (mounted) setState(() => channelGridColumnsLoading = true);
+    try {
+      final row = await AuthService.client.from('app_settings')
+          .select('setting_value').eq('setting_key', 'channel_grid_columns').maybeSingle();
+      final saved = int.tryParse(row?['setting_value']?.toString() ?? '');
+      if (mounted) setState(() => channelGridColumns = (saved ?? 5).clamp(2, 8).toInt());
+    } catch (e) {
+      if (mounted) showMessage('تعذر تحميل عدد القنوات في الصف: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => channelGridColumnsLoading = false);
+    }
+  }
+
+  Future<void> saveChannelGridColumnsSetting(int? value) async {
+    if (value == null || channelGridColumnsSaving) return;
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
+      showMessage('ليس لديك صلاحية تعديل هذا الإعداد', isError: true);
+      return;
+    }
+    setState(() => channelGridColumnsSaving = true);
+    try {
+      await AuthService.client.from('app_settings').upsert({
+        'setting_key': 'channel_grid_columns',
+        'setting_value': value,
+      }, onConflict: 'setting_key');
+      if (!mounted) return;
+      setState(() => channelGridColumns = value);
+      showMessage('تم حفظ عدد القنوات في كل صف وتطبيقه على البث المباشر');
+    } catch (e) {
+      showMessage('تعذر حفظ عدد القنوات: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => channelGridColumnsSaving = false);
+    }
+  }
+
   Future<void> loadAppLinksAndUpdateSettings() async {
     if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
     if (mounted) setState(() => appSettingsLoading = true);
@@ -401,14 +443,8 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Widget themePaletteSection() {
-    const labels = {
-      'background': 'خلفية التطبيق',
-      'primary': 'اللون الأساسي / الأحمر',
-      'panel': 'خلفية البطاقات واللوحات',
-      'text': 'لون النص الرئيسي',
-      'secondaryText': 'لون النص الثانوي',
-      'button': 'لون الأزرار',
-    };
+    final sections = <String, String>{'global': 'الألوان العامة', ...AppTheme.sectionLabels};
+    final prefix = selectedThemeSection == 'global' ? '' : '${selectedThemeSection}_';
     return Card(
       color: adminPanel,
       child: Padding(
@@ -418,40 +454,93 @@ class _AdminPageState extends State<AdminPage> {
           children: [
             Text('تخصيص ألوان التطبيق', style: TextStyle(color: adminGold, fontSize: 17, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            Text('غيّر الألوان باستخدام HEX مع معاينة فورية قبل الحفظ. الإعداد موحّد لجميع المستخدمين.', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+            Text('اختر القسم ثم عدّل ألوان عناصره بشكل مستقل. التغيير يظهر مباشرة قبل الحفظ.', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
             const SizedBox(height: 12),
-            for (final entry in labels.entries)
+            DropdownButtonFormField<String>(
+              value: selectedThemeSection,
+              dropdownColor: adminPanel,
+              style: TextStyle(color: AppTheme.text),
+              decoration: InputDecoration(
+                labelText: 'القسم المراد تخصيص ألوانه',
+                labelStyle: TextStyle(color: AppTheme.secondaryText),
+                enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: adminGold)),
+              ),
+              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
+              onChanged: (value) { if (value != null) setState(() => selectedThemeSection = value); },
+            ),
+            const SizedBox(height: 14),
+            for (final entry in AppTheme.colorLabels.entries)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  children: [
-                    Container(width: 30, height: 30, decoration: BoxDecoration(color: AppTheme.color(entry.key), borderRadius: BorderRadius.circular(7), border: Border.all(color: Colors.white24))),
-                    const SizedBox(width: 10),
-                    Expanded(child: TextField(
-                      controller: themeColorControllers[entry.key],
-                      textCapitalization: TextCapitalization.characters,
-                      onChanged: (_) => previewThemePalette(),
-                      style: TextStyle(color: AppTheme.text),
-                      decoration: InputDecoration(labelText: entry.value, hintText: '#RRGGBB', labelStyle: TextStyle(color: AppTheme.secondaryText), isDense: true),
-                    )),
-                  ],
-                ),
+                child: Row(children: [
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: AppTheme.color('${prefix}${entry.key}'),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(
+                    controller: themeColorControllers['${prefix}${entry.key}'],
+                    textCapitalization: TextCapitalization.characters,
+                    textDirection: TextDirection.ltr,
+                    onChanged: (_) => previewThemePalette(),
+                    style: TextStyle(color: AppTheme.text),
+                    decoration: InputDecoration(
+                      labelText: entry.value, hintText: '#RRGGBB',
+                      labelStyle: TextStyle(color: AppTheme.secondaryText), isDense: true,
+                    ),
+                  )),
+                ]),
               ),
             Container(
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: AppTheme.background, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppTheme.primary)),
+              decoration: BoxDecoration(
+                color: AppTheme.color('${prefix}background'),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.color('${prefix}primary')),
+              ),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text('معاينة SHAM FLIX', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 17)),
+                Text('معاينة SHAM FLIX', style: TextStyle(color: AppTheme.color('${prefix}primary'), fontWeight: FontWeight.bold, fontSize: 17)),
                 const SizedBox(height: 8),
-                Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: AppTheme.panel, borderRadius: BorderRadius.circular(9)), child: Text('هذا مثال للنص داخل بطاقة', style: TextStyle(color: AppTheme.text))),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppTheme.color('${prefix}panel'), borderRadius: BorderRadius.circular(9)),
+                  child: Text('هذا مثال للنص داخل بطاقة', style: TextStyle(color: AppTheme.color('${prefix}text'))),
+                ),
                 const SizedBox(height: 8),
-                FilledButton(onPressed: null, style: FilledButton.styleFrom(backgroundColor: AppTheme.button), child: Text('زر تجريبي', style: TextStyle(color: AppTheme.text))),
-                Text('نص ثانوي للمعاينة', style: TextStyle(color: AppTheme.secondaryText)),
+                FilledButton(
+                  onPressed: null,
+                  style: FilledButton.styleFrom(backgroundColor: AppTheme.color('${prefix}button')),
+                  child: Text('زر تجريبي', style: TextStyle(color: AppTheme.color('${prefix}text'))),
+                ),
+                Text('نص ثانوي للمعاينة', style: TextStyle(color: AppTheme.color('${prefix}secondaryText'))),
               ]),
             ),
             const SizedBox(height: 12),
-            FilledButton.icon(onPressed: themeSaving ? null : saveThemePalette, icon: const Icon(Icons.save), label: Text(themeSaving ? 'جارٍ الحفظ...' : 'حفظ الألوان'), style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text)),
-            TextButton.icon(onPressed: themeSaving ? null : restoreNetflixTheme, icon: const Icon(Icons.restart_alt), label: Text('استعادة ألوان Netflix الافتراضية', style: TextStyle(color: AppTheme.secondaryText))),
+            FilledButton.icon(
+              onPressed: themeSaving ? null : saveThemePalette,
+              icon: const Icon(Icons.save),
+              label: Text(themeSaving ? 'جارٍ الحفظ...' : 'حفظ الألوان'),
+              style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
+            ),
+            TextButton.icon(
+              onPressed: themeSaving ? null : () async {
+                final keys = selectedThemeSection == 'global'
+                    ? AppTheme.colorLabels.keys
+                    : AppTheme.colorLabels.keys.map((key) => '${selectedThemeSection}_$key');
+                for (final key in keys) {
+                  themeColorControllers[key]?.text = AppTheme.defaults[key]!;
+                }
+                previewThemePalette();
+                await saveThemePalette();
+              },
+              icon: const Icon(Icons.restart_alt),
+              label: Text('استعادة ألوان هذا القسم', style: TextStyle(color: AppTheme.secondaryText)),
+            ),
           ],
         ),
       ),
@@ -566,6 +655,42 @@ class _AdminPageState extends State<AdminPage> {
                   ),
               ],
             ),
+          ),
+        ),
+        Card(
+          color: adminPanel,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Icon(Icons.live_tv, color: adminGold),
+                const SizedBox(width: 9),
+                Expanded(child: Text('عدد القنوات في كل صف', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold))),
+              ]),
+              const SizedBox(height: 8),
+              Text('تحكم بعدد شعارات القنوات الظاهرة في كل صف داخل قسم البث المباشر.', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+              const SizedBox(height: 12),
+              if (channelGridColumnsLoading)
+                Center(child: CircularProgressIndicator(color: adminGold))
+              else
+                DropdownButtonFormField<int>(
+                  value: channelGridColumns,
+                  dropdownColor: adminPanel,
+                  style: TextStyle(color: AppTheme.text),
+                  decoration: InputDecoration(
+                    labelText: 'اختر عدد القنوات',
+                    labelStyle: TextStyle(color: AppTheme.secondaryText),
+                    enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: adminGold)),
+                  ),
+                  items: [2, 3, 4, 5, 6, 7, 8].map((count) => DropdownMenuItem<int>(
+                    value: count, child: Text('$count قنوات في كل صف'),
+                  )).toList(),
+                  onChanged: channelGridColumnsSaving ? null : saveChannelGridColumnsSetting,
+                ),
+              if (channelGridColumnsSaving)
+                Padding(padding: const EdgeInsets.only(top: 10), child: LinearProgressIndicator(color: adminGold)),
+            ]),
           ),
         ),
         Padding(
@@ -4295,4 +4420,4 @@ class _AdminPageState extends State<AdminPage> {
 
 // ==========================================
 
-// آخر تعديل: ربط ألوان النصوص والأزرار والواجهات بإعدادات لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 22:05:00 بتوقيت تركيا
+// آخر تعديل: إضافة تخصيص ألوان مستقل لكل قسم وإعداد عدد القنوات في الصف | التاريخ: 2026-11-21 | الوقت: 22:42:00 بتوقيت تركيا
