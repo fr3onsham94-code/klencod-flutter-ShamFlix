@@ -1578,126 +1578,483 @@ class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
   final String title;
   const ShamFlixPlayerPage({super.key, required this.url, required this.title});
+
   @override
   State<ShamFlixPlayerPage> createState() => _ShamFlixPlayerPageState();
 }
+
 class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   late final Player player;
   late final VideoController controller;
+  Timer? controlsTimer;
   String? error;
   bool opening = true;
+  bool controlsVisible = true;
+  bool seeking = false;
+  double seekValue = 0;
+  bool landscape = true;
+
   @override
   void initState() {
     super.initState();
     player = Player();
     controller = VideoController(player);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _setLandscape(true);
     player.stream.error.listen((message) {
       if (!mounted) return;
-      setState(() { error = message; opening = false; });
+      setState(() {
+        error = message;
+        opening = false;
+        controlsVisible = true;
+      });
     });
     _open();
   }
+
+  Future<void> _setLandscape(bool value) async {
+    landscape = value;
+    await SystemChrome.setPreferredOrientations(
+      value
+          ? const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : const [
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ],
+    );
+  }
+
   Future<void> _open() async {
     try {
       await player.open(Media(widget.url));
-      if (mounted) setState(() => opening = false);
+      if (mounted) {
+        setState(() => opening = false);
+        _showControls();
+      }
     } catch (e) {
-      if (mounted) setState(() {
-        opening = false;
-        error = 'تعذر تشغيل هذا الرابط: ' + e.toString();
+      if (mounted) {
+        setState(() {
+          opening = false;
+          error = 'تعذر تشغيل هذا الرابط: ' + e.toString();
+          controlsVisible = true;
+        });
+      }
+    }
+  }
+
+  void _showControls() {
+    controlsTimer?.cancel();
+    if (!mounted) return;
+    setState(() => controlsVisible = true);
+    if (player.state.playing && !opening && error == null) {
+      controlsTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted && player.state.playing && !seeking) {
+          setState(() => controlsVisible = false);
+        }
       });
     }
   }
+
+  void _toggleControls() {
+    if (controlsVisible) {
+      controlsTimer?.cancel();
+      setState(() => controlsVisible = false);
+    } else {
+      _showControls();
+    }
+  }
+
   String _time(Duration value) {
     String two(int n) => n.toString().padLeft(2, '0');
     final h = value.inHours;
     final m = value.inMinutes.remainder(60);
     final s = value.inSeconds.remainder(60);
-    if (h > 0) return two(h) + ':' + two(m) + ':' + two(s);
-    return two(m) + ':' + two(s);
+    if (h > 0) return '\${two(h)}:\${two(m)}:\${two(s)}';
+    return '\${two(m)}:\${two(s)}';
   }
+
+  Future<void> _pickSpeed() async {
+    final selected = await showModalBottomSheet<double>(
+      context: context,
+      backgroundColor: const Color(0xFF171717),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('سرعة التشغيل',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+            for (final rate in [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0])
+              ListTile(
+                title: Text('\${rate}x',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: player.state.rate == rate ? gold : Colors.white)),
+                onTap: () => Navigator.pop(sheetContext, rate),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      await player.setRate(selected);
+      _showControls();
+    }
+  }
+
+  Future<void> _pickAudioTrack() async {
+    final tracks = player.state.tracks.audio;
+    if (tracks.isEmpty) {
+      _message('لا توجد مسارات صوت إضافية لهذا المصدر');
+      return;
+    }
+    final selected = await showModalBottomSheet<AudioTrack>(
+      context: context,
+      backgroundColor: const Color(0xFF171717),
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('مسار الصوت', textAlign: TextAlign.center,
+                style: TextStyle(color: gold, fontWeight: FontWeight.bold))),
+            for (final track in tracks)
+              ListTile(
+                title: Text(track.toString(), textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white)),
+                onTap: () => Navigator.pop(sheetContext, track),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      await player.setAudioTrack(selected);
+      _showControls();
+    }
+  }
+
+  Future<void> _pickSubtitleTrack() async {
+    final tracks = player.state.tracks.subtitle;
+    final selected = await showModalBottomSheet<SubtitleTrack>(
+      context: context,
+      backgroundColor: const Color(0xFF171717),
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('الترجمة', textAlign: TextAlign.center,
+                style: TextStyle(color: gold, fontWeight: FontWeight.bold))),
+            ListTile(
+              title: const Text('إيقاف الترجمة', textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
+            ),
+            for (final track in tracks)
+              ListTile(
+                title: Text(track.toString(), textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white)),
+                onTap: () => Navigator.pop(sheetContext, track),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      await player.setSubtitleTrack(selected);
+      _showControls();
+    }
+  }
+
+  void _message(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: const Color(0xFF292929)),
+    );
+  }
+
+  Future<void> _toggleFullscreen() async {
+    await _setLandscape(!landscape);
+    _showControls();
+  }
+
   @override
   void dispose() {
+    controlsTimer?.cancel();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     player.dispose();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(backgroundColor: bg, title: Text(widget.title)),
         body: error != null
-            ? Center(child: Padding(
-                padding: const EdgeInsets.all(22),
-                child: Text(error!, textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70)),
-              ))
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(child: Center(
-                    child: opening
-                        ? const CircularProgressIndicator(color: gold)
-                        : Video(controller: controller, fit: BoxFit.contain,
-                            controls: NoVideoControls),
-                  )),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    child: StreamBuilder<Duration>(
-                      stream: player.stream.position,
-                      builder: (context, ps) {
-                        final position = ps.data ?? Duration.zero;
-                        return StreamBuilder<Duration>(
-                          stream: player.stream.duration,
-                          builder: (context, ds) {
-                            final duration = ds.data ?? Duration.zero;
-                            final max = duration.inMilliseconds > 0
-                                ? duration.inMilliseconds.toDouble() : 1.0;
-                            final value = position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
-                            return Column(children: [
-                              Slider(
-                                value: value, max: max, activeColor: gold,
-                                inactiveColor: Colors.white24,
-                                onChanged: duration == Duration.zero ? null :
-                                    (next) => player.seek(Duration(milliseconds: next.round())),
-                              ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(_time(position), style: const TextStyle(color: Colors.white70)),
-                                  Text(_time(duration), style: const TextStyle(color: Colors.white70)),
-                                ],
-                              ),
-                            ]);
-                          },
-                        );
-                      },
+            ? SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(22),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline, color: gold, size: 48),
+                        const SizedBox(height: 14),
+                        Text(error!, textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white70)),
+                        const SizedBox(height: 18),
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('رجوع'),
+                        ),
+                      ],
                     ),
                   ),
-                  StreamBuilder<bool>(
-                    stream: player.stream.playing,
-                    builder: (context, snapshot) {
-                      final playing = snapshot.data ?? false;
-                      return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        IconButton(iconSize: 48, color: gold,
-                          onPressed: () => player.seek(player.state.position > const Duration(seconds: 10)
-                                  ? player.state.position - const Duration(seconds: 10)
-                                  : Duration.zero),
-                          icon: const Icon(Icons.replay_10)),
-                        IconButton(iconSize: 62, color: gold,
-                          onPressed: () => player.playOrPause(),
-                          icon: Icon(playing ? Icons.pause_circle : Icons.play_circle)),
-                        IconButton(iconSize: 48, color: gold,
-                          onPressed: () => player.seek(player.state.position + const Duration(seconds: 10)),
-                          icon: const Icon(Icons.forward_10)),
-                      ]);
-                    },
-                  ),
-                  const SizedBox(height: 18),
-                ],
+                ),
+              )
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleControls,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (!opening)
+                      Video(
+                        controller: controller,
+                        fit: BoxFit.contain,
+                        controls: NoVideoControls,
+                      ),
+                    if (opening)
+                      const Center(child: CircularProgressIndicator(color: gold)),
+                    if (!opening)
+                      StreamBuilder<bool>(
+                        stream: player.stream.buffering,
+                        builder: (context, snapshot) => snapshot.data == true
+                            ? const Center(child: CircularProgressIndicator(color: gold))
+                            : const SizedBox.shrink(),
+                      ),
+                    AnimatedOpacity(
+                      opacity: controlsVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 250),
+                      child: IgnorePointer(
+                        ignoring: !controlsVisible,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Color(0xCC000000),
+                                Colors.transparent,
+                                Colors.transparent,
+                                Color(0xDD000000),
+                              ],
+                              stops: [0, 0.28, 0.58, 1],
+                            ),
+                          ),
+                          child: SafeArea(
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        widget.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'ملء الشاشة',
+                                      onPressed: _toggleFullscreen,
+                                      icon: Icon(
+                                        landscape ? Icons.fullscreen_exit : Icons.fullscreen,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Spacer(),
+                                StreamBuilder<bool>(
+                                  stream: player.stream.playing,
+                                  builder: (context, snapshot) {
+                                    final playing = snapshot.data ?? false;
+                                    return Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        _controlButton(
+                                          icon: Icons.replay_10_rounded,
+                                          size: 42,
+                                          onTap: () {
+                                            final next = player.state.position - const Duration(seconds: 10);
+                                            player.seek(next.isNegative ? Duration.zero : next);
+                                            _showControls();
+                                          },
+                                        ),
+                                        const SizedBox(width: 34),
+                                        _controlButton(
+                                          icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                          size: 68,
+                                          onTap: () async {
+                                            await player.playOrPause();
+                                            _showControls();
+                                          },
+                                          filled: true,
+                                        ),
+                                        const SizedBox(width: 34),
+                                        _controlButton(
+                                          icon: Icons.forward_10_rounded,
+                                          size: 42,
+                                          onTap: () {
+                                            player.seek(player.state.position + const Duration(seconds: 10));
+                                            _showControls();
+                                          },
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                                const Spacer(),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                                  child: StreamBuilder<Duration>(
+                                    stream: player.stream.position,
+                                    builder: (context, positionSnapshot) {
+                                      final position = positionSnapshot.data ?? Duration.zero;
+                                      return StreamBuilder<Duration>(
+                                        stream: player.stream.duration,
+                                        builder: (context, durationSnapshot) {
+                                          final duration = durationSnapshot.data ?? Duration.zero;
+                                          final max = duration.inMilliseconds > 0
+                                              ? duration.inMilliseconds.toDouble()
+                                              : 1.0;
+                                          final current = seeking
+                                              ? seekValue
+                                              : position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
+                                          return Column(
+                                            children: [
+                                              SliderTheme(
+                                                data: SliderTheme.of(context).copyWith(
+                                                  trackHeight: 3,
+                                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
+                                                ),
+                                                child: Slider(
+                                                  value: current.clamp(0.0, max).toDouble(),
+                                                  max: max,
+                                                  activeColor: gold,
+                                                  inactiveColor: Colors.white30,
+                                                  onChangeStart: duration == Duration.zero
+                                                      ? null
+                                                      : (value) {
+                                                          setState(() {
+                                                            seeking = true;
+                                                            seekValue = value;
+                                                          });
+                                                          controlsTimer?.cancel();
+                                                        },
+                                                  onChanged: duration == Duration.zero
+                                                      ? null
+                                                      : (value) => setState(() => seekValue = value),
+                                                  onChangeEnd: duration == Duration.zero
+                                                      ? null
+                                                      : (value) {
+                                                          player.seek(Duration(milliseconds: value.round()));
+                                                          setState(() => seeking = false);
+                                                          _showControls();
+                                                        },
+                                                ),
+                                              ),
+                                              Row(
+                                                children: [
+                                                  Text(_time(position),
+                                                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                                  const Spacer(),
+                                                  IconButton(
+                                                    visualDensity: VisualDensity.compact,
+                                                    onPressed: _pickAudioTrack,
+                                                    tooltip: 'الصوت',
+                                                    icon: const Icon(Icons.audiotrack, color: Colors.white, size: 21),
+                                                  ),
+                                                  IconButton(
+                                                    visualDensity: VisualDensity.compact,
+                                                    onPressed: _pickSubtitleTrack,
+                                                    tooltip: 'الترجمة',
+                                                    icon: const Icon(Icons.subtitles_outlined, color: Colors.white, size: 21),
+                                                  ),
+                                                  Text(_time(duration),
+                                                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                                ],
+                                              ),
+                                              Row(
+                                                children: [
+                                                  const Spacer(),
+                                                  TextButton.icon(
+                                                    onPressed: _pickSpeed,
+                                                    icon: const Icon(Icons.speed, color: Colors.white, size: 18),
+                                                    label: Text(
+                                                      '\${player.state.rate}x',
+                                                      style: const TextStyle(color: Colors.white),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+      ),
+    );
+  }
+
+  Widget _controlButton({
+    required IconData icon,
+    required double size,
+    required VoidCallback onTap,
+    bool filled = false,
+  }) {
+    return Material(
+      color: filled ? gold.withOpacity(0.95) : Colors.black.withOpacity(0.35),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: size + 12,
+          height: size + 12,
+          child: Icon(icon, color: filled ? Colors.black : Colors.white, size: size),
+        ),
       ),
     );
   }
@@ -1944,4 +2301,11 @@ class ShamFlixSearch extends SearchDelegate {
 // تم اعتماد media_kit/libmpv لتوسيع دعم صيغ الفيديو والبث المباشر.
 // تمت إضافة متصفح WebView مدمج لروابط صفحات مواقع المشاهدة.
 // تم فصل روابط صفحات المواقع عن روابط ملفات الفيديو المباشرة.
+// ==========================================
+
+// ==========================================
+// ShamFlix - آخر تحديث: 21-11-2026
+// تم تطوير واجهة المشغّل الداخلي بتصميم سينمائي مستوحى من Netflix.
+// أضيف الإخفاء التلقائي لعناصر التحكم، والملء للشاشة، والتقديم والترجيع، والسرعة ومسارات الصوت والترجمة.
+// تم الإبقاء على media_kit ونظام اختيار السيرفرات الحالي دون تغيير.
 // ==========================================
