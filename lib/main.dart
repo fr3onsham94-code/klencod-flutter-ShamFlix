@@ -16,7 +16,6 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_service.dart';
@@ -5063,3 +5062,5 @@ class ShamFlixSearch extends SearchDelegate {
 // آخر تعديل: إصلاح مراجع ألوان الصفحات العامة والتفاصيل والإعدادات والقنوات خارج صفحة الباقات | التاريخ: 2026-11-21 | الوقت: 23:50:00 بتوقيت تركيا
 
 // ShamFlix - آخر تعديل: استعادة الملف الأساسي وإضافة دعم الترجمات الخارجية وروابط البث الموسعة ومعالجة بدء التشغيل دون اتصال | التاريخ والوقت: 22/11/2026، 01:15 بتوقيت تركيا.
+
+// ShamFlix - آخر تعديل: إزالة استيراد غير مستخدم وفق تقرير flutter analyze | التاريخ والوقت: 22/11/2026، 01:25 بتوقيت تركيا.
