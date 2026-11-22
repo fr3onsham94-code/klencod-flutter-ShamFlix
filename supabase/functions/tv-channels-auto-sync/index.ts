@@ -315,14 +315,19 @@ async function syncChannels(db: any) {
   const oldChannels: any[] = [];
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await db.from("channels")
-      .select("id,external_source_key").not("external_source_key","is",null)
+      .select("id,external_source_key,name,name_en").not("external_source_key","is",null)
       .order("id").range(offset, offset + 999);
     if (error) throw new Error("existing channel lookup: " + JSON.stringify(error));
     oldChannels.push(...(data || []));
     if (!data || data.length < 1000) break;
   }
   const byExternalKey = new Map<string, any>();
-  for (const row of oldChannels) byExternalKey.set(row.external_source_key, row);
+  const byCanonicalName = new Map<string, any>();
+  for (const row of oldChannels) {
+    byExternalKey.set(row.external_source_key, row);
+    const canonical = canonicalKey("", String(row.name_en || row.name || ""), "");
+    if (!byCanonicalName.has(canonical)) byCanonicalName.set(canonical, row);
+  }
 
   const channelRows: Record<string,unknown>[] = [];
   const streamRows: Record<string,unknown>[] = [];
@@ -339,7 +344,7 @@ async function syncChannels(db: any) {
     const aliases = [...new Set(uniqueStreams.map(x=>x.name).filter(x=>x !== preferred.name))];
     const arabic = uniqueStreams.map(x=>x.name).find(x=>/[\u0600-\u06FF]/.test(x)) || arabicAlias(preferred.name);
     const channelName = arabic || baseChannelName(preferred.name);
-    const existing = byExternalKey.get(key) || null;
+    const existing = byExternalKey.get(key) || byCanonicalName.get(key) || null;
     const assignedId = existing?.id && !assignedChannelIds.has(existing.id) ? existing.id : crypto.randomUUID();
     assignedChannelIds.add(assignedId);
     const channelRow: Record<string,unknown> = {
