@@ -160,14 +160,14 @@ function extractSources(html: string, page: URL) {
   const add = (raw: string | undefined, name: string) => {
     if (!raw) return;
     try {
-      const url = validateUrl(new URL(raw.replace(/&amp;/g,"&").replace(/\\\//g,"/"),page).toString());
+      const url = validateUrl(new URL(raw.replace(/&amp;/g,"&").replace(/\\//g,"/"),page).toString());
       found.set(url.toString(),{url:url.toString(),name});
     } catch {}
   };
   for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)) {
     const a=attrs(m[0]); add(a.src || a["data-src"] || a["data-lazy-src"] || a["data-url"] || a.data,"مشغل الفيلم");
   }
-  for (const m of html.matchAll(/https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:\?[^\s"'<>]*)?/gi)) {
+  for (const m of html.matchAll(/https?:\/\/[^\s"'<>\]+?\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:\?[^\s"'<>]*)?/gi)) {
     add(m[0],"رابط مباشر"); if(found.size>=30) break;
   }
   return [...found.values()].slice(0,30);
