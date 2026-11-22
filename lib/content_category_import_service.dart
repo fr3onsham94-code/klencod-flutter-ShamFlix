@@ -19,6 +19,7 @@ class ContentCategoryImportService {
     var current = _validatedUri(rawUrl);
     final visitedPages = <String>{};
     final candidates = <String, Map<String, dynamic>>{};
+    var scanIncomplete = false;
 
     for (var page = 0; page < pageLimit && candidates.length < itemLimit; page++) {
       if (!visitedPages.add(current.toString())) break;
@@ -28,6 +29,7 @@ class ContentCategoryImportService {
       } catch (_) {
         // Keep results already found if a later pagination page is temporarily unavailable.
         if (candidates.isEmpty) rethrow;
+        scanIncomplete = true;
         break;
       }
       for (final candidate in _extractCards(html, current, itemLimit)) {
@@ -59,6 +61,11 @@ class ContentCategoryImportService {
         }
       }));
       results.addAll(inspected.whereType<Map<String, dynamic>>());
+    }
+    if (scanIncomplete) {
+      for (final item in results) {
+        item['_scan_incomplete'] = true;
+      }
     }
     return results;
   }
