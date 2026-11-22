@@ -4394,8 +4394,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   void _cycleVideoFit() {
     setState(() => videoFitMode = (videoFitMode + 1) % 3);
     _savePlayerSetting('fit', videoFitMode);
-    final labels = ['احتواء كامل بدون قص', 'ملء الشاشة مع قص الأطراف', 'تمديد الصورة لملء الشاشة'];
-    _message('طريقة عرض الصورة: ${labels[videoFitMode]}');
     _showControls();
   }
 
@@ -4484,33 +4482,40 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                             ? Center(child: CircularProgressIndicator(color: gold))
                             : const SizedBox.shrink(),
                       ),
-                    Positioned(
-                      top: 12,
-                      right: 14,
-                      child: SafeArea(
-                        child: StreamBuilder<bool>(
-                          stream: player.stream.buffering,
-                          builder: (context, snapshot) {
-                            final buffering = snapshot.data == true;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.68),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: buffering ? gold : Colors.green),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.circle, size: 7,
-                                    color: buffering ? gold : Colors.greenAccent),
-                                  const SizedBox(width: 6),
-                                  Text(buffering ? appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor') : appText('البث متصل', 'Stream Connected', 'Yayın Bağlandı'),
-                                    style: TextStyle(color: Colors.white, fontSize: 10)),
-                                ],
-                              ),
-                            );
-                          },
+                    AnimatedOpacity(
+                      opacity: controlsVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 250),
+                      child: IgnorePointer(
+                        ignoring: !controlsVisible,
+                        child: Positioned(
+                          top: 12,
+                          right: 14,
+                          child: SafeArea(
+                            child: StreamBuilder<bool>(
+                              stream: player.stream.buffering,
+                              builder: (context, snapshot) {
+                                final buffering = snapshot.data == true;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.68),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: buffering ? gold : Colors.green),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.circle, size: 7,
+                                        color: buffering ? gold : Colors.greenAccent),
+                                      const SizedBox(width: 6),
+                                      Text(buffering ? appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor') : appText('البث متصل', 'Stream Connected', 'Yayın Bağlandı'),
+                                        style: TextStyle(color: Colors.white, fontSize: 10)),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ),
                       ),
                     ),
