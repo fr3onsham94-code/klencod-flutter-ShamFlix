@@ -6,7 +6,7 @@ class LiveMatchSourcesPage extends StatefulWidget{const LiveMatchSourcesPage({su
 class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage>{
  bool loading=true;String? error;List<Map<String,dynamic>> sources=[];
  @override void initState(){super.initState();_load();}
- Future<void> _load()async{setState(()=>{loading=true,error=null});try{final rows=await AuthService.client.from('live_match_sources').select('*').order('created_at');sources=rows.map((r)=>Map<String,dynamic>.from(r)).toList();}catch(e){error=e.toString();}if(mounted)setState(()=>loading=false);}
+ Future<void> _load()async{setState(() { loading=true; error=null; });try{final rows=await AuthService.client.from('live_match_sources').select('*').order('created_at');sources=rows.map((r)=>Map<String,dynamic>.from(r)).toList();}catch(e){error=e.toString();}if(mounted)setState(()=>loading=false);}
  Future<void> _editSource([Map<String,dynamic>? source])async{
   final name=TextEditingController(text:source?['source_name']?.toString()??''),url=TextEditingController(text:source?['base_url']?.toString()??''),parser=TextEditingController(text:source?['parser_key']?.toString()??'jsonld_sports_event'),ua=TextEditingController(text:source?['user_agent']?.toString()??'Mozilla/5.0'),referer=TextEditingController(text:source?['referer']?.toString()??''),headers=TextEditingController(text:const JsonEncoder.withIndent('  ').convert(source?['request_headers']??{})),hosts=TextEditingController(text:((source?['allowed_redirect_hosts'] as List?)??[]).join(', ')),interval=TextEditingController(text:(source?['check_interval_minutes']??60).toString());
   bool active=source?['is_active']==true;final key=GlobalKey<FormState>();
