@@ -88,7 +88,7 @@ class ContentPageImportService {
     }
     final html = await _fetchPublicHtml(seriesUri);
     final episodeLinks = <String, Map<String, String>>{};
-    final anchorPattern = RegExp(r'<a\b[^>]*>[\s\\S]*?</a>', caseSensitive: false);
+    final anchorPattern = RegExp(r'<a\b[^>]*>[\s\S]*?</a>', caseSensitive: false);
     for (final match in anchorPattern.allMatches(html)) {
       final tag = match.group(0)!;
       final opening = RegExp(r'<a\b[^>]*>', caseSensitive: false).firstMatch(tag)?.group(0);
