@@ -135,7 +135,7 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
                         ),
                         _field(
                           parserController,
-                          'مفتاح المحلل (m_yala_wordpress_cards أو fel3ardaa_json_api أو syrialive_my_cards أو yalla_shoot_ltd_cards)',
+                          'مفتاح المحلل (m_yala_wordpress_cards أو yandex_kora_cards أو fel3ardaa_json_api أو syrialive_my_cards أو yalla_shoot_ltd_cards)',
                         ),
                         _field(userAgentController, 'User-Agent'),
                         _field(
@@ -325,6 +325,7 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
   Future<void> _toggle(Map<String, dynamic> source, bool active) async {
     const supportedParsers = {
       'm_yala_wordpress_cards',
+      'yandex_kora_cards',
       'fel3ardaa_json_api',
       'syrialive_my_cards',
       'yalla_shoot_ltd_cards',
