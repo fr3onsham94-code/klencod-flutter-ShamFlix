@@ -4844,7 +4844,8 @@ class ShamFlixWebPage extends StatefulWidget {
   final String title;
   final bool playerOnly;
   final bool returnToPlayer;
-  const ShamFlixWebPage({super.key, required this.url, required this.title, this.playerOnly = false, this.returnToPlayer = false});
+  final ValueChanged<List<Map<String, dynamic>>>? onSourcesDetected;
+  const ShamFlixWebPage({super.key, required this.url, required this.title, this.playerOnly = false, this.returnToPlayer = false, this.onSourcesDetected});
   @override
   State<ShamFlixWebPage> createState() => _ShamFlixWebPageState();
 }
@@ -4962,6 +4963,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
           ? decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
           : <Map<String, dynamic>>[];
       if (!mounted) return;
+      widget.onSourcesDetected?.call(entries);
       if (entries.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('لم نعثر على روابط فيديو ظاهرة في الصفحة حالياً. جرّب تشغيل الفيديو ثم افحص مرة أخرى.')),
