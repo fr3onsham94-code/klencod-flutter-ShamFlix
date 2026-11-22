@@ -56,6 +56,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
   }
 
   Future<void> scan() async {
+    if (category.text.trim().isNotEmpty) _addCategoriesFromInput();
     if (url.text.trim().isEmpty || packageIds.isEmpty) {
       message(packageIds.isEmpty ? 'أنشئ باقة واختر باقة واحدة على الأقل' : 'أدخل رابط صفحة القسم', true);
       return;
@@ -332,6 +333,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
   }
 
   Future<void> importSelected() async {
+    if (category.text.trim().isNotEmpty) _addCategoriesFromInput();
     final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
     if (chosen.isEmpty || packageIds.isEmpty) return;
     setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; movieMonitorCreated = 0; movieMonitorFailures = 0; });
@@ -572,7 +574,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
 
   void _addCategoriesFromInput() {
     final values = category.text
-        .split(RegExp(r'[,،|;؛\\n]+'))
+        .split(RegExp(r'[,،|;؛\n]+'))
         .map((value) => value.trim())
         .where((value) => value.isNotEmpty);
     setState(() {
