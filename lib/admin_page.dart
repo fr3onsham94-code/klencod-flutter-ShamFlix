@@ -861,6 +861,15 @@ class _AdminPageState extends State<AdminPage> {
     final posterController = TextEditingController(
       text: existing?[isSeries ? 'poster_url' : 'logo_url']?.toString() ?? '',
     );
+    final backdropController = TextEditingController(
+      text: existing?['backdrop_url']?.toString() ?? '',
+    );
+    final directorController = TextEditingController(
+      text: existing?['director']?.toString() ?? '',
+    );
+    final castController = TextEditingController(
+      text: existing?['cast']?.toString() ?? '',
+    );
     final descriptionController = TextEditingController(
       text: existing?['description']?.toString() ?? '',
     );
@@ -1016,7 +1025,10 @@ class _AdminPageState extends State<AdminPage> {
                         ),
                       ],
                       adminField(posterController, 'رابط صورة البوستر'),
+                      adminField(backdropController, 'رابط صورة الخلفية'),
                       adminField(descriptionController, 'وصف المسلسل', maxLines: 4),
+                      adminField(directorController, 'المخرج'),
+                      adminField(castController, 'طاقم التمثيل', maxLines: 2),
                       adminField(categoryController, 'التصنيف'),
                       adminField(yearController, 'سنة الإصدار', keyboard: TextInputType.number),
                       adminField(ratingController, 'التقييم', keyboard: const TextInputType.numberWithOptions(decimal: true)),
@@ -1092,6 +1104,7 @@ class _AdminPageState extends State<AdminPage> {
                   if (isSeries) {
                     data.addAll({
                       'tmdb_id': int.tryParse(tmdbController.text.trim()),
+                      'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
                       'director': directorController.text.trim().isEmpty ? null : directorController.text.trim(),
                       'cast': castController.text.trim().isEmpty ? null : castController.text.trim(),
