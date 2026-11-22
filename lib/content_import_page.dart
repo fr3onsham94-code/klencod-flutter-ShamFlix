@@ -14,8 +14,9 @@ class ContentImportPage extends StatefulWidget {
 class _ContentImportPageState extends State<ContentImportPage> {
   final url = TextEditingController();
   final category = TextEditingController();
+  final Set<String> selectedCategories = {};
   String type = 'movie';
-  String? packageId;
+  final Set<String> packageIds = {};
   List<Map<String, dynamic>> packages = [];
   List<Map<String, dynamic>> items = [];
   final Set<String> selected = {};
@@ -47,15 +48,16 @@ class _ContentImportPageState extends State<ContentImportPage> {
           .select('id,name,content_type').eq('content_type', type)
           .order('sort_order').order('created_at');
       packages = rows.map((e) => Map<String, dynamic>.from(e)).toList();
-      packageId = packages.isEmpty ? null : packages.first['id'].toString();
+      packageIds.clear();
+      if (packages.isNotEmpty) packageIds.add(packages.first['id'].toString());
       error = null;
     } catch (e) { error = 'تعذر تحميل الباقات: $e'; }
     if (mounted) setState(() => loadingPackages = false);
   }
 
   Future<void> scan() async {
-    if (url.text.trim().isEmpty || packageId == null) {
-      message(packageId == null ? 'أنشئ باقة واخترها أولاً' : 'أدخل رابط صفحة القسم', true);
+    if (url.text.trim().isEmpty || packageIds.isEmpty) {
+      message(packageIds.isEmpty ? 'أنشئ باقة واختر باقة واحدة على الأقل' : 'أدخل رابط صفحة القسم', true);
       return;
     }
     setState(() { scanning = true; items = []; selected.clear(); error = null; });
@@ -174,22 +176,27 @@ class _ContentImportPageState extends State<ContentImportPage> {
     }
   }
 
-  Future<void> _ensureSeriesInPackage(String seriesId) async {
-    if (packageId == null) return;
-    final existing = await AuthService.client
-        .from('content_package_items')
-        .select('id')
-        .eq('package_id', packageId!)
-        .eq('content_type', 'series')
-        .eq('content_id', seriesId)
-        .limit(1);
-    if (existing.isEmpty) {
-      await AuthService.client.from('content_package_items').insert({
-        'package_id': packageId,
-        'content_type': 'series',
-        'content_id': seriesId,
-      });
+  Future<void> _ensureContentInPackages(String contentType, String contentId) async {
+    for (final targetPackageId in packageIds) {
+      final existing = await AuthService.client
+          .from('content_package_items')
+          .select('id')
+          .eq('package_id', targetPackageId)
+          .eq('content_type', contentType)
+          .eq('content_id', contentId)
+          .limit(1);
+      if (existing.isEmpty) {
+        await AuthService.client.from('content_package_items').insert({
+          'package_id': targetPackageId,
+          'content_type': contentType,
+          'content_id': contentId,
+        });
+      }
     }
+  }
+
+  Future<void> _ensureSeriesInPackage(String seriesId) async {
+    await _ensureContentInPackages('series', seriesId);
   }
 
   Future<Map<String, int>> _saveAkwamSeriesEpisodes(
@@ -326,7 +333,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
 
   Future<void> importSelected() async {
     final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
-    if (chosen.isEmpty || packageId == null) return;
+    if (chosen.isEmpty || packageIds.isEmpty) return;
     setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; movieMonitorCreated = 0; movieMonitorFailures = 0; });
     try {
       final table = type == 'movie' ? 'movies' : 'series';
@@ -356,6 +363,14 @@ class _ContentImportPageState extends State<ContentImportPage> {
         final year = int.tryParse(item['release_year']?.toString() ?? '');
         final key = normalize(title) + '|' + (year?.toString() ?? '');
         if (known.contains(key)) {
+          final existingId = existingIdsByKey[key];
+          if (existingId != null) {
+            try {
+              await _ensureContentInPackages(type, existingId);
+            } catch (_) {
+              setState(() => failed++);
+            }
+          }
           setState(() => duplicates++);
           // For a second Akwam URL of the same series, offer an explicit
           // merge into the chosen existing series and season. Skipping keeps
@@ -426,7 +441,9 @@ class _ContentImportPageState extends State<ContentImportPage> {
             'poster_url': emptyNull(item['poster_url']),
             'backdrop_url': emptyNull(item['backdrop_url']),
             'description': emptyNull(item['description']),
-            'category': category.text.trim().isNotEmpty ? category.text.trim() : emptyNull(item['category']),
+            'category': selectedCategories.isNotEmpty
+                ? selectedCategories.join('، ')
+                : emptyNull(item['category']),
             'release_year': year,
             'rating': double.tryParse(item['rating']?.toString() ?? ''),
             'director': emptyNull(item['director']),
@@ -436,9 +453,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
           if (type == 'movie') data['source_page_url'] = emptyNull(item['page_url']);
           final saved = await AuthService.client.from(table).insert(data).select('id').single();
           final id = saved['id'].toString();
-          await AuthService.client.from('content_package_items').insert({
-            'package_id': packageId, 'content_type': type, 'content_id': id,
-          });
+          await _ensureContentInPackages(type, id);
 
           if (type == 'series' && _isAkwamPage(item['page_url'])) {
             akwamSeriesCount++;
@@ -512,15 +527,17 @@ class _ContentImportPageState extends State<ContentImportPage> {
             (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
             sourceUri.host.isNotEmpty && sourceUri.userInfo.isEmpty) {
           try {
-            await AuthService.client.from('movie_source_monitors').upsert({
-              'package_id': packageId,
-              'source_url': sourceUri.toString(),
-              'source_host': sourceUri.host,
-              'category': category.text.trim().isEmpty ? null : category.text.trim(),
-              'check_interval_minutes': movieMonitorInterval,
-              'is_active': true,
-            }, onConflict: 'package_id,source_url');
-            movieMonitorCreated = 1;
+            for (final targetPackageId in packageIds) {
+              await AuthService.client.from('movie_source_monitors').upsert({
+                'package_id': targetPackageId,
+                'source_url': sourceUri.toString(),
+                'source_host': sourceUri.host,
+                'category': selectedCategories.isEmpty ? null : selectedCategories.join('، '),
+                'check_interval_minutes': movieMonitorInterval,
+                'is_active': true,
+              }, onConflict: 'package_id,source_url');
+              movieMonitorCreated++;
+            }
           } catch (_) {
             movieMonitorFailures = 1;
           }
@@ -551,6 +568,17 @@ class _ContentImportPageState extends State<ContentImportPage> {
   dynamic emptyNull(dynamic value) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? null : text;
+  }
+
+  void _addCategoriesFromInput() {
+    final values = category.text
+        .split(RegExp(r'[,،|;؛\\n]+'))
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty);
+    setState(() {
+      selectedCategories.addAll(values);
+      category.clear();
+    });
   }
 
   void message(String text, [bool isError = false]) {
@@ -587,21 +615,36 @@ class _ContentImportPageState extends State<ContentImportPage> {
                 ],
                 onChanged: scanning || importing ? null : (v) async {
                   if (v == null) return;
-                  setState(() { type = v; items = []; selected.clear(); packageId = null; });
+                  setState(() { type = v; items = []; selected.clear(); packageIds.clear(); });
                   await loadPackages();
                 },
               ),
               const SizedBox(height: 12),
               if (loadingPackages) Center(child: CircularProgressIndicator(color: accent))
-              else if (packages.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  value: packageId, dropdownColor: panel,
-                  decoration: const InputDecoration(labelText: 'الباقة المستهدفة'),
-                  items: packages.map((p) => DropdownMenuItem<String>(
-                    value: p['id'].toString(), child: Text(p['name'].toString()),
-                  )).toList(),
-                  onChanged: scanning || importing ? null : (v) => setState(() => packageId = v),
-                )
+              else if (packages.isNotEmpty) ...[
+                const Text('الباقات المستهدفة (يمكن اختيار أكثر من باقة)',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                ...packages.map((p) {
+                  final id = p['id'].toString();
+                  return CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: packageIds.contains(id),
+                    activeColor: accent,
+                    title: Text(p['name'].toString()),
+                    onChanged: scanning || importing ? null : (checked) => setState(() {
+                      if (checked == true) {
+                        packageIds.add(id);
+                      } else {
+                        packageIds.remove(id);
+                      }
+                    }),
+                  );
+                }),
+                Text('تم اختيار ${packageIds.length} باقة',
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+              ]
               else ...[
                 const Text('لا توجد باقات لهذا النوع. أنشئ باقة أولاً.'),
                 OutlinedButton.icon(
@@ -615,8 +658,41 @@ class _ContentImportPageState extends State<ContentImportPage> {
                 ),
               ],
               const SizedBox(height: 12),
-              TextField(controller: category, style: TextStyle(color: AppTheme.text),
-                decoration: const InputDecoration(labelText: 'التصنيف الاختياري', hintText: 'مثلاً: هندي')),
+              TextField(
+                controller: category,
+                style: TextStyle(color: AppTheme.text),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _addCategoriesFromInput(),
+                decoration: InputDecoration(
+                  labelText: 'التصنيفات الاختيارية',
+                  hintText: 'أدخل تصنيفاً واضغط إضافة، ويمكن اختيار عدة تصنيفات',
+                  suffixIcon: IconButton(
+                    tooltip: 'إضافة التصنيف',
+                    onPressed: scanning || importing ? null : _addCategoriesFromInput,
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                ),
+              ),
+              if (selectedCategories.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: selectedCategories.map((value) => InputChip(
+                    label: Text(value),
+                    onDeleted: scanning || importing
+                        ? null
+                        : () => setState(() => selectedCategories.remove(value)),
+                  )).toList(),
+                ),
+                TextButton.icon(
+                  onPressed: scanning || importing
+                      ? null
+                      : () => setState(() => selectedCategories.clear()),
+                  icon: const Icon(Icons.clear),
+                  label: const Text('مسح التصنيفات المختارة'),
+                ),
+              ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero, value: publish, activeColor: accent,
                 title: const Text('النشر مباشرة بعد الاستيراد'),
