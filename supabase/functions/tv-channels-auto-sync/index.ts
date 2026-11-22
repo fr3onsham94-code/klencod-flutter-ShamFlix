@@ -402,6 +402,6 @@ Deno.serve(async (req: Request) => {
     if (body.mode === "health") return json({ ok: true, mode: "health", result: await healthCheck(db) });
     return json({ ok: true, mode: "sync", result: await syncChannels(db) });
   } catch (error) {
-    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    return json({ ok: false, error: error instanceof Error ? error.message : JSON.stringify(error) }, 500);
   }
 });
