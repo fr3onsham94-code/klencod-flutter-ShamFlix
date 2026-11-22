@@ -47,14 +47,29 @@ function normalizeName(value: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
-function canonicalKey(tvgId: string, name: string, sourceId: string): string {
-  const id = normalizeName(tvgId);
-  const alias = arabicAlias(name);
-  if (id) return "id:" + id;
-  // Cross-source merging without a stable ID is allowed only for an explicit,
-  // reviewed alias. Similar display names alone are not proof of identity.
-  if (alias) return "alias:" + normalizeName(alias);
-  return "source:" + sourceId + ":name:" + normalizeName(name);
+function baseChannelName(value: string): string {
+  return clean(value)
+    .replace(/\\s*[([]?\\s*(?:SD|HD|FHD|UHD|4K|8K|[0-9]{3,4}\\s*[pPiI])\\s*[)\\]]?\\s*$/i, "")
+    .replace(/\\s*[ⓈⒼⓅⒽⓊ]+\\s*$/u, "")
+    .replace(/\\s+/g, " ").trim();
+}
+
+function qualityLabel(name: string, url: string): string {
+  const value = name + " " + url;
+  if (/\\b8k\\b|7680\\s*[xX]\\s*4320|4320\\s*[pPiI]/i.test(value)) return "8K";
+  if (/\\b4k\\b|2160\\s*[pPiI]|3840\\s*[xX]\\s*2160/i.test(value)) return "4K";
+  if (/\\b(?:uhd|fhd)\\b|1080\\s*[pPiI]|1920\\s*[xX]\\s*1080/i.test(value)) return "FHD";
+  if (/\\bhd\\b|720\\s*[pPiI]|1280\\s*[xX]\\s*720/i.test(value)) return "HD";
+  if (/\\bsd\\b|480\\s*[pPiI]|576\\s*[pPiI]/i.test(value)) return "SD";
+  return "غير محددة";
+}
+
+function canonicalKey(_tvgId: string, name: string, _sourceId: string): string {
+  const baseName = baseChannelName(name);
+  const alias = arabicAlias(baseName);
+  // A channel is identified by its normalized display name, not by the source's
+  // tvg-id. This merges source variants and resolution variants into one entry.
+  return "name:" + normalizeName(alias || baseName);
 }
 
 function safeStreamUrl(raw: string): string | null {
@@ -258,14 +273,14 @@ async function syncChannels(db: any) {
     const category = [...categoryCounts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] || "عامة";
     const aliases = [...new Set(uniqueStreams.map(x=>x.name).filter(x=>x !== preferred.name))];
     const arabic = uniqueStreams.map(x=>x.name).find(x=>/[\u0600-\u06FF]/.test(x)) || arabicAlias(preferred.name);
-    const channelName = arabic || preferred.name;
+    const channelName = arabic || baseChannelName(preferred.name);
     const existing = byExternalKey.get(key) || null;
     const assignedId = existing?.id && !assignedChannelIds.has(existing.id) ? existing.id : crypto.randomUUID();
     assignedChannelIds.add(assignedId);
     const channelRow: Record<string,unknown> = {
       id: assignedId,
       name: channelName,
-      name_en: preferred.name,
+      name_en: baseChannelName(preferred.name),
       aliases,
       category,
       stream_url: preferred.url,
@@ -281,7 +296,7 @@ async function syncChannels(db: any) {
       streamRows.push({
         channel_id: null,
         channel_key: key,
-        server_name: stream.sourceName + " • " + (stream.url.includes(".m3u8") ? "HLS" : "DASH"),
+        server_name: stream.sourceName + " • " + qualityLabel(stream.name, stream.url) + " • " + (stream.url.includes(".m3u8") ? "HLS" : "DASH"),
         stream_url: stream.url,
         source_key: stream.sourceId + ":" + await hash(key + "|" + stream.url),
         source_id: stream.sourceId,
@@ -342,7 +357,7 @@ async function syncChannels(db: any) {
   for (const server of sourceServers || []) {
     // Never prune a source whose playlist failed to fetch or parse in this run.
     if (!successfullySyncedSourceIds.has(server.source_id)) continue;
-    const groupKey = server.channel_id + "|" + server.source_id;
+    const groupKey = server.channel_id + "|" + server.source_id + "|" + (String(server.server_name || "").match(/(?:SD|HD|FHD|4K|8K|غير محددة)/)?.[0] || "غير محددة");
     const group = groupedServers.get(groupKey) || [];
     group.push(server);
     groupedServers.set(groupKey,group);
@@ -397,7 +412,7 @@ async function syncChannels(db: any) {
       ...sourceErrors.map((x:any, index:number) => ({ id:SOURCES[settledSources.indexOf(x)]?.id || "unknown", status:"failed", error:String(x.reason?.message || x.reason || "fetch failed") })),
     ],
     retainedServerLimit: 2,
-    retentionScope: "per channel and per source",
+    retentionScope: "two latest URLs per channel, source, and quality",
     languageFilter: ["Arabic", "Turkish"],
     filteredEntries: sourceResults.reduce((n,x)=>n+x.entries.length,0),
   };
