@@ -123,7 +123,24 @@ class SupabaseService {
     return _getRows('playback_servers', {
       foreignKey: 'eq.$contentId',
       'is_active': 'eq.true',
-      'order': 'sort_order.asc',
+      'order': 'sort_order.asc,created_at.asc',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getLiveMatches() {
+    return _getRows('live_matches', {
+      'is_visible': 'eq.true',
+      'order': 'kickoff_at.asc',
+      'limit': '250',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getLiveMatchServers(String matchId) {
+    return _getRows('live_match_servers', {
+      'match_id': 'eq.$matchId',
+      'is_active': 'eq.true',
+      'order': 'sort_order.asc,created_at.asc',
+      'limit': '30',
     });
   }
 
