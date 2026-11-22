@@ -381,7 +381,7 @@ async function syncChannels(db: any) {
 
   // Upsert channel rows in batches; stable source keys prevent duplicate channels on each run.
   for (let i=0; i<channelRows.length; i+=100) {
-    const { error } = await db.from("channels").upsert(channelRows.slice(i,i+100), { onConflict:"external_source_key" });
+    const { error } = await db.from("channels").upsert(channelRows.slice(i,i+100), { onConflict:"id" });
     if (error) throw new Error("channels upsert: " + JSON.stringify(error));
   }
   const syncedChannels: any[] = [];
