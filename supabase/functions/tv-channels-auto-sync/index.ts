@@ -210,16 +210,17 @@ async function syncChannels(db: any) {
   if (!grouped.size) throw new Error("No channels were aggregated; existing catalogue was left untouched");
   if (grouped.size > MAX_CHANNELS_PER_RUN) throw new Error("Playlist set exceeded the safe per-run channel limit; existing catalogue was left untouched");
 
-  const { data: oldChannels, error: oldError } = await db.from("channels")
-    .select("id,name,external_source_key").limit(100000);
-  if (oldError) throw oldError;
-  const byName = new Map<string, any>();
-  const byExternalKey = new Map<string, any>();
-  const claimedManualIds = new Set<string>();
-  for (const row of oldChannels || []) {
-    byName.set(normalizeName(row.name || ""), row);
-    if (row.external_source_key) byExternalKey.set(row.external_source_key, row);
+  const oldChannels: any[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("channels")
+      .select("id,external_source_key").not("external_source_key","is",null)
+      .order("id").range(offset, offset + 999);
+    if (error) throw new Error("existing channel lookup: " + JSON.stringify(error));
+    oldChannels.push(...(data || []));
+    if (!data || data.length < 1000) break;
   }
+  const byExternalKey = new Map<string, any>();
+  for (const row of oldChannels) byExternalKey.set(row.external_source_key, row);
 
   const channelRows: Record<string,unknown>[] = [];
   const streamRows: Record<string,unknown>[] = [];
@@ -276,10 +277,16 @@ async function syncChannels(db: any) {
     const { error } = await db.from("channels").upsert(channelRows.slice(i,i+100), { onConflict:"external_source_key" });
     if (error) throw new Error("channels upsert: " + JSON.stringify(error));
   }
-  const { data: syncedChannels, error: syncedError } = await db.from("channels")
-    .select("id,external_source_key").not("external_source_key","is",null).limit(50000);
-  if (syncedError) throw new Error("channel ID lookup: " + JSON.stringify(syncedError));
-  const channelIds = new Map((syncedChannels || []).map((x:any)=>[x.external_source_key,x.id]));
+  const syncedChannels: any[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("channels")
+      .select("id,external_source_key").not("external_source_key","is",null)
+      .order("id").range(offset, offset + 999);
+    if (error) throw new Error("channel ID lookup: " + JSON.stringify(error));
+    syncedChannels.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  const channelIds = new Map(syncedChannels.map((x:any)=>[x.external_source_key,x.id]));
   const serverRows = streamRows.map((row:any) => {
     const channelId = channelIds.get(row.channel_key);
     const { channel_key, ...server } = row;
