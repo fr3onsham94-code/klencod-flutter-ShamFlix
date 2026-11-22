@@ -61,7 +61,48 @@ class ContentPageImportService {
 
       final html = utf8.decode(response.bodyBytes, allowMalformed: true);
       final metadata = _parseHtml(html);
-      metadata['stream_sources'] = _extractStreamSources(html, uri);
+      final sources = <Map<String, dynamic>>[
+        ..._extractStreamSources(html, uri),
+      ];
+
+      // Akwam movie pages commonly keep the playable page behind a public
+      // /watch/ link. Follow that ordinary page just like the episode importer.
+      final isAkwam = uri.host.toLowerCase() == 'akwam.ss' ||
+          uri.host.toLowerCase().endsWith('.akwam.ss');
+      if (isAkwam && uri.path.toLowerCase().contains('/movie/')) {
+        String? watchUrl;
+        for (final match in RegExp(r'<a\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+          final attrs = _attributes(match.group(0)!);
+          final href = (attrs['href'] ?? '').trim();
+          if (href.isEmpty) continue;
+          final candidate = uri.resolve(href);
+          if (candidate.host.toLowerCase() == uri.host.toLowerCase() &&
+              candidate.path.toLowerCase().contains('/watch/')) {
+            try {
+              _validatedUri(candidate.toString());
+              watchUrl = candidate.toString();
+              break;
+            } catch (_) {}
+          }
+        }
+        if (watchUrl != null) {
+          final watchUri = _validatedUri(watchUrl);
+          final watchHtml = await _fetchPublicHtml(watchUri);
+          sources.addAll(_extractStreamSources(watchHtml, watchUri));
+          sources.add({
+            'url': watchUri.toString(),
+            'name': 'مشاهدة الفيلم على أكوام',
+            'kind': 'iframe',
+          });
+        }
+      }
+
+      final uniqueSources = <String, Map<String, dynamic>>{};
+      for (final source in sources) {
+        final sourceUrl = source['url']?.toString() ?? '';
+        if (sourceUrl.isNotEmpty) uniqueSources[sourceUrl] = source;
+      }
+      metadata['stream_sources'] = uniqueSources.values.toList();
       metadata['poster_url'] = _resolveImage(uri, metadata['poster_url']?.toString() ?? '');
       metadata['backdrop_url'] = _resolveImage(uri, metadata['backdrop_url']?.toString() ?? '');
       metadata['page_url'] = uri.toString();
