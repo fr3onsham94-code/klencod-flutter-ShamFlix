@@ -4203,7 +4203,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Map<String, String> _headersForServer([int? serverIndex]) {
-    final result = Map<String, String>.from(widget.headers);
+    final result = serverIndex == null ? Map<String, String>.from(widget.headers) : <String, String>{};
     final index = serverIndex ?? currentServerIndex;
     if (index >= 0 && index < widget.servers.length) {
       final server = widget.servers[index];
