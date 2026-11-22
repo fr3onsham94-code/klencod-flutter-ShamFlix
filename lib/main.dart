@@ -4853,7 +4853,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
 
   static const String _playerOnlyScript = r'''(() => {
     const isolate = () => {
-      const candidates = [...document.querySelectorAll('video, iframe, embed, object, canvas')];
+      const candidates = [...document.querySelectorAll('video, iframe, embed, object')];
       const visible = candidates.map(el => {
         const r = el.getBoundingClientRect();
         const style = getComputedStyle(el);
@@ -4887,7 +4887,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
     };
     isolate();
     const observer = new MutationObserver(() => isolate());
-    observer.observe(document.documentElement, {childList:true,subtree:true,attributes:true,attributeFilter:['src','style','class']});
+    observer.observe(document.documentElement, {childList:true,subtree:true,attributes:true,attributeFilter:['src']});
     setTimeout(() => observer.disconnect(), 20000);
   })();''';
 
