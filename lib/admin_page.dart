@@ -1865,11 +1865,8 @@ class _AdminPageState extends State<AdminPage> {
       final p1=await _loadAssignedPackageIds('series',primary),p2=await _loadAssignedPackageIds('series',source);
       await _saveContentPackageAssignments('series',primary,{...p1,...p2}.toList());
       await AuthService.client.from('content_package_items').delete().eq('content_type','series').eq('content_id',source);
-      final monitors=await _extraLoad('series_source_monitors',{'series_id':'eq.$source'});
-      for(final monitor in monitors){
-        final r=await http.patch(_extraTableUrl('series_source_monitors').replace(queryParameters:{'id':'eq.${monitor['id']}'}),headers:headers,body:jsonEncode({'series_id':primary}));
-        if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
-      }
+      final monitorResponse=await http.patch(_extraTableUrl('series_source_monitors').replace(queryParameters:{'series_id':'eq.$source'}),headers:headers,body:jsonEncode({'series_id':primary}));
+      if(monitorResponse.statusCode!=200&&monitorResponse.statusCode!=204)throw Exception(_readError(monitorResponse));
       final r=await http.delete(catalogUrl('series').replace(queryParameters:{'id':'eq.$source'}),headers:headers);
       if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
       selectedCatalogIds.clear();await loadCatalog('series');showMessage('تم دمج المسلسلين ونقل المواسم والحلقات والسيرفرات');
