@@ -213,6 +213,7 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     for (const stream of uniqueStreams) {
       streamRows.push({
         channel_id: null,
+        channel_key: key,
         server_name: stream.sourceName + " • " + (stream.url.includes(".m3u8") ? "HLS" : "DASH"),
         stream_url: stream.url,
         source_key: stream.sourceId + ":" + await hash(key + "|" + stream.url),
@@ -234,12 +235,9 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
   if (syncedError) throw syncedError;
   const channelIds = new Map((syncedChannels || []).map((x:any)=>[x.external_source_key,x.id]));
   const serverRows = streamRows.map((row:any) => {
-    const key = String(row.source_key).split(":").slice(1).join(":");
-    // The hash is unique to a canonical channel + stream; resolve the channel from the matching source row.
-    const sourceId = String(row.source_id);
-    const entry = [...grouped.entries()].find(([k, values]) =>
-      values.some(v => sourceId === v.sourceId && row.stream_url === v.url));
-    return { ...row, channel_id: entry ? channelIds.get(entry[0]) : null };
+    const channelId = channelIds.get(row.channel_key);
+    const { channel_key, ...server } = row;
+    return { ...server, channel_id: channelId };
   }).filter((row:any)=>row.channel_id);
 
   for (let i=0; i<serverRows.length; i+=250) {
