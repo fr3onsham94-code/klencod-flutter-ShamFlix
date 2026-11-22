@@ -25,6 +25,7 @@ import 'auth_page.dart';
 import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
 import 'shamflix_presence_service.dart';
+import 'stream_source_detector.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -4815,6 +4816,151 @@ class ShamFlixWebPage extends StatefulWidget {
 }
 class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
   late final WebViewController controller;
+  bool inspectingSources = false;
+
+  static const String _sourceScanScript = r'''
+(() => {
+  const found = new Map();
+  const add = (raw, kind, label) => {
+    if (!raw || typeof raw !== 'string') return;
+    let url;
+    try { url = new URL(raw.trim(), location.href).href; } catch (_) { return; }
+    if (!/^https?:\\/\\//i.test(url)) return;
+    if (url.length > 4096) return;
+    const key = url.split('#')[0];
+    const path = (() => { try { return new URL(key).pathname.toLowerCase(); } catch (_) { return ''; } })();
+    const direct = /\\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd|ts)(?:$)/i.test(path);
+    const old = found.get(key);
+    if (!old || (direct && !old.direct)) found.set(key, {
+      url: key, kind: direct ? 'media' : kind, label: label || (direct ? 'رابط فيديو مباشر' : 'صفحة تضمين'),
+      direct: direct
+    });
+  };
+
+  document.querySelectorAll('video[src], video source[src], audio[src], audio source[src], source[src]').forEach(el => {
+    add(el.src || el.getAttribute('src'), 'media', 'وسم فيديو/مصدر');
+  });
+  document.querySelectorAll('iframe[src], frame[src]').forEach(el => {
+    add(el.src || el.getAttribute('src'), 'iframe', 'إطار تضمين');
+  });
+  document.querySelectorAll('embed[src], object[data]').forEach(el => {
+    add(el.src || el.data || el.getAttribute('src') || el.getAttribute('data'), 'embed', 'مشغل مضمّن');
+  });
+  document.querySelectorAll('a[href]').forEach(el => {
+    const href = el.href || el.getAttribute('href');
+    if (href && /\\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:$|[?#])/i.test(href)) {
+      add(href, 'media', 'رابط فيديو');
+    }
+  });
+
+  // موارد الشبكة التي أتاحها المتصفح للصفحة الحالية فقط.
+  try {
+    performance.getEntriesByType('resource').forEach(entry => {
+      if (/\\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:$|[?#])/i.test(entry.name)) {
+        add(entry.name, 'media', 'مورد فيديو محمّل');
+      }
+    });
+  } catch (_) {}
+
+  // إعدادات المشغل المنشورة داخل HTML/JavaScript، دون تنفيذ أكواد إضافية.
+  const html = document.documentElement ? document.documentElement.innerHTML : '';
+  const patterns = [
+    /https?:\\/\\/[^\\s\\\"\'<>\\\\]+\\.(?:m3u8|mp4|mkv|mpd)(?:\\?[^\\s\\\"\'<>\\\\]*)?/ig,
+    /(?:file|src|source|hls|mp4|playlist)\\s*[:=]\\s*[\\\"\']([^\\\"\']+)[\\\"\']/ig
+  ];
+  patterns.forEach((pattern, index) => {
+    let match, count = 0;
+    while ((match = pattern.exec(html)) && count++ < 100) {
+      add(index === 0 ? match[0].replace(/\\\\\\//g, '/') : match[1], 'media', 'عنوان ضمن إعدادات الصفحة');
+    }
+  });
+  return JSON.stringify(Array.from(found.values()).slice(0, 80));
+})()
+''';
+
+  Future<void> _inspectPageSources() async {
+    if (inspectingSources) return;
+    setState(() => inspectingSources = true);
+    try {
+      final result = await controller.runJavaScriptReturningResult(_sourceScanScript);
+      dynamic decoded = result;
+      if (decoded is String) {
+        decoded = jsonDecode(decoded);
+        if (decoded is String) decoded = jsonDecode(decoded);
+      }
+      final entries = decoded is List
+          ? decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+          : <Map<String, dynamic>>[];
+      if (!mounted) return;
+      if (entries.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لم نعثر على روابط فيديو ظاهرة في الصفحة حالياً. جرّب تشغيل الفيديو ثم افحص مرة أخرى.')),
+        );
+        return;
+      }
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: panel,
+        builder: (sheetContext) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(sheetContext).size.height * 0.65,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(children: [
+                    Icon(Icons.travel_explore, color: gold),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text('الروابط المكتشفة (\u0024{entries.length})',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
+                  ]),
+                ),
+                const Divider(height: 1),
+                Expanded(child: ListView.separated(
+                  itemCount: entries.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+                  itemBuilder: (context, index) {
+                    final item = entries[index];
+                    final url = valueOf(item['url']);
+                    final direct = item['direct'] == true ||
+                        StreamSourceDetector.isDirectMediaUrl(url);
+                    final host = Uri.tryParse(url)?.host ?? url;
+                    return ListTile(
+                      leading: Icon(direct ? Icons.video_file : Icons.web, color: direct ? Colors.greenAccent : gold),
+                      title: Text(valueOf(item['label'], direct ? 'رابط فيديو مباشر' : 'صفحة تضمين'),
+                        style: const TextStyle(color: Colors.white)),
+                      subtitle: Text(host, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                      trailing: Icon(direct ? Icons.play_circle_outline : Icons.open_in_browser, color: gold),
+                      onTap: () async {
+                        Navigator.pop(sheetContext);
+                        if (direct) {
+                          await Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => ShamFlixPlayerPage(url: url, title: widget.title),
+                          ));
+                        } else {
+                          await controller.loadRequest(Uri.parse(url));
+                        }
+                      },
+                    );
+                  },
+                )),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر فحص روابط الصفحة: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => inspectingSources = false);
+    }
+  }
   int progress = 0;
   bool canGoBack = false;
   bool canGoForward = false;
@@ -4866,6 +5012,8 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
                 icon: const Icon(Icons.arrow_forward)),
             IconButton(tooltip: 'تحديث', onPressed: () => controller.reload(),
                 icon: const Icon(Icons.refresh)),
+            IconButton(tooltip: 'فحص روابط البث', onPressed: inspectingSources ? null : _inspectPageSources,
+                icon: inspectingSources ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.travel_explore)),
           ],
         ),
         body: Column(children: [
