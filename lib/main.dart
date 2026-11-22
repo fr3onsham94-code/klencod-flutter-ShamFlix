@@ -3789,7 +3789,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     final isWebPage = url.contains('/albaplayer/') ||
         url.contains('syrialive.my/matches/') ||
         url.contains('pandab-hd.com/') ||
-        RegExp(r'\\.php(?:\\?|$)', caseSensitive: false).hasMatch(url);
+        RegExp(r'\.php(?:\?|$)', caseSensitive: false).hasMatch(url);
     if (isWebPage) {
       await Navigator.push(context, MaterialPageRoute(
         builder: (_) => ShamFlixWebPage(
