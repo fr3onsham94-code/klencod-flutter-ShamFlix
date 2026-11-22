@@ -108,8 +108,8 @@ class _ContentImportPageState extends State<ContentImportPage> {
             'director': emptyNull(item['director']),
             'cast': emptyNull(item['cast']),
             'is_published': publish,
-            'source_page_url': type == 'movie' ? emptyNull(item['page_url']) : null,
           };
+          if (type == 'movie') data['source_page_url'] = emptyNull(item['page_url']);
           final saved = await AuthService.client.from(table).insert(data).select('id').single();
           final id = saved['id'].toString();
           await AuthService.client.from('content_package_items').insert({
