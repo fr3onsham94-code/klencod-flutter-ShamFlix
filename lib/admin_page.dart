@@ -1286,7 +1286,7 @@ class _AdminPageState extends State<AdminPage> {
             : 'الحلقة $number',
         'description': null,
         'stream_url': firstUrl,
-        'is_published': servers.isNotEmpty,
+        'is_published': true,
       });
       if (episodeId == null) continue;
       if (servers.isNotEmpty) {
