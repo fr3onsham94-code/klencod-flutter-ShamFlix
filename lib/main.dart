@@ -711,7 +711,11 @@ class _HomePageState extends State<HomePage> {
     final selected = categories[selectedCategory];
 
     return items.where((item) {
-      return valueOf(item['category']) == selected;
+      final itemCategories = valueOf(item['category'])
+          .split(RegExp(r'[,،|]'))
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty);
+      return itemCategories.contains(selected);
     }).toList();
   }
 
@@ -5535,7 +5539,10 @@ class ShamFlixSearch extends SearchDelegate {
     return allResults.where((item) {
       final searchable = [valueOf(item['title']), valueOf(item['category']), valueOf(item['release_year']), valueOf(item['description'])].join(' ').toLowerCase();
       final matchesText = searchText.isEmpty || searchable.contains(searchText);
-      final matchesCategory = categoryFilter == 'الكل' || valueOf(item['category']) == categoryFilter;
+      final itemCategories = valueOf(item['category'])
+          .split(RegExp(r'[,،|]'))
+          .map((value) => value.trim());
+      final matchesCategory = categoryFilter == 'الكل' || itemCategories.contains(categoryFilter);
       final matchesYear = yearFilter.trim().isEmpty || valueOf(item['release_year']).contains(yearFilter.trim());
       return matchesText && matchesCategory && matchesYear;
     }).toList();
