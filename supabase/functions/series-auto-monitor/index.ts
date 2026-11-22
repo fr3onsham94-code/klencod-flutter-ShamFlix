@@ -346,7 +346,15 @@ Deno.serve(async (req: Request) => {
               let seasonId=oldSeason?.id;
               if(!seasonId){const {data:s,error:si}=await db.from("seasons").insert({series_id:seriesId,season_number:episode.seasonNumber,name:"الموسم "+episode.seasonNumber}).select("id").single();if(si)throw si;seasonId=s.id;}
               const {data:oldEpisode,error:de}=await db.from("episodes").select("id").eq("season_id",seasonId).eq("episode_number",episode.number).maybeSingle();if(de)throw de;
-              if(oldEpisode){summary.skipped++;continue;}
+              if(oldEpisode){
+                const {data:oldServers,error:oldServerError}=await db.from("playback_servers").select("stream_url").eq("episode_id",oldEpisode.id);
+                if(oldServerError)throw oldServerError;
+                const oldUrls=new Set((oldServers||[]).map((x:any)=>x.stream_url));
+                const fresh=episode.sources.filter(x=>!oldUrls.has(x.url));
+                if(fresh.length){const rows=fresh.map((server,index)=>({episode_id:oldEpisode.id,server_name:server.name||("السيرفر "+(index+1)),stream_url:server.url,sort_order:(oldServers||[]).length+index,is_active:true}));const {error:saveNew}=await db.from("playback_servers").insert(rows);if(saveNew)throw saveNew;}
+                const {error:updateEpisode}=await db.from("episodes").update({stream_url:episode.streamUrl}).eq("id",oldEpisode.id);if(updateEpisode)throw updateEpisode;
+                summary.skipped++;continue;
+              }
               const {data:savedEpisode,error:ei}=await db.from("episodes").insert({season_id:seasonId,episode_number:episode.number,title:episode.title||("الحلقة "+episode.number),stream_url:episode.streamUrl,is_published:true}).select("id").single();if(ei)throw ei;
               if(episode.sources.length){const rows=episode.sources.map((server,index)=>({episode_id:savedEpisode.id,server_name:server.name||("السيرفر "+(index+1)),stream_url:server.url,sort_order:index,is_active:true}));const {error:se}=await db.from("playback_servers").insert(rows);if(se)throw se;}
               added++;summary.added++;
