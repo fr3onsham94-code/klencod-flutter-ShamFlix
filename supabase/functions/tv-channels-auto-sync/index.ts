@@ -48,10 +48,14 @@ function normalizeName(value: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
-function canonicalKey(tvgId: string, name: string): string {
+function canonicalKey(tvgId: string, name: string, sourceId: string): string {
   const id = normalizeName(tvgId);
-  const alias = arabicAlias(name) || name;
-  return id ? "id:" + id : "name:" + normalizeName(alias);
+  const alias = arabicAlias(name);
+  if (id) return "id:" + id;
+  // Cross-source merging without a stable ID is allowed only for an explicit,
+  // reviewed alias. Similar display names alone are not proof of identity.
+  if (alias) return "alias:" + normalizeName(alias);
+  return "source:" + sourceId + ":name:" + normalizeName(name);
 }
 
 function safeStreamUrl(raw: string): string | null {
@@ -87,9 +91,10 @@ function categoryOf(raw: string, name: string): string {
 }
 
 function parseM3u(text: string, sourceId: string) {
-  const result: Array<{sourceId:string;sourceName:string;key:string;name:string;nameEn:string;tvgId:string;logo:string;category:string;url:string}> = [];
+  const result: Array<{sourceId:string;sourceName:string;key:string;name:string;nameEn:string;tvgId:string;logo:string;category:string;url:string;position:number}> = [];
   let pending: Record<string,string> | null = null;
   let displayName = "";
+  let position = 0;
   for (const raw of text.replace(/^\uFEFF/, "").split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
@@ -108,13 +113,14 @@ function parseM3u(text: string, sourceId: string) {
       result.push({
         sourceId,
         sourceName: sourceId === "iptv-org" ? "IPTV-ORG" : sourceId === "free-tv" ? "FREE-TV" : "IPTV-NEXUS",
-        key: canonicalKey(tvgId, name),
+        key: canonicalKey(tvgId, name, sourceId),
         name,
         nameEn: name,
         tvgId,
         logo: pending["tvg-logo"] || "",
         category: categoryOf(pending["group-title"] || "", name),
         url,
+        position: position++,
       });
     }
     pending = null;
@@ -124,11 +130,30 @@ function parseM3u(text: string, sourceId: string) {
   return result;
 }
 
+const ALLOWED_PLAYLIST_HOSTS = new Set([
+  "iptv-org.github.io",
+  "raw.githubusercontent.com",
+  "dearbulut.github.io",
+]);
+
 async function fetchPlaylist(source: typeof SOURCES[number]) {
-  const response = await fetch(source.url, {
-    signal: AbortSignal.timeout(45000),
-    headers: { "User-Agent": "ShamFlix-TV-Aggregator/1.0", "Accept": "text/plain,*/*" },
-  });
+  let current = new URL(source.url);
+  let response: Response | null = null;
+  for (let hop = 0; hop <= 3; hop++) {
+    if (current.protocol !== "https:" || !ALLOWED_PLAYLIST_HOSTS.has(current.hostname.toLowerCase())) {
+      throw new Error(source.id + " redirected to a non-approved playlist host");
+    }
+    response = await fetch(current.toString(), {
+      redirect: "manual",
+      signal: AbortSignal.timeout(45000),
+      headers: { "User-Agent": "ShamFlix-TV-Aggregator/1.0", "Accept": "text/plain,*/*" },
+    });
+    if (response.status < 300 || response.status >= 400) break;
+    const location = response.headers.get("location");
+    if (!location || hop === 3) throw new Error(source.id + " returned an invalid or excessive redirect");
+    current = new URL(location, current);
+  }
+  if (!response) throw new Error(source.id + " did not return a response");
   if (!response.ok) throw new Error(source.id + " returned HTTP " + response.status);
   const body = await response.text();
   if (new TextEncoder().encode(body).length > MAX_PLAYLIST_BYTES) throw new Error(source.id + " playlist exceeds size limit");
@@ -238,6 +263,7 @@ async function syncChannels(db: any) {
         source_key: stream.sourceId + ":" + await hash(key + "|" + stream.url),
         source_id: stream.sourceId,
         source_seen_at: new Date().toISOString(),
+        source_position: stream.position,
         source_failures: 0,
         is_active: true,
         sort_order: stream.sourceId === "nexus" ? 0 : stream.sourceId === "iptv-org" ? 1 : 2,
@@ -273,6 +299,7 @@ async function syncChannels(db: any) {
     .select("id,channel_id,source_id,source_seen_at")
     .not("source_id","is",null)
     .order("source_seen_at",{ascending:false,nullsFirst:false})
+    .order("source_position",{ascending:false,nullsFirst:false})
     .limit(50000);
   if (sourceServersError) throw sourceServersError;
   const groupedServers = new Map<string, any[]>();
@@ -311,6 +338,18 @@ async function syncChannels(db: any) {
     const packageId = packageIds.get("قنوات تلقائية — " + category);
     if (channelId && packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
   }
+  const syncedChannelIdList = [...new Set(itemRows.map(row => String(row.content_id)))];
+  if (syncedChannelIdList.length) {
+    const automaticPackageIds = (packages || []).map((x:any) => x.id);
+    if (automaticPackageIds.length) {
+      const { error: removeOldAutomaticMemberships } = await db.from("content_package_items")
+        .delete()
+        .eq("content_type","channel")
+        .in("content_id",syncedChannelIdList)
+        .in("package_id",automaticPackageIds);
+      if (removeOldAutomaticMemberships) throw removeOldAutomaticMemberships;
+    }
+  }
   for (let i=0; i<itemRows.length; i+=500) {
     const { error } = await db.from("content_package_items")
       .upsert(itemRows.slice(i,i+500), { onConflict:"package_id,content_type,content_id", ignoreDuplicates:true });
@@ -330,50 +369,19 @@ async function syncChannels(db: any) {
   };
 }
 
-async function probeServer(url: string): Promise<"ok"|"blocked"|"bad"> {
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      // Do not follow arbitrary playlist redirects from the server-side health checker.
-      redirect: "manual",
-      signal: AbortSignal.timeout(7000),
-      headers: { "Range": "bytes=0-1023", "User-Agent": "ShamFlix-TV-Health/1.0", "Accept": "*/*" },
-    });
-    if (response.body) await response.body.cancel().catch(() => {});
-    if ((response.status >= 300 && response.status < 400) ||
-        response.status === 401 || response.status === 403 || response.status === 451) return "blocked";
-    if (response.status === 404 || response.status === 410 || response.status >= 500) return "bad";
-    return response.ok || response.status === 206 ? "ok" : "bad";
-  } catch { return "bad"; }
-}
-
 async function healthCheck(db: any) {
-  const { data: servers, error } = await db.from("playback_servers")
-    .select("id,stream_url,source_failures,is_active")
-    .not("source_id","is",null)
-    .order("source_checked_at",{ascending:true,nullsFirst:true}).limit(MAX_HEALTH_CHECKS);
+  const { count, error } = await db.from("playback_servers")
+    .select("id", { count: "exact", head: true })
+    .not("source_id","is",null);
   if (error) throw error;
-  let checked=0, recovered=0, disabled=0, blocked=0;
-  const rows = servers || [];
-  for (let i=0; i<rows.length; i+=CONCURRENCY) {
-    await Promise.all(rows.slice(i,i+CONCURRENCY).map(async (server:any) => {
-      const result = await probeServer(server.stream_url);
-      const failures = Number(server.source_failures || 0);
-      const nextFailures = result === "bad" ? failures + 1 : result === "ok" ? 0 : failures;
-      const active = nextFailures < 3;
-      const { error: updateError } = await db.from("playback_servers").update({
-        source_checked_at: new Date().toISOString(),
-        source_failures: nextFailures,
-        is_active: active,
-      }).eq("id",server.id);
-      if (updateError) throw updateError;
-      checked++;
-      if (result === "blocked") blocked++;
-      if (result === "ok" && failures > 0) recovered++;
-      if (server.is_active && !active) disabled++;
-    }));
-  }
-  return { checked, recovered, disabled, geoBlockedOrAuthProtected: blocked };
+  // Stream hosts originate in third-party playlists and are not safe to fetch from
+  // the Edge Function without DNS pinning and redirect validation. Keep their state
+  // unchanged until a safe external health-check mechanism is configured.
+  return {
+    checked: 0,
+    skipped: count || 0,
+    reason: "Server-side probing of untrusted stream hosts is disabled to prevent SSRF",
+  };
 }
 
 Deno.serve(async (req: Request) => {
