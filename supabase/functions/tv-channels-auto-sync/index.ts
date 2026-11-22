@@ -166,11 +166,15 @@ async function verifySecret(db: any, token: string) {
 }
 
 async function syncChannels(db: any) {
-  // All three sources must download and parse successfully before any catalogue writes.
-  const sourceResults = await Promise.all(SOURCES.map(async source => ({
+  // Each source is reconciled independently. A failed source must never affect its saved servers.
+  const settledSources = await Promise.all(SOURCES.map(async source => ({
     source,
     entries: await fetchPlaylist(source),
-  })));
+  })).map(p => p.then(value => ({ status: "fulfilled" as const, value }))
+    .catch(reason => ({ status: "rejected" as const, reason }))));
+  const sourceResults = settledSources.filter((x): x is {status:"fulfilled";value:{source:typeof SOURCES[number];entries:ReturnType<typeof parseM3u>}} => x.status === "fulfilled").map(x => x.value);
+  const sourceErrors = settledSources.filter(x => x.status === "rejected");
+  if (!sourceResults.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
   const grouped = new Map<string, typeof sourceResults[number]["entries"]>();
   for (const { entries } of sourceResults) {
     for (const entry of entries) {
@@ -232,6 +236,7 @@ async function syncChannels(db: any) {
         stream_url: stream.url,
         source_key: stream.sourceId + ":" + await hash(key + "|" + stream.url),
         source_id: stream.sourceId,
+        source_seen_at: new Date().toISOString(),
         source_failures: 0,
         is_active: true,
         sort_order: stream.sourceId === "nexus" ? 0 : stream.sourceId === "iptv-org" ? 1 : 2,
@@ -254,8 +259,34 @@ async function syncChannels(db: any) {
     return { ...server, channel_id: channelId };
   }).filter((row:any)=>row.channel_id);
 
+  // Upsert only URLs observed in successfully parsed sources. source_seen_at is refreshed
+  // for links still present, while older links that disappeared remain as fallbacks.
   for (let i=0; i<serverRows.length; i+=500) {
     const { error } = await db.from("playback_servers").upsert(serverRows.slice(i,i+500), { onConflict:"source_key" });
+    if (error) throw error;
+  }
+
+  // Keep only the two most recently observed URLs for each channel + source pair.
+  // This bounds history without allowing one source to delete another source's servers.
+  const { data: sourceServers, error: sourceServersError } = await db.from("playback_servers")
+    .select("id,channel_id,source_id,source_seen_at")
+    .not("source_id","is",null)
+    .order("source_seen_at",{ascending:false,nullsFirst:false})
+    .limit(50000);
+  if (sourceServersError) throw sourceServersError;
+  const groupedServers = new Map<string, any[]>();
+  for (const server of sourceServers || []) {
+    const groupKey = server.channel_id + "|" + server.source_id;
+    const group = groupedServers.get(groupKey) || [];
+    group.push(server);
+    groupedServers.set(groupKey,group);
+  }
+  const deleteIds: string[] = [];
+  for (const servers of groupedServers.values()) {
+    for (const stale of servers.slice(2)) deleteIds.push(stale.id);
+  }
+  for (let i=0; i<deleteIds.length; i+=500) {
+    const { error } = await db.from("playback_servers").delete().in("id",deleteIds.slice(i,i+500));
     if (error) throw error;
   }
 
@@ -286,7 +317,12 @@ async function syncChannels(db: any) {
     channels: channelRows.length,
     servers: serverRows.length,
     packages: packageRows.length,
-    sources: sourceResults.map(x => ({ id:x.source.id, entries:x.entries.length })),
+    sources: [
+      ...sourceResults.map(x => ({ id:x.source.id, entries:x.entries.length, status:"synced" })),
+      ...sourceErrors.map((x:any, index:number) => ({ id:SOURCES[settledSources.indexOf(x)]?.id || "unknown", status:"failed", error:String(x.reason?.message || x.reason || "fetch failed") })),
+    ],
+    retainedServerLimit: 2,
+    retentionScope: "per channel and per source",
   };
 }
 
