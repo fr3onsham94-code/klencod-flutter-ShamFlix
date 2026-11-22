@@ -575,6 +575,7 @@ class _HomePageState extends State<HomePage> {
 
   late Future<List<Map<String, dynamic>>> movies;
   late Future<List<Map<String, dynamic>>> series;
+  late Future<List<Map<String, dynamic>>> anime;
   late Future<List<Map<String, dynamic>>> channels;
   late Future<List<Map<String, dynamic>>> recentHistory;
   late Future<List<Map<String, dynamic>>> featuredItems;
@@ -652,6 +653,18 @@ class _HomePageState extends State<HomePage> {
   void loadData() {
     movies = SupabaseService.getMovies();
     series = SupabaseService.getSeries();
+    anime = Future.wait([movies, series]).then((lists) {
+      final combined = <Map<String, dynamic>>[
+        ...lists[0].map((item) => {...item, '_isSeries': false}),
+        ...lists[1].map((item) => {...item, '_isSeries': true}),
+      ];
+      combined.sort((a, b) {
+        final dateA = DateTime.tryParse(valueOf(a['created_at'])) ?? DateTime(1970);
+        final dateB = DateTime.tryParse(valueOf(b['created_at'])) ?? DateTime(1970);
+        return dateB.compareTo(dateA);
+      });
+      return combined;
+    });
     channels = SupabaseService.getChannels();
     featuredItems = Future.wait([movies, series]).then((lists) {
       final latestMovies = lists[0].take(2).map((item) => {...item, '_isSeries': false});
@@ -894,9 +907,12 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: items.length,
                 itemBuilder: (context, index) {
+                  final item = items[index];
                   return mediaCard(
-                    items[index],
-                    isSeries: isSeries,
+                    item,
+                    isSeries: item.containsKey('_isSeries')
+                        ? item['_isSeries'] == true
+                        : isSeries,
                   );
                 },
               );
@@ -1218,7 +1234,7 @@ class _HomePageState extends State<HomePage> {
           continueWatchingSection(),
           mediaSection(appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'), movies, isSeries: false),
           mediaSection(appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'), series, isSeries: true),
-          mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), series, isSeries: true),
+          mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), anime, isSeries: false),
           recentChannelsSection(),
           const SizedBox(height: 30),
         ],
