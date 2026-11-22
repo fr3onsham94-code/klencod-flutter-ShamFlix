@@ -1294,7 +1294,7 @@ class _AdminPageState extends State<AdminPage> {
     return data;
   }
 
-  Future<void> _saveImportedAkwamEpisodes(
+  Future<String?> _saveImportedAkwamEpisodes(
     String seriesId,
     List<Map<String, dynamic>> importedEpisodes,
   ) async {
@@ -1413,9 +1413,9 @@ class _AdminPageState extends State<AdminPage> {
     }
 
     final message = 'حلقات جديدة: $added • تم تحديث: $updated • سيرفرات جديدة: $linkedServers';
-    showMessage(missingServers > 0
+    return missingServers > 0
         ? '$message • $missingServers حلقة بلا سيرفر مشاهدة'
-        : message, isError: missingServers > 0);
+        : message;
   }
 
   Future<void> openCatalogForm(
@@ -1461,6 +1461,7 @@ class _AdminPageState extends State<AdminPage> {
     bool isLive = existing?['is_live'] != false;
     List<Map<String, dynamic>> importedAkwamEpisodes = [];
     String? episodeImportWarning;
+    String? episodeImportSummary;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
     final packageType = isSeries ? 'series' : 'channel';
@@ -1759,14 +1760,17 @@ class _AdminPageState extends State<AdminPage> {
       if (savedId != null) {
         if (!isSeries) await _saveServerDrafts('channel', savedId, serverDrafts);
         if (isSeries && importedAkwamEpisodes.isNotEmpty) {
-          await _saveImportedAkwamEpisodes(savedId, importedAkwamEpisodes);
+          episodeImportSummary = await _saveImportedAkwamEpisodes(savedId, importedAkwamEpisodes);
         }
         await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
       }
-      showMessage(episodeImportWarning != null
-          ? 'تم حفظ بيانات المسلسل، لكن تعذر استيراد الحلقات: $episodeImportWarning'
-          : existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح',
-          isError: episodeImportWarning != null);
+      showMessage(
+        episodeImportWarning != null
+            ? 'تم حفظ بيانات المسلسل، لكن تعذر استيراد الحلقات: $episodeImportWarning'
+            : episodeImportSummary ?? (existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح'),
+        isError: episodeImportWarning != null ||
+            (episodeImportSummary?.contains('بلا سيرفر مشاهدة') ?? false),
+      );
     } catch (e) {
       showMessage(e.toString(), isError: true);
     } finally {
