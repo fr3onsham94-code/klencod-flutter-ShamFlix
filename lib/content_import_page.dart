@@ -161,7 +161,15 @@ class _ContentImportPageState extends State<ContentImportPage> {
       }
       if (type == 'movie' && monitorMovies) {
         final sourceUri = Uri.tryParse(url.text.trim());
-        if (sourceUri != null &&
+        final sourceHost = sourceUri?.host.toLowerCase() ?? '';
+        final isAkwam = sourceHost == 'akwam.ss' || sourceHost.endsWith('.akwam.ss');
+
+        // Akwam returns HTTP 500 to the cloud monitor. Its public listing is
+        // scanned from the admin device instead; do not register a broken cron monitor.
+        if (isAkwam) {
+          movieMonitorCreated = 0;
+          movieMonitorFailures = 0;
+        } else if (sourceUri != null &&
             (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
             sourceUri.host.isNotEmpty && sourceUri.userInfo.isEmpty) {
           try {
@@ -185,9 +193,12 @@ class _ContentImportPageState extends State<ContentImportPage> {
           (type == 'series' && monitorSeries
               ? ' • تمت جدولة $monitorsCreated للمراقبة • تعذر تفعيل المراقبة لـ $monitorFailures'
               : type == 'movie' && monitorMovies
-                  ? (movieMonitorCreated > 0
-                      ? ' • تم حفظ قسم الأفلام للمراقبة التلقائية'
-                      : ' • تعذر حفظ رابط المراقبة')
+                  ? ((Uri.tryParse(url.text.trim())?.host.toLowerCase() == 'akwam.ss' ||
+                      (Uri.tryParse(url.text.trim())?.host.toLowerCase() ?? '').endsWith('.akwam.ss'))
+                      ? ' • أكوام: يتم فحص القسم من جهاز الإدارة عند الضغط على فحص القسم'
+                      : movieMonitorCreated > 0
+                          ? ' • تم حفظ قسم الأفلام للمراقبة التلقائية'
+                          : ' • تعذر حفظ رابط المراقبة')
                   : ''));
     } catch (e) { message('تعذر الاستيراد: $e', true); }
     finally { if (mounted) setState(() => importing = false); }
