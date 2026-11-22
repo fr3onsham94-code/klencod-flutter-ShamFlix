@@ -5309,6 +5309,7 @@ class _ShamFlixServerResolverPageState extends State<ShamFlixServerResolverPage>
   bool checking = false;
   bool fallbackVisible = false;
   int navigationDepth = 0;
+  int scanAttempts = 0;
   final Set<String> visitedUrls = <String>{};
 
   static const String _scanScript = r'''
@@ -5394,6 +5395,7 @@ class _ShamFlixServerResolverPageState extends State<ShamFlixServerResolverPage>
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) {
           currentUrl = url;
+          scanAttempts = 0;
           if (mounted) setState(() => fallbackVisible = false);
         },
         onPageFinished: (url) {
@@ -5450,9 +5452,19 @@ class _ShamFlixServerResolverPageState extends State<ShamFlixServerResolverPage>
         );
         return;
       }
-      _showFallback();
+      scanAttempts++;
+      if (scanAttempts >= 12) {
+        _showFallback();
+      } else {
+        Future<void>.delayed(const Duration(seconds: 2), _inspectPage);
+      }
     } catch (_) {
-      _showFallback();
+      scanAttempts++;
+      if (scanAttempts >= 12) {
+        _showFallback();
+      } else {
+        Future<void>.delayed(const Duration(seconds: 2), _inspectPage);
+      }
     } finally {
       checking = false;
     }
