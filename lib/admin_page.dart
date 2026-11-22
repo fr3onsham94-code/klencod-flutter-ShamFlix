@@ -3588,6 +3588,11 @@ class _AdminPageState extends State<AdminPage> {
                               try {
                                 final data = await _inspectContentPage(pageUrlController.text, 'movie');
                                 if (!dialogContext.mounted) return;
+                                final rawSources = data['stream_sources'];
+                                final candidates = rawSources is List
+                                    ? rawSources.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+                                    : <Map<String, dynamic>>[];
+                                var addedSources = 0;
                                 setDialogState(() {
                                   titleController.text = data['title']?.toString() ?? titleController.text;
                                   posterController.text = data['poster_url']?.toString() ?? '';
@@ -3598,8 +3603,27 @@ class _AdminPageState extends State<AdminPage> {
                                   categoryController.text = data['category']?.toString() ?? '';
                                   yearController.text = data['release_year']?.toString() ?? '';
                                   ratingController.text = data['rating']?.toString() ?? '';
+                                  for (final source in candidates) {
+                                    final url = source['url']?.toString().trim() ?? '';
+                                    if (url.isEmpty || serverDrafts.any((draft) =>
+                                        (draft['url'] as TextEditingController).text.trim() == url)) {
+                                      continue;
+                                    }
+                                    final emptyIndex = serverDrafts.indexWhere((draft) =>
+                                        (draft['url'] as TextEditingController).text.trim().isEmpty);
+                                    final sourceName = source['name']?.toString() ?? 'Embed';
+                                    if (emptyIndex >= 0) {
+                                      (serverDrafts[emptyIndex]['name'] as TextEditingController).text = sourceName;
+                                      (serverDrafts[emptyIndex]['url'] as TextEditingController).text = url;
+                                    } else {
+                                      serverDrafts.add(_newServerDraft(name: sourceName, url: url));
+                                    }
+                                    addedSources++;
+                                  }
                                 });
-                                showMessage('تم تحليل الصفحة وجلب البيانات المتاحة');
+                                showMessage(addedSources > 0
+                                    ? 'تم جلب البيانات وإضافة $addedSources رابط تشغيل إلى السيرفرات'
+                                    : 'تم تحليل الصفحة، لكن لم يظهر رابط بث مباشر في HTML');
                               } catch (e) {
                                 if (dialogContext.mounted) showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
                               } finally {
