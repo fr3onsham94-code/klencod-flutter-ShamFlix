@@ -160,17 +160,26 @@ function extractSources(html: string, page: URL) {
   const add = (raw: string | undefined, name: string) => {
     if (!raw) return;
     try {
-      const url = validateUrl(new URL(raw.replace(/&amp;/g,"&").replace(/\\//g,"/"),page).toString());
+      let value=raw.replace(/&amp;/g,"&").replace(/\\\//g,"/").replace(/\\u0026/g,"&").trim();
+      if(value.startsWith("//")) value=page.protocol+value;
+      const url=validateUrl(new URL(value,page).toString());
       found.set(url.toString(),{url:url.toString(),name});
     } catch {}
   };
-  for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)) {
-    const a=attrs(m[0]); add(a.src || a["data-src"] || a["data-lazy-src"] || a["data-url"] || a.data,"مشغل الفيلم");
+  for(const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)){
+    const a=attrs(m[0]);
+    add(a.src||a["data-src"]||a["data-lazy-src"]||a["data-url"]||a["data-embed"]||a["data-video"]||a["data-href"]||a["data-file"]||a.data,"مشغل الفيلم");
   }
-  for (const m of html.matchAll(/https?:\/\/[^\s"'<>\]+?\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:\?[^\s"'<>]*)?/gi)) {
-    add(m[0],"رابط مباشر"); if(found.size>=30) break;
+  for(const m of html.matchAll(/(?:src|href|data-src|data-url|data-embed|data-file|file|source|url)\s*[:=]\s*["']([^"']{8,2000})["']/gi)){
+    const raw=m[1];
+    if(/^(https?:)?\/\//i.test(raw)||/\.(?:m3u8|mp4|mpd|webm)(?:[?#]|$)/i.test(raw)||/(?:embed|player|watch)/i.test(raw)) add(raw,"مصدر تشغيل");
   }
-  return [...found.values()].slice(0,30);
+  for(const m of html.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)){
+    const raw=m[0].replace(/&amp;/g,"&");
+    if(/\.(?:m3u8|mp4|mpd|m4v|mov|webm|avi)(?:[?#]|$)/i.test(raw)||/(?:\/embed\/|\/player\/|\/watch\/)/i.test(raw)) add(raw,"رابط تشغيل");
+    if(found.size>=60) break;
+  }
+  return [...found.values()].slice(0,60);
 }
 async function inspectMovie(card: {url:string;title:string;poster:string}, host: string, category: string) {
   const page = await fetchHtml(card.url,host);
