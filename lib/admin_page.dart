@@ -3491,6 +3491,8 @@ class _AdminPageState extends State<AdminPage> {
     final tmdbController = TextEditingController(
       text: existing?['tmdb_id']?.toString() ?? '',
     );
+    final pageUrlController = TextEditingController();
+    bool pageImportLoading = false;
 
     final posterController = TextEditingController(
       text: existing?['poster_url']?.toString() ?? '',
