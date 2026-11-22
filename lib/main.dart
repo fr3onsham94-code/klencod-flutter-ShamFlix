@@ -2823,6 +2823,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   Map<String, dynamic>? selectedChannel;
   List<Map<String, dynamic>> selectedServers = [];
   String selectedUrl = '';
+  int selectedServerIndex = 0;
   bool starting = false;
 
   bool get _isMatchesPackage => packages.any((p) =>
@@ -2867,6 +2868,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       selectedChannel = null;
       selectedServers = [];
       selectedUrl = '';
+      selectedServerIndex = 0;
       return;
     }
     if (selectedPackageId == null) {
@@ -2897,6 +2899,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       selectedChannel = null;
       selectedServers = [];
       selectedUrl = '';
+      selectedServerIndex = 0;
     } catch (e) {
       error = e.toString();
     }
@@ -2944,6 +2947,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         selectedChannel = channel;
         selectedServers = servers;
         selectedUrl = url;
+        selectedServerIndex = 0;
       });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -3012,12 +3016,14 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                         url: selectedUrl,
                         title: valueOf(selectedChannel!['name'], appText('قناة', 'Channel', 'Kanal')),
                         servers: selectedServers,
+                        initialServerIndex: selectedServerIndex,
                         progressKey: 'channel-${selectedChannel!['id']}',
                         embedded: true,
                         onClose: () => setState(() {
                           selectedChannel = null;
                           selectedServers = [];
                           selectedUrl = '';
+                          selectedServerIndex = 0;
                         }),
                       ),
               ),
@@ -3099,6 +3105,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                 };
                                 selectedServers = servers;
                                 selectedUrl = url;
+                                selectedServerIndex = serverIndex;
                               });
                             },
                           )
