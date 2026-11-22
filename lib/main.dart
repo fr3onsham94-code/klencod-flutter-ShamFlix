@@ -3077,7 +3077,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                               if (userAgent.isNotEmpty) serverHeaders['User-Agent'] = userAgent;
                               if (referer.isNotEmpty) serverHeaders['Referer'] = referer;
                               if (url.contains('/albaplayer/') ||
-                                  RegExp(r'\\.php(?:\\?|$)', caseSensitive: false).hasMatch(url)) {
+                                  RegExp(r'\.php(?:\?|$)', caseSensitive: false).hasMatch(url)) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
