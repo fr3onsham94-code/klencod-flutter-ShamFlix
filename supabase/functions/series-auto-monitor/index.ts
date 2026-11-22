@@ -1,0 +1,212 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "content-type, x-shamflix-monitor-secret",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+function clean(value: string): string {
+  return value.replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+}
+function attrs(tag: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const pattern = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+  for (const m of tag.matchAll(pattern)) result[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? "";
+  return result;
+}
+function validateUrl(raw: string): URL {
+  const url = new URL(raw);
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password ||
+      (url.port && !["80", "443"].includes(url.port))) throw new Error("رابط المصدر غير صالح");
+  const host = url.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "::1" ||
+      /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+    throw new Error("تم رفض عنوان شبكة محلية");
+  }
+  url.hash = "";
+  return url;
+}
+async function fetchHtml(raw: string, originalHost?: string): Promise<{ html: string; url: URL }> {
+  let url = validateUrl(raw);
+  const allowedHost = originalHost ?? url.hostname;
+  for (let redirect = 0; redirect <= 4; redirect++) {
+    const response = await fetch(url, {
+      redirect: "manual", signal: AbortSignal.timeout(18000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+      },
+    });
+    if ([301,302,303,307,308].includes(response.status)) {
+      const location = response.headers.get("location");
+      if (!location || redirect === 4) throw new Error("تجاوز الموقع عدد التحويلات المسموح");
+      const next = validateUrl(new URL(location, url).toString());
+      if (next.hostname !== allowedHost) throw new Error("تم رفض تحويل الصفحة إلى نطاق آخر");
+      url = next; continue;
+    }
+    if (!response.ok) throw new Error("رفض الموقع قراءة الصفحة: HTTP " + response.status);
+    const type = response.headers.get("content-type")?.toLowerCase() ?? "";
+    if (type && !type.includes("text/html") && !type.includes("application/xhtml")) throw new Error("الرابط لا يشير إلى صفحة HTML");
+    const html = await response.text();
+    if (new TextEncoder().encode(html).length > 2 * 1024 * 1024) throw new Error("حجم الصفحة أكبر من الحد المسموح");
+    return { html, url };
+  }
+  throw new Error("تعذر قراءة الصفحة");
+}
+function titleFromHtml(html: string): string {
+  const og = /<meta\b[^>]*(?:property|name)=["'](?:og:title|twitter:title)["'][^>]*>/i.exec(html)?.[0];
+  return clean((og ? attrs(og).content : "") || /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] || "");
+}
+function parseSeason(text: string, fallback: number): number {
+  const n = Number(/(?:season|الموسم)\s*[-:#]?\s*(\d{1,2})/i.exec(text)?.[1]);
+  return Number.isInteger(n) && n > 0 && n <= 100 ? n : fallback;
+}
+function parseEpisodeNumber(text: string): number | null {
+  for (const pattern of [
+    /(?:episode|الحلقة|حلقة|ep)\s*[-:#_]?\s*(\d{1,4})/i,
+    /(?:episode|ep)[-_](\d{1,4})/i,
+    /-(\d{1,4})(?:[/?#]|$)/i,
+  ]) {
+    const n = Number(pattern.exec(text)?.[1]);
+    if (Number.isInteger(n) && n > 0 && n <= 9999) return n;
+  }
+  return null;
+}
+function extractEpisodeLinks(html: string, base: URL) {
+  const found = new Map<string, { url: string; title: string; number: number }>();
+  for (const m of html.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)) {
+    const opening = /^<a\b[^>]*>/i.exec(m[0])?.[0];
+    if (!opening) continue;
+    const href = attrs(opening).href;
+    if (!href || /^javascript:|^#|^mailto:/i.test(href)) continue;
+    let target: URL;
+    try { target = validateUrl(new URL(href, base).toString()); } catch { continue; }
+    if (target.hostname !== base.hostname || !/(?:episode|episodes|الحلقة)/i.test(target.pathname)) continue;
+    const title = clean(m[0]);
+    const number = parseEpisodeNumber(title + " " + target.pathname);
+    if (!number) continue;
+    target.search = "";
+    found.set(target.toString(), { url: target.toString(), title, number });
+    if (found.size >= 100) break;
+  }
+  return [...found.values()].sort((a,b) => a.number-b.number);
+}
+function extractSources(html: string, base: URL) {
+  const found = new Map<string, {url:string; name:string}>();
+  const add = (raw: string | undefined, name: string) => {
+    if (!raw) return;
+    try {
+      const url = validateUrl(new URL(raw.replace(/&amp;/g,"&").replace(/\\\//g,"/"), base).toString());
+      found.set(url.toString(), {url:url.toString(),name});
+    } catch { /* ignore malformed URLs */ }
+  };
+  for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)) {
+    const a = attrs(m[0]); add(a.src || a["data-src"] || a["data-lazy-src"] || a["data-url"] || a["data"], "مشغل الحلقة");
+  }
+  for (const m of html.matchAll(/https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|webm|mpd)(?:\?[^\s"'<>]*)?/gi)) {
+    add(m[0], "رابط مباشر"); if (found.size >= 15) break;
+  }
+  return [...found.values()].slice(0,15);
+}
+async function inspectEpisode(link: {url:string;title:string;number:number}, host: string) {
+  const page = await fetchHtml(link.url, host);
+  const title = titleFromHtml(page.html) || link.title || ("الحلقة " + link.number);
+  let watchUrl: string | null = null;
+  for (const m of page.html.matchAll(/<a\b[^>]*>/gi)) {
+    const href = attrs(m[0]).href; if (!href) continue;
+    try {
+      const candidate = validateUrl(new URL(href,page.url).toString());
+      if (candidate.hostname === host && /\/watch(?:\/|$)/i.test(candidate.pathname)) { watchUrl = candidate.toString(); break; }
+    } catch { /* ignore */ }
+  }
+  let sources = extractSources(page.html,page.url);
+  if (watchUrl) {
+    try { const watch = await fetchHtml(watchUrl,host); sources = [...sources,...extractSources(watch.html,watch.url)]; } catch { /* fallback to watch page */ }
+  }
+  if (watchUrl && !sources.some(s=>s.url===watchUrl)) sources.push({url:watchUrl,name:"صفحة مشاهدة الحلقة"});
+  const unique = [...new Map(sources.map(s=>[s.url,s])).values()].slice(0,15);
+  return {number:link.number,title,streamUrl:unique[0]?.url ?? null,sources:unique};
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok",{headers:corsHeaders});
+  if (req.method !== "POST") return json({error:"Method not allowed"},405);
+  const cronToken = req.headers.get("x-shamflix-monitor-secret") ?? "";
+  if (!cronToken) return json({error:"Unauthorized"},401);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) return json({error:"Server configuration missing"},500);
+  const db = createClient(supabaseUrl,serviceKey,{auth:{autoRefreshToken:false,persistSession:false}});
+  const {data:tokenValid,error:tokenError} = await db.rpc("verify_series_monitor_cron_secret",{candidate_secret:cronToken});
+  if (tokenError || tokenValid !== true) return json({error:"Unauthorized"},401);
+  const {data:monitors,error:listError} = await db.from("series_source_monitors")
+    .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at")
+    .eq("is_active",true).order("created_at",{ascending:true}).limit(100);
+  if (listError) return json({error:listError.message},500);
+  const now = Date.now();
+  const summary = {checked:0,added:0,skipped:0,failed:0,results:[] as unknown[]};
+  for (const monitor of monitors ?? []) {
+    const last = monitor.last_checked_at ? new Date(monitor.last_checked_at).getTime() : 0;
+    const interval = Math.max(30,Number(monitor.check_interval_minutes)||60)*60000;
+    if (last && now-last < interval) continue;
+    let added = 0; let errorMessage: string | null = null;
+    try {
+      const source = validateUrl(monitor.source_url);
+      const listing = await fetchHtml(source.toString(),source.hostname);
+      const links = extractEpisodeLinks(listing.html,listing.url);
+      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة في صفحة المسلسل");
+      const seasonNumber = parseSeason(titleFromHtml(listing.html)+" "+listing.html,Number(monitor.season_number)||1);
+      const {data:oldSeason,error:seasonReadError} = await db.from("seasons").select("id")
+        .eq("series_id",monitor.series_id).eq("season_number",seasonNumber).maybeSingle();
+      if (seasonReadError) throw seasonReadError;
+      let seasonId = oldSeason?.id;
+      if (!seasonId) {
+        const {data:newSeason,error:seasonInsertError} = await db.from("seasons").insert({
+          series_id:monitor.series_id,season_number:seasonNumber,name:"الموسم "+seasonNumber,
+        }).select("id").single();
+        if (seasonInsertError) throw seasonInsertError;
+        seasonId = newSeason.id;
+      }
+      for (const link of links) {
+        try {
+          const {data:oldEpisode,error:duplicateError} = await db.from("episodes").select("id")
+            .eq("season_id",seasonId).eq("episode_number",link.number).maybeSingle();
+          if (duplicateError) throw duplicateError;
+          if (oldEpisode) { summary.skipped++; continue; }
+          const episode = await inspectEpisode(link,source.hostname);
+          if (!episode.streamUrl) { summary.skipped++; continue; }
+          const {data:saved,error:saveError} = await db.from("episodes").insert({
+            season_id:seasonId,episode_number:episode.number,title:episode.title||("الحلقة "+episode.number),
+            stream_url:episode.streamUrl,is_published:true,
+          }).select("id").single();
+          if (saveError) throw saveError;
+          if (episode.sources.length) {
+            const rows = episode.sources.map((server,index)=>({
+              episode_id:saved.id,server_name:server.name||("السيرفر "+(index+1)),
+              stream_url:server.url,sort_order:index,is_active:true,
+            }));
+            const {error:serverError} = await db.from("playback_servers").insert(rows);
+            if (serverError) throw serverError;
+          }
+          added++; summary.added++;
+        } catch (episodeError) {
+          summary.failed++;
+          errorMessage = episodeError instanceof Error ? episodeError.message : "تعذر استيراد حلقة";
+        }
+      }
+    } catch (monitorError) {
+      errorMessage = monitorError instanceof Error ? monitorError.message : "تعذر فحص صفحة المسلسل";
+      summary.failed++;
+    }
+    await db.from("series_source_monitors").update({
+      last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString(),
+    }).eq("id",monitor.id);
+    summary.checked++;
+    summary.results.push({monitor_id:monitor.id,added,error:errorMessage});
+  }
+  return json({success:true,...summary});
+});
