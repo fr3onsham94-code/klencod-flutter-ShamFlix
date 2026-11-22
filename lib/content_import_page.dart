@@ -65,9 +65,12 @@ class _ContentImportPageState extends State<ContentImportPage> {
         items = foundItems;
         selected.addAll(foundItems.map((e) => e['page_url'].toString()));
       });
+      final incomplete = foundItems.any((item) => item['_scan_incomplete'] == true);
       message(foundItems.isEmpty
           ? 'لم نعثر على عناصر. قد يحتاج الموقع إلى محلّل خاص أو يمنع القراءة.'
-          : 'تم اكتشاف ' + foundItems.length.toString() + ' عنصر؛ راجع المعاينة.');
+          : incomplete
+              ? 'تم اكتشاف ${foundItems.length} عنصر، لكن تعذر الوصول إلى صفحة لاحقة؛ يمكنك استيراد النتائج المكتشفة.'
+              : 'تم اكتشاف ' + foundItems.length.toString() + ' عنصر؛ راجع المعاينة.');
     } catch (e) {
       if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
     } finally { if (mounted) setState(() => scanning = false); }
