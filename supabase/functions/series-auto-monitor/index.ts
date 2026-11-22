@@ -86,8 +86,9 @@ function extractEpisodeLinks(html: string, base: URL) {
     if (!href || /^javascript:|^#|^mailto:/i.test(href)) continue;
     let target: URL;
     try { target = validateUrl(new URL(href, base).toString()); } catch { continue; }
-    if (target.hostname !== base.hostname || !/(?:episode|episodes|الحلقة)/i.test(target.pathname)) continue;
     const title = clean(m[0]);
+    if (target.hostname !== base.hostname ||
+        (!/(?:episode|episodes|الحلقة)/i.test(target.pathname) && !/(?:episode|الحلقة|حلقة)\\s*[-:#_]?\\s*\\d+/i.test(title))) continue;
     const number = parseEpisodeNumber(title + " " + target.pathname);
     if (!number) continue;
     target.search = "";
