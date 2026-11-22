@@ -160,10 +160,10 @@ class ContentPageImportService {
       'title': _clean(title),
       'description': _clean(description),
       'poster_url': image,
-      'backdrop_url': _absoluteImage(_firstNonEmpty([
+      'backdrop_url': _firstNonEmpty([
         meta['og:image:secure_url'],
         meta['twitter:image'],
-      ])),
+      ]),
       'release_year': _year(date),
       'rating': double.tryParse(ratingValue?.toString() ?? ''),
       'category': genres is List ? genres.map(_clean).join('، ') : _clean(genres),
