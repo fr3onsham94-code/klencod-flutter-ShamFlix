@@ -1878,7 +1878,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                                       child: Icon(
                                         sidebarOpen ? Icons.close : Icons.menu,
                                         color: Colors.white,
-                                        size: (sidebarButtonSize * 0.48).clamp(16, 26),
+                                        size: (sidebarButtonSize * 0.48).clamp(16, 26).toDouble(),
                                       ),
                                     ),
                                   ),
