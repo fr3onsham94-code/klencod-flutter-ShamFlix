@@ -1364,6 +1364,8 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   bool loading = true;
   bool sidebarOpen = false;
   String? error;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   String? selectedPackageId;
   int gridColumns = 5;
   double sidebarWidth = 110;
@@ -1411,6 +1413,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   void dispose() {
     AppTheme.revision.removeListener(_onThemeChanged);
     appSettingsRefreshNotifier.removeListener(_onSidebarSettingsChanged);
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -1485,10 +1488,18 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
     if (mounted) setState(() => loading = false);
   }
 
+  List<Map<String, dynamic>> _filterCatalogItems(List<Map<String, dynamic>> items) {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return items;
+    return items.where((item) {
+      final text = [item['title'], item['title_en'], item['original_title'], item['category'], item['release_year']]
+          .map((v) => v?.toString() ?? '').join(' ').toLowerCase();
+      return text.contains(q);
+    }).toList();
+  }
+
   List<Map<String, dynamic>> get selectedItems =>
-      selectedPackageId == null
-          ? []
-          : packageContents[selectedPackageId!] ?? [];
+      selectedPackageId == null ? [] : _filterCatalogItems(packageContents[selectedPackageId!] ?? []);
 
   void _openPackage(String id) {
     setState(() {
@@ -1525,7 +1536,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
 
   Widget _packageShelf(Map<String, dynamic> package, double cardWidth) {
     final id = package['id'].toString();
-    final contents = packageContents[id] ?? [];
+    final contents = _filterCatalogItems(packageContents[id] ?? []);
     final name = package['name']?.toString() ?? 'باقة';
 
     return Padding(
@@ -1833,6 +1844,22 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                   icon: Icon(Icons.refresh, color: sectionPrimary),
                 ),
               ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: TextField(
+              controller: _searchController,
+              textDirection: TextDirection.rtl,
+              style: TextStyle(color: sectionText),
+              onChanged: (value) => setState(() => _searchQuery = value),
+              decoration: InputDecoration(
+                hintText: widget.contentType == 'movie' ? appText('ابحث عن فيلم...', 'Search movies...', 'Film ara...') : appText('ابحث عن مسلسل...', 'Search series...', 'Dizi ara...'),
+                prefixIcon: Icon(Icons.search, color: sectionPrimary),
+                suffixIcon: _searchQuery.isEmpty ? null : IconButton(onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); }, icon: Icon(Icons.close, color: sectionSecondaryText)),
+                filled: true, fillColor: sectionPanel,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
             ),
           ),
           Expanded(
@@ -3596,6 +3623,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   String? selectedPackageId;
   int gridColumns = 5;
   bool starting = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   bool sidebarOpen=false;
   double sidebarWidth=110,sidebarButtonSize=42,packageFontSize=11,sectionFontSize=12,packageIconSize=15,packageItemHeight=38;
 
@@ -3615,6 +3644,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   void dispose() {
     channelRefreshNotifier.removeListener(_onExternalRefresh);
     AppTheme.revision.removeListener(_onThemeChanged);
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -3737,6 +3767,13 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         .eq('is_published', true)
         .order('name');
     channels = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+  }
+
+  List<Map<String, dynamic>> get _filteredChannels {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return channels;
+    return channels.where((channel) => [channel['name'], channel['name_en'], channel['group_title'], channel['country']]
+        .map((v) => v?.toString() ?? '').join(' ').toLowerCase().contains(q)).toList();
   }
 
   Future<void> _selectPackage(String? id) async {
@@ -3930,6 +3967,21 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                 IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: livePrimary)),
               ]),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: TextField(
+                controller: _searchController, textDirection: TextDirection.rtl,
+                style: TextStyle(color: liveText),
+                onChanged: (value) => setState(() => _searchQuery = value),
+                decoration: InputDecoration(
+                  hintText: appText('ابحث عن قناة...', 'Search channels...', 'Kanal ara...'),
+                  prefixIcon: Icon(Icons.search, color: livePrimary),
+                  suffixIcon: _searchQuery.isEmpty ? null : IconButton(onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); }, icon: Icon(Icons.close, color: liveSecondaryText)),
+                  filled: true, fillColor: livePanel,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ),
             if (starting)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -3979,8 +4031,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                                     mainAxisSpacing: 9,
                                                     childAspectRatio: 1.0,
                                                   ),
-                                                  itemCount: channels.length,
-                                                  itemBuilder: (context, index) => _channelTile(channels[index]),
+                                                  itemCount: _filteredChannels.length,
+                                                  itemBuilder: (context, index) => _channelTile(_filteredChannels[index]),
                                                 ),
                                               ),
                               ),
