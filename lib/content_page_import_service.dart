@@ -70,123 +70,7 @@ class ContentPageImportService {
       final isAkwam = uri.host.toLowerCase() == 'akwam.ss' ||
           uri.host.toLowerCase().endsWith('.akwam.ss');
       if (isAkwam && uri.path.toLowerCase().contains('/movie/')) {
-        String? watchUrl;
-        for (final match in RegExp(r'<a\b[^>]*>', caseSensitive: false).allMatches(html)) {
-          final attrs = _attributes(match.group(0)!);
-          final href = (attrs['href'] ?? '').trim();
-          if (href.isEmpty) continue;
-          final candidate = uri.resolve(href);
-          if (candidate.host.toLowerCase() == uri.host.toLowerCase() &&
-              candidate.path.toLowerCase().contains('/watch/')) {
-            try {
-              _validatedUri(candidate.toString());
-              watchUrl = candidate.toString();
-              break;
-            } catch (_) {}
-          }
-        }
-        if (watchUrl != null) {
-          final watchUri = _validatedUri(watchUrl);
-          final watchHtml = await _fetchPublicHtml(watchUri);
-          sources.addAll(_extractStreamSources(watchHtml, watchUri));
-          sources.add({
-            'url': watchUri.toString(),
-            'name': 'مشاهدة الفيلم على أكوام',
-            'kind': 'iframe',
-          });
-        }
-      }
-
-      final uniqueSources = <String, Map<String, dynamic>>{};
-      for (final source in sources) {
-        final sourceUrl = source['url']?.toString() ?? '';
-        if (sourceUrl.isNotEmpty) uniqueSources[sourceUrl] = source;
-      }
-      metadata['stream_sources'] = uniqueSources.values.toList();
-      metadata['poster_url'] = _resolveImage(uri, metadata['poster_url']?.toString() ?? '');
-      metadata['backdrop_url'] = _resolveImage(uri, metadata['backdrop_url']?.toString() ?? '');
-      metadata['page_url'] = uri.toString();
-      metadata['source_host'] = uri.host;
-      if ((metadata['title']?.toString() ?? '').trim().isEmpty) {
-        throw Exception('وصلنا إلى الصفحة، لكن لم نجد عنواناً واضحاً للعمل');
-      }
-      return metadata;
-    } on http.ClientException {
-      throw Exception('تعذر الاتصال بالموقع');
-    } finally {
-      client.close();
-    }
-  }
-
-  /// Imports publicly visible episode links from an Akwam series page.
-  /// Only follows ordinary public episode/watch pages; it does not bypass
-  /// authentication, anti-bot challenges, DRM, or protected player controls.
-  static Future<List<Map<String, dynamic>>> inspectAkwamSeries(String rawUrl) async {
-    final seriesUri = _validatedUri(rawUrl);
-    if (seriesUri.host.toLowerCase() != 'akwam.ss' &&
-        !seriesUri.host.toLowerCase().endsWith('.akwam.ss')) {
-      throw Exception('استيراد الحلقات التلقائي متاح حالياً لصفحات أكوام');
-    }
-    final html = await _fetchPublicHtml(seriesUri);
-    final episodeLinks = <String, Map<String, String>>{};
-    final anchorPattern = RegExp(r'<a\b[^>]*>[\s\S]*?</a>', caseSensitive: false);
-    for (final match in anchorPattern.allMatches(html)) {
-      final tag = match.group(0)!;
-      final opening = RegExp(r'<a\b[^>]*>', caseSensitive: false).firstMatch(tag)?.group(0);
-      if (opening == null) continue;
-      final attrs = _attributes(opening);
-      final href = attrs['href'] ?? '';
-      if (!href.contains('/episode/')) continue;
-      final uri = seriesUri.resolve(href);
-      try { _validatedUri(uri.toString()); } catch (_) { continue; }
-      final title = _clean(tag.replaceAll(RegExp(r'<[^>]*>'), ' '));
-      final numberMatch = RegExp(r'(?:episode|الحلقة)[^0-9]{0,12}(\d+)', caseSensitive: false)
-          .firstMatch('$title $href') ?? RegExp(r'-(\d+)(?:[/?#]|$)').firstMatch(href);
-      final number = int.tryParse(numberMatch?.group(1) ?? '');
-      if (number == null || number < 1) continue;
-      episodeLinks[uri.toString()] = {'title': title.isEmpty ? 'الحلقة $number' : title, 'number': '$number'};
-      if (episodeLinks.length >= 80) break;
-    }
-    if (episodeLinks.isEmpty) {
-      throw Exception('لم أجد روابط حلقات ظاهرة في صفحة أكوام');
-    }
-
-    final episodes = <Map<String, dynamic>>[];
-    final ordered = episodeLinks.entries.toList()
-      ..sort((a, b) => int.parse(a.value['number']!).compareTo(int.parse(b.value['number']!)));
-    Future<Map<String, dynamic>> inspectEpisode(
-      MapEntry<String, Map<String, String>> entry,
-    ) async {
-      final episodeUri = _validatedUri(entry.key);
-      final episodeHtml = await _fetchPublicHtml(episodeUri);
-      final episodePageTitle = _clean(_parseHtml(episodeHtml)['title']);
-      final linkTitle = _clean(entry.value['title']);
-      final episodeNumberPattern = RegExp(
-        r'(?:الحلقة|حلقة|episode)\s*[:#-]?\s*(\d+)',
-        caseSensitive: false,
-      );
-      final pageNumberMatch = episodeNumberPattern.firstMatch(episodePageTitle) ??
-          episodeNumberPattern.firstMatch(linkTitle);
-      final resolvedEpisodeNumber = int.tryParse(pageNumberMatch?.group(1) ?? '') ??
-          int.parse(entry.value['number']!);
-      final descriptivePageTitle = episodePageTitle.isNotEmpty &&
-              !RegExp(r'^\d+$').hasMatch(episodePageTitle)
-          ? episodePageTitle
-          : '';
-      final resolvedEpisodeTitle = descriptivePageTitle.isNotEmpty
-          ? descriptivePageTitle
-          : (linkTitle.isNotEmpty && !RegExp(r'^\d+$').hasMatch(linkTitle)
-              ? linkTitle
-              : 'الحلقة $resolvedEpisodeNumber');
-      String? watchUrl;
-      for (final match in RegExp(r'<a\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
-        final attrs = _attributes(match.group(0)!);
-        final href = attrs['href'] ?? '';
-        if (href.contains('/watch/')) {
-          final resolved = episodeUri.resolve(href);
-          try { _validatedUri(resolved.toString()); watchUrl = resolved.toString(); break; } catch (_) {}
-        }
-      }
+        final watchUrl = _findPublicWatchUrl(episodeHtml, episodeUri);
       final servers = <Map<String, dynamic>>[];
       if (watchUrl != null) {
         final watchUri = _validatedUri(watchUrl);
@@ -274,6 +158,58 @@ class ContentPageImportService {
   }
 
 
+  static String? _findPublicWatchUrl(String html, Uri pageUri) {
+    final normalizedHtml = html.replaceAll(r'\/', '/').replaceAll('&amp;', '&');
+    final candidateValues = <String>[];
+    final tagPattern = RegExp(
+      r'<(?:a|button|iframe|frame|form|div|span)[^>]*>',
+      caseSensitive: false,
+    );
+    const urlAttributes = [
+      'href', 'src', 'action', 'data-href', 'data-url', 'data-src',
+      'data-lazy-src', 'data-embed', 'data-video', 'data-file', 'value',
+      'onclick',
+    ];
+    for (final match in tagPattern.allMatches(normalizedHtml)) {
+      final attrs = _attributes(match.group(0)!);
+      for (final key in urlAttributes) {
+        final value = attrs[key];
+        if (value != null && value.trim().isNotEmpty) candidateValues.add(value.trim());
+      }
+    }
+
+    // Public watch routes may also appear in inline JSON or script text.
+    final routePattern = RegExp(
+      r'''(?:https?://[^\s"'<>]+)?/watch/[^\s"'<>\\]+''',
+      caseSensitive: false,
+    );
+    for (final match in routePattern.allMatches(normalizedHtml)) {
+      candidateValues.add(match.group(0)!);
+    }
+
+    for (final value in candidateValues) {
+      final cleaned = value.replaceAll(r'\/', '/')
+          .replaceAll('&amp;', '&').replaceAll(r'\u0026', '&');
+      final routeMatch = RegExp(
+        r'''(?:https?://[^\s"'<>]+)?(/watch/[^\s"'<>\\]+)''',
+        caseSensitive: false,
+      ).firstMatch(cleaned);
+      if (routeMatch == null) continue;
+      final rawRoute = routeMatch.group(0)!;
+      final uri = Uri.tryParse(rawRoute.startsWith('/watch/')
+          ? pageUri.resolve(rawRoute).toString()
+          : rawRoute);
+      if (uri == null ||
+          uri.host.toLowerCase() != pageUri.host.toLowerCase() ||
+          !uri.path.toLowerCase().contains('/watch/')) continue;
+      try {
+        _validatedUri(uri.toString());
+        return uri.toString();
+      } catch (_) {}
+    }
+    return null;
+  }
+
   static List<Map<String, dynamic>> _extractStreamSources(String html, Uri pageUri) {
     final found = <String, Map<String, dynamic>>{};
 
@@ -298,13 +234,22 @@ class ContentPageImportService {
       };
     }
 
-    for (final match in RegExp(r'<(?:iframe|frame)\b[^>]*>', caseSensitive: false).allMatches(html)) {
+    for (final match in RegExp(r'<(?:iframe|frame|embed)\\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
-      add(attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ?? attrs['data-url'], kind: 'iframe');
+      add(
+        attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ??
+            attrs['data-url'] ?? attrs['data-embed'] ?? attrs['data-video'] ??
+            attrs['data-href'],
+        kind: 'iframe',
+      );
     }
-    for (final match in RegExp(r'<(?:video|source|embed)\b[^>]*>', caseSensitive: false).allMatches(html)) {
+    for (final match in RegExp(r'<(?:video|source)\\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
-      add(attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ?? attrs['data'], kind: 'media');
+      add(
+        attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ??
+            attrs['data-url'] ?? attrs['data-file'] ?? attrs['data'],
+        kind: 'media',
+      );
     }
 
     final directPattern = RegExp(
