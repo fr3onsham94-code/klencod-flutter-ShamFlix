@@ -157,7 +157,7 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
                         ),
                         _field(
                           intervalController,
-                          'فاصل الفحص بالدقائق (15 إلى 1440)',
+                          'فاصل الفحص بالدقائق (60 إلى 1440)',
                           keyboard: TextInputType.number,
                         ),
                         SwitchListTile(
@@ -238,10 +238,10 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
                     }
 
                     final minutes = int.tryParse(intervalController.text.trim());
-                    if (minutes == null || minutes < 15 || minutes > 1440) {
+                    if (minutes == null || minutes < 60 || minutes > 1440) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('الفاصل يجب أن يكون بين 15 و1440 دقيقة'),
+                          content: Text('الفاصل يجب أن يكون بين 60 و1440 دقيقة'),
                         ),
                       );
                       return;
