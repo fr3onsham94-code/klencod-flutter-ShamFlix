@@ -111,7 +111,7 @@ class ContentPageImportService {
         .firstMatch(html)?.group(1);
     final jsonLd = <Map<String, dynamic>>[];
     for (final match in RegExp(
-      r'<script\b[^>]*type=["\']application/ld\+json["\'][^>]*>([\s\S]*?)</script>',
+      r"""<script\b[^>]*type=["\']application/ld\+json["\'][^>]*>([\s\S]*?)</script>""",
       caseSensitive: false,
     ).allMatches(html)) {
       try {
