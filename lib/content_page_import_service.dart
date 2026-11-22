@@ -6,9 +6,9 @@ import 'stream_source_detector.dart';
 
 /// Generic metadata importer for public movie/series pages.
 ///
-/// This intentionally reads page metadata only (Open Graph, JSON-LD and
-/// standard meta tags). It does not extract protected player URLs, cookies,
-/// tokens, DRM data, or bypass site access controls.
+/// Reads public page metadata and visible direct-media/iframe candidates.
+/// It does not extract protected player URLs, cookies, tokens, DRM data,
+/// or bypass site access controls.
 class ContentPageImportService {
   static const int _maxHtmlBytes = 2 * 1024 * 1024;
   static const int _maxRedirects = 4;
