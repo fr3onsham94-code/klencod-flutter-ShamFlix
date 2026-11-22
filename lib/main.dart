@@ -3786,44 +3786,28 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     if (referer.isNotEmpty) headers['Referer'] = referer;
 
     final title = '${match['home_team']} × ${match['away_team']}';
-    var playbackUrl = url;
-    var playbackHeaders = Map<String, String>.from(headers);
-
+    // صفحات PHP وEmbed تُفتح داخل واجهة مشغّل ShamFlix مباشرة؛ لا نشترط امتداد
+    // m3u8/mp4 ولا نحاول تحويل رابط الصفحة الأصلية إلى رابط آخر قبل تشغيلها.
     if (!StreamSourceDetector.isDirectMediaUrl(url)) {
-      final resolved = await Navigator.push<Map<String, dynamic>>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ShamFlixServerResolverPage(
-            url: url,
-            title: title,
-            headers: headers,
-          ),
+      await Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ShamFlixWebPage(
+          url: url,
+          title: title,
+          playerOnly: true,
+          headers: headers,
         ),
-      );
-      if (!mounted || resolved == null) return;
-      playbackUrl = valueOf(resolved['url']).trim();
-      final resolvedHeaders = resolved['headers'];
-      if (resolvedHeaders is Map) {
-        playbackHeaders = resolvedHeaders.map(
-          (key, value) => MapEntry(key.toString(), value.toString()),
-        );
-      }
-      if (playbackUrl.isEmpty || !StreamSourceDetector.isDirectMediaUrl(playbackUrl)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('لم يتم العثور على رابط فيديو مباشر قابل للتشغيل.')),
-        );
-        return;
-      }
+      ));
+      return;
     }
 
     await Navigator.push(context, MaterialPageRoute(
       builder: (_) => ShamFlixPlayerPage(
-        url: playbackUrl,
+        url: url,
         title: title,
         servers: servers,
         initialServerIndex: serverIndex,
         progressKey: 'match-${match['id']}',
-        headers: playbackHeaders,
+        headers: headers,
       ),
     ));
   }
