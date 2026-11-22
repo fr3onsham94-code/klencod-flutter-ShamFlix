@@ -233,8 +233,11 @@ class ContentPageImportService {
       final servers = <Map<String, dynamic>>[];
       if (watchUrl != null) {
         final watchUri = _validatedUri(watchUrl);
-        final watchHtml = await _fetchPublicHtml(watchUri);
-        servers.addAll(_extractStreamSources(watchHtml, watchUri));
+        // Keep the public watch page as a fallback if reading its HTML fails.
+        try {
+          final watchHtml = await _fetchPublicHtml(watchUri);
+          servers.addAll(_extractStreamSources(watchHtml, watchUri));
+        } catch (_) {}
         servers.add({
           'url': watchUri.toString(),
           'name': 'مشاهدة الحلقة على أكوام',
@@ -249,10 +252,22 @@ class ContentPageImportService {
       };
     }
 
-    // Process small batches in parallel to avoid a long serial crawl.
+    // Process small batches independently; one failed episode cannot cancel its siblings.
+    final failedEpisodeNumbers = <int>[];
     for (var start = 0; start < ordered.length; start += 4) {
       final batch = ordered.skip(start).take(4);
-      episodes.addAll(await Future.wait(batch.map(inspectEpisode)));
+      final inspected = await Future.wait(batch.map((entry) async {
+        try {
+          return await inspectEpisode(entry);
+        } catch (_) {
+          failedEpisodeNumbers.add(int.tryParse(entry.value['number'] ?? '') ?? 0);
+          return null;
+        }
+      }));
+      episodes.addAll(inspected.whereType<Map<String, dynamic>>());
+    }
+    if (episodes.isEmpty && failedEpisodeNumbers.isNotEmpty) {
+      throw Exception('تعذر قراءة صفحات الحلقات المتاحة؛ فشل فحص ${failedEpisodeNumbers.length} حلقة');
     }
     return episodes;
   }
