@@ -23,8 +23,8 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
   Future<void> _load() async {
     setState(() { loading = true; error = null; });
     try {
-      final rows = await AuthService.client.from('series_source_monitors')
-          .select('id,series_id,source_url,source_host,season_number,check_interval_minutes,is_active,last_checked_at,last_error,last_added_count,series(title)')
+      final rows = await AuthService.client.from('series_section_monitors')
+          .select('id,package_id,source_url,category,check_interval_minutes,is_active,last_checked_at,last_error,last_added_count,content_packages(name)')
           .order('created_at', ascending: false);
       monitors = rows.map((row) => Map<String, dynamic>.from(row)).toList();
     } catch (e) { error = e.toString(); }
@@ -32,47 +32,38 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
   }
 
   Future<void> _addMonitor() async {
-    final seriesRows = await AuthService.client.from('series').select('id,title').order('title');
-    if (seriesRows.isEmpty) {
-      _message('أضف مسلسل إلى المكتبة أولاً', true);
+    final packageRows = await AuthService.client.from('content_packages')
+        .select('id,name').eq('content_type', 'series').order('sort_order').order('created_at');
+    if (packageRows.isEmpty) {
+      _message('أنشئ باقة مسلسلات أولاً', true);
       return;
     }
     final urlController = TextEditingController();
-    String? selectedSeries = seriesRows.first['id'].toString();
-    int seasonNumber = 1;
+    final categoryController = TextEditingController();
+    String? selectedPackage = packageRows.first['id'].toString();
     int interval = 60;
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           backgroundColor: panel,
-          title: Text('إضافة مصدر مراقبة', style: TextStyle(color: accent)),
+          title: Text('إضافة قسم مسلسلات للمراقبة', style: TextStyle(color: accent)),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               DropdownButtonFormField<String>(
-                value: selectedSeries,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'المسلسل'),
-                items: seriesRows.map((row) => DropdownMenuItem<String>(
-                  value: row['id'].toString(),
-                  child: Text(row['title']?.toString() ?? 'مسلسل'),
+                value: selectedPackage, isExpanded: true,
+                decoration: const InputDecoration(labelText: 'الباقة المستهدفة'),
+                items: packageRows.map((row) => DropdownMenuItem<String>(
+                  value: row['id'].toString(), child: Text(row['name']?.toString() ?? 'باقة مسلسلات'),
                 )).toList(),
-                onChanged: (value) => setDialogState(() => selectedSeries = value),
+                onChanged: (value) => setDialogState(() => selectedPackage = value),
               ),
               const SizedBox(height: 10),
-              TextField(
-                controller: urlController,
-                textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(labelText: 'رابط صفحة المسلسل'),
-              ),
+              TextField(controller: urlController, textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(labelText: 'رابط صفحة قسم المسلسلات')),
               const SizedBox(height: 10),
-              DropdownButtonFormField<int>(
-                value: seasonNumber,
-                decoration: const InputDecoration(labelText: 'رقم الموسم'),
-                items: List.generate(20, (i) => i + 1).map((n) =>
-                  DropdownMenuItem(value: n, child: Text('الموسم $n'))).toList(),
-                onChanged: (value) => setDialogState(() => seasonNumber = value ?? 1),
-              ),
+              TextField(controller: categoryController,
+                decoration: const InputDecoration(labelText: 'التصنيف (اختياري)', hintText: 'هندي، تركي، أكشن...')),
               const SizedBox(height: 10),
               DropdownButtonFormField<int>(
                 value: interval,
@@ -94,52 +85,53 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: accent),
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('حفظ المصدر'),
+              child: const Text('حفظ المراقبة'),
             ),
           ],
         ),
       ),
     );
-    if (result != true) { urlController.dispose(); return; }
+    if (result != true) { urlController.dispose(); categoryController.dispose(); return; }
     try {
       final uri = Uri.tryParse(urlController.text.trim());
-      if (selectedSeries == null || uri == null ||
-          (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
-        throw Exception('أدخل رابط صفحة مسلسل صحيح');
+      if (selectedPackage == null || uri == null ||
+          (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty || uri.userInfo.isNotEmpty) {
+        throw Exception('أدخل رابط قسم صحيح يبدأ بـ HTTPS أو HTTP');
       }
-      await AuthService.client.from('series_source_monitors').upsert({
-        'series_id': selectedSeries,
+      await AuthService.client.from('series_section_monitors').upsert({
+        'package_id': selectedPackage,
         'source_url': uri.toString(),
         'source_host': uri.host,
-        'season_number': seasonNumber,
+        'category': categoryController.text.trim().isEmpty ? null : categoryController.text.trim(),
         'check_interval_minutes': interval,
         'is_active': true,
-      }, onConflict: 'series_id,source_url');
+      }, onConflict: 'package_id,source_url');
       if (!mounted) return;
-      _message('تمت إضافة مصدر المراقبة');
+      _message('تمت إضافة قسم المسلسلات للمراقبة التلقائية');
       await _load();
     } catch (e) {
-      _message('تعذر إضافة المصدر: $e', true);
+      _message('تعذر إضافة المراقبة: $e', true);
     } finally {
       urlController.dispose();
+      categoryController.dispose();
     }
   }
 
   Future<void> _toggle(Map<String, dynamic> item, bool enabled) async {
     try {
-      await AuthService.client.from('series_source_monitors')
+      await AuthService.client.from('series_section_monitors')
           .update({'is_active': enabled, 'updated_at': DateTime.now().toUtc().toIso8601String()})
           .eq('id', item['id'].toString());
       if (!mounted) return;
       setState(() => item['is_active'] = enabled);
-      _message(enabled ? 'تم تشغيل مراقبة المسلسل' : 'تم إيقاف مراقبة المسلسل');
+      _message(enabled ? 'تم تشغيل مراقبة قسم المسلسلات' : 'تم إيقاف مراقبة قسم المسلسلات');
     } catch (e) { _message('تعذر تغيير حالة المراقبة: $e', true); }
   }
 
   Future<void> _changeInterval(Map<String, dynamic> item, int? minutes) async {
     if (minutes == null) return;
     try {
-      await AuthService.client.from('series_source_monitors')
+      await AuthService.client.from('series_section_monitors')
           .update({'check_interval_minutes': minutes, 'updated_at': DateTime.now().toUtc().toIso8601String()})
           .eq('id', item['id'].toString());
       if (!mounted) return;
@@ -154,18 +146,18 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: panel,
         title: Text('حذف المراقبة؟', style: TextStyle(color: accent)),
-        content: Text('سيبقى المسلسل وحلقاته كما هي، وسيتم حذف متابعة مصدر الحلقات فقط.',
+        content: Text('سيبقى كل حلقة أُضيف سابقاً في المكتبة. سيتم حذف متابعة القسم فقط.',
             style: TextStyle(color: AppTheme.text)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red), child: const Text('حذف')),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red), child: const Text('حذف')),
         ],
       ),
     );
     if (ok != true) return;
     try {
-      await AuthService.client.from('series_source_monitors').delete().eq('id', item['id'].toString());
+      await AuthService.client.from('series_section_monitors').delete().eq('id', item['id'].toString());
       if (!mounted) return;
       setState(() => monitors.removeWhere((e) => e['id'] == item['id']));
       _message('تم حذف المراقبة');
@@ -191,7 +183,7 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
   Widget build(BuildContext context) {
     if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
       return Scaffold(backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: const Text('المراقبة التلقائية')),
+        appBar: AppBar(backgroundColor: bg, title: const Text('مراقبة المسلسلات')),
         body: const Center(child: Text('ليس لديك صلاحية الوصول')));
     }
     return Directionality(
@@ -200,7 +192,7 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
         backgroundColor: bg,
         appBar: AppBar(
           backgroundColor: bg,
-          title: Text('المراقبة والتحديث التلقائي', style: TextStyle(color: accent)),
+          title: Text('المراقبة التلقائية للمسلسلات', style: TextStyle(color: accent)),
           actions: [
             IconButton(onPressed: _addMonitor, icon: const Icon(Icons.add_link)),
             IconButton(onPressed: loading ? null : _load, icon: const Icon(Icons.refresh)),
@@ -221,12 +213,14 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
                     ? Center(child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Column(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.radar, size: 54, color: accent),
+                          Icon(Icons.movie_filter_outlined, size: 54, color: accent),
                           const SizedBox(height: 12),
-                          Text('ما في مسلسلات قيد المراقبة حالياً', style: TextStyle(color: AppTheme.text, fontSize: 16)),
+                          Text('ما في أقسام مسلسلات قيد المراقبة', style: TextStyle(color: AppTheme.text, fontSize: 16)),
                           const SizedBox(height: 8),
-                          Text('فعّل خيار المراقبة التلقائية عند استيراد مسلسل من صفحة مصدره.',
-                              textAlign: TextAlign.center, style: TextStyle(color: AppTheme.secondaryText)),
+                          Text('أضف رابط قسم المسلسلات مرة واحدة وحدد الباقة؛ سننشئ المسلسلات الجديدة ونضيف حلقاتها تلقائياً.',
+                            textAlign: TextAlign.center, style: TextStyle(color: AppTheme.secondaryText)),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(onPressed: _addMonitor, icon: const Icon(Icons.add), label: const Text('إضافة قسم مسلسلات')),
                         ]),
                       ))
                     : ListView(
@@ -234,12 +228,13 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
                         children: [
                           Card(color: panel, child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: Text('عدد المصادر: ${monitors.length} • الفحص الآلي يعمل كل 30 دقيقة، ويحترم الفترة المحددة لكل مسلسل.',
-                                style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+                            child: Text('عدد الأقسام: ${monitors.length} • الفحص الآلي كل 30 دقيقة، ويحترم الفترة المحددة لكل قسم. ينشئ المسلسلات الجديدة ويضيف الحلقات الجديدة تلقائياً.',
+                              style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                           )),
                           ...monitors.map((item) {
-                            final series = item['series'] is Map ? Map<String, dynamic>.from(item['series']) : <String, dynamic>{};
-                            final title = series['title']?.toString() ?? 'مسلسل بدون عنوان';
+                            final package = item['content_packages'] is Map
+                                ? Map<String, dynamic>.from(item['content_packages']) : <String, dynamic>{};
+                            final title = package['name']?.toString() ?? 'باقة مسلسلات';
                             final active = item['is_active'] == true;
                             final lastError = item['last_error']?.toString() ?? '';
                             final count = int.tryParse(item['last_added_count']?.toString() ?? '') ?? 0;
@@ -255,16 +250,14 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
                                     Switch(value: active, activeColor: accent, onChanged: (value) => _toggle(item, value)),
                                   ]),
                                   SelectableText(item['source_url']?.toString() ?? '',
-                                      textDirection: TextDirection.ltr,
-                                      style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                                    textDirection: TextDirection.ltr, style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                                  if ((item['category']?.toString() ?? '').isNotEmpty)
+                                    Padding(padding: const EdgeInsets.only(top: 6),
+                                      child: Text('التصنيف: ${item['category']}', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11))),
                                   const SizedBox(height: 8),
                                   Row(children: [
-                                    Text('الموسم ${item['season_number'] ?? 1}', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
-                                    const Spacer(),
                                     Text('أضيف آخر فحص: $count حلقة', style: TextStyle(color: accent, fontSize: 11)),
-                                  ]),
-                                  const SizedBox(height: 8),
-                                  Row(children: [
+                                    const Spacer(),
                                     Text('الفحص كل', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                                     const SizedBox(width: 8),
                                     DropdownButton<int>(
@@ -281,16 +274,15 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
                                       ],
                                       onChanged: active ? (value) => _changeInterval(item, value) : null,
                                     ),
-                                    const Spacer(),
                                     IconButton(onPressed: () => _delete(item),
-                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
                                   ]),
                                   Text('آخر فحص: ${_date(item['last_checked_at'])}',
-                                      style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
                                   if (lastError.isNotEmpty) ...[
                                     const SizedBox(height: 6),
                                     Text('ملاحظة الفحص: $lastError',
-                                        style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
+                                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
                                   ],
                                 ]),
                               ),
