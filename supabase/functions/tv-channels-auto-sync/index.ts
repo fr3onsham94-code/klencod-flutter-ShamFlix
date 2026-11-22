@@ -159,6 +159,7 @@ async function verifySecret(db: ReturnType<typeof createClient>, token: string) 
 }
 
 async function syncChannels(db: ReturnType<typeof createClient>) {
+  // All three sources must download and parse successfully before any catalogue writes.
   const sourceResults = await Promise.all(SOURCES.map(async source => ({
     source,
     entries: await fetchPlaylist(source),
@@ -174,14 +175,14 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
   if (!grouped.size) throw new Error("No channels were aggregated; existing catalogue was left untouched");
 
   const { data: oldChannels, error: oldError } = await db.from("channels")
-    .select("id,name,external_source_key").limit(10000);
+    .select("id,name,external_source_key").limit(20000);
   if (oldError) throw oldError;
   const byName = new Map<string, any>();
   for (const row of oldChannels || []) byName.set(normalizeName(row.name || ""), row);
 
-  const summary = { channels: 0, servers: 0, packages: 0, sources: sourceResults.map(x => ({ id:x.source.id, entries:x.entries.length })) };
-  const packageIds = new Map<string,string>();
-
+  const channelRows: Record<string,unknown>[] = [];
+  const streamRows: Record<string,unknown>[] = [];
+  const categoryByKey = new Map<string,string>();
   for (const [key, entries] of grouped) {
     const uniqueStreams = [...new Map(entries.map(e => [e.url,e])).values()];
     const preferred = uniqueStreams.find(x => x.sourceId === "nexus") ||
@@ -192,72 +193,89 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     const aliases = [...new Set(uniqueStreams.map(x=>x.name).filter(x=>x !== preferred.name))];
     const arabic = uniqueStreams.map(x=>x.name).find(x=>/[\u0600-\u06FF]/.test(x)) || arabicAlias(preferred.name);
     const channelName = arabic || preferred.name;
-    const externalKey = key;
-    let existing = (oldChannels || []).find((x:any) => x.external_source_key === externalKey) ||
+    const existing = (oldChannels || []).find((x:any) => x.external_source_key === key) ||
       byName.get(normalizeName(channelName)) || byName.get(normalizeName(preferred.name));
-
-    let channelId: string;
-    if (existing) {
-      channelId = existing.id;
-      const update: Record<string,unknown> = {
-        name: channelName,
-        name_en: preferred.name,
-        aliases,
-        category,
-        stream_url: preferred.url,
-        logo_url: preferred.logo || null,
-        is_live: true,
-        is_published: true,
-        external_source_key: externalKey,
-        updated_at: new Date().toISOString(),
-      };
-      const { error } = await db.from("channels").update(update).eq("id", channelId);
-      if (error) throw error;
-    } else {
-      const { data, error } = await db.from("channels").insert({
-        name: channelName, name_en: preferred.name, aliases, category,
-        stream_url: preferred.url, logo_url: preferred.logo || null,
-        is_live: true, is_published: true, external_source_key: externalKey,
-      }).select("id").single();
-      if (error) throw error;
-      channelId = data.id;
-      byName.set(normalizeName(channelName), { id: channelId, name: channelName, external_source_key: externalKey });
-    }
-    summary.channels++;
-
+    const channelRow: Record<string,unknown> = {
+      name: channelName,
+      name_en: preferred.name,
+      aliases,
+      category,
+      stream_url: preferred.url,
+      logo_url: preferred.logo || null,
+      is_live: true,
+      is_published: true,
+      external_source_key: key,
+      updated_at: new Date().toISOString(),
+    };
+    if (existing?.id) channelRow.id = existing.id;
+    channelRows.push(channelRow);
+    categoryByKey.set(key,category);
     for (const stream of uniqueStreams) {
-      const sourceKey = stream.sourceId + ":" + await hash(externalKey + "|" + stream.url);
-      const { error } = await db.from("playback_servers").upsert({
-        channel_id: channelId,
+      streamRows.push({
+        channel_id: null,
         server_name: stream.sourceName + " • " + (stream.url.includes(".m3u8") ? "HLS" : "DASH"),
         stream_url: stream.url,
-        source_key: sourceKey,
+        source_key: stream.sourceId + ":" + await hash(key + "|" + stream.url),
         source_id: stream.sourceId,
         source_failures: 0,
         is_active: true,
         sort_order: stream.sourceId === "nexus" ? 0 : stream.sourceId === "iptv-org" ? 1 : 2,
-      }, { onConflict: "source_key" });
-      if (error) throw error;
-      summary.servers++;
+      });
     }
-
-    if (!packageIds.has(category)) {
-      const packageName = "قنوات تلقائية — " + category;
-      const { data, error } = await db.from("content_packages").upsert({
-        name: packageName, content_type: "channel", sort_order: 900,
-      }, { onConflict: "content_type,name" }).select("id").single();
-      if (error) throw error;
-      packageIds.set(category, data.id);
-      summary.packages++;
-    }
-    const { error: itemError } = await db.from("content_package_items").upsert({
-      package_id: packageIds.get(category),
-      content_type: "channel",
-      content_id: channelId,
-    }, { onConflict: "package_id,content_type,content_id", ignoreDuplicates: true });
-    if (itemError) throw itemError;
   }
-  return summary;
+
+  // Upsert channel rows in batches; stable source keys prevent duplicate channels on each run.
+  for (let i=0; i<channelRows.length; i+=250) {
+    const { error } = await db.from("channels").upsert(channelRows.slice(i,i+250), { onConflict:"external_source_key" });
+    if (error) throw error;
+  }
+  const { data: syncedChannels, error: syncedError } = await db.from("channels")
+    .select("id,external_source_key").not("external_source_key","is",null).limit(20000);
+  if (syncedError) throw syncedError;
+  const channelIds = new Map((syncedChannels || []).map((x:any)=>[x.external_source_key,x.id]));
+  const serverRows = streamRows.map((row:any) => {
+    const key = String(row.source_key).split(":").slice(1).join(":");
+    // The hash is unique to a canonical channel + stream; resolve the channel from the matching source row.
+    const sourceId = String(row.source_id);
+    const entry = [...grouped.entries()].find(([k, values]) =>
+      values.some(v => sourceId === v.sourceId && row.stream_url === v.url));
+    return { ...row, channel_id: entry ? channelIds.get(entry[0]) : null };
+  }).filter((row:any)=>row.channel_id);
+
+  for (let i=0; i<serverRows.length; i+=250) {
+    const { error } = await db.from("playback_servers").upsert(serverRows.slice(i,i+250), { onConflict:"source_key" });
+    if (error) throw error;
+  }
+
+  const categories = [...new Set(categoryByKey.values())];
+  const packageRows = categories.map(category => ({
+    name: "قنوات تلقائية — " + category, content_type: "channel", sort_order: 900,
+  }));
+  const { error: packageError } = await db.from("content_packages")
+    .upsert(packageRows, { onConflict:"content_type,name" });
+  if (packageError) throw packageError;
+  const { data: packages, error: packagesError } = await db.from("content_packages")
+    .select("id,name").in("name",packageRows.map(x=>x.name)).eq("content_type","channel");
+  if (packagesError) throw packagesError;
+  const packageIds = new Map((packages || []).map((x:any)=>[x.name,x.id]));
+  const itemRows: Record<string,unknown>[] = [];
+  for (const [key,category] of categoryByKey) {
+    const channelId = channelIds.get(key);
+    const packageId = packageIds.get("قنوات تلقائية — " + category);
+    if (channelId && packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
+  }
+  for (let i=0; i<itemRows.length; i+=250) {
+    const { error } = await db.from("content_package_items")
+      .upsert(itemRows.slice(i,i+250), { onConflict:"package_id,content_type,content_id", ignoreDuplicates:true });
+    if (error) throw error;
+  }
+
+  return {
+    channels: channelRows.length,
+    servers: serverRows.length,
+    packages: packageRows.length,
+    sources: sourceResults.map(x => ({ id:x.source.id, entries:x.entries.length })),
+  };
 }
 
 async function probeServer(url: string): Promise<"ok"|"blocked"|"bad"> {
