@@ -154,12 +154,12 @@ function arabicAlias(name: string): string | null {
   return known[n] || null;
 }
 
-async function verifySecret(db: ReturnType<typeof createClient>, token: string) {
+async function verifySecret(db: any, token: string) {
   const { data, error } = await db.rpc("verify_tv_channels_cron_secret", { candidate_secret: token });
   return !error && data === true;
 }
 
-async function syncChannels(db: ReturnType<typeof createClient>) {
+async function syncChannels(db: any) {
   // All three sources must download and parse successfully before any catalogue writes.
   const sourceResults = await Promise.all(SOURCES.map(async source => ({
     source,
@@ -299,7 +299,7 @@ async function probeServer(url: string): Promise<"ok"|"blocked"|"bad"> {
   } catch { return "bad"; }
 }
 
-async function healthCheck(db: ReturnType<typeof createClient>) {
+async function healthCheck(db: any) {
   const { data: servers, error } = await db.from("playback_servers")
     .select("id,stream_url,source_failures")
     .not("source_id","is",null).eq("is_active",true)
@@ -338,7 +338,7 @@ Deno.serve(async (req: Request) => {
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) return json({ error: "Server configuration missing" }, 500);
 
-  const db = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  const db: any = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
   if (!await verifySecret(db, token)) return json({ error: "Unauthorized" }, 401);
 
   let body: Record<string,unknown> = {};
