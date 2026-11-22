@@ -3747,6 +3747,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   late int currentServerIndex;
   final Set<int> _failedServers = <int>{};
   bool _failoverInProgress = false;
+  String? _embedFallbackUrl;
+  String? _embedFallbackName;
   StreamSubscription<Duration>? _positionSubscription;
   int _lastSavedSecond = -1;
 
@@ -3908,6 +3910,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           _failedServers.add(next);
           continue;
         }
+        // صفحات Embed ليست ملفات فيديو؛ لا نرسلها إلى media_kit.
+        if (!StreamSourceDetector.isDirectMediaUrl(nextUrl)) {
+          _failedServers.add(next);
+          _embedFallbackUrl ??= nextUrl;
+          _embedFallbackName ??= valueOf(widget.servers[next]['server_name'], 'سيرفر مضمّن');
+          continue;
+        }
         if (mounted) {
           setState(() {
             currentServerIndex = next;
@@ -3940,6 +3949,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       opening = false;
       controlsVisible = true;
     });
+  }
+
+  Future<void> _openEmbedFallback() async {
+    final url = _embedFallbackUrl;
+    if (url == null || url.isEmpty || !mounted) return;
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => ShamFlixWebPage(url: url, title: widget.title),
+    ));
   }
 
   void _showControls() {
@@ -4452,6 +4469,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         Text(error!, textAlign: TextAlign.center,
                             style: TextStyle(color: Colors.white70)),
                         const SizedBox(height: 18),
+                        if (_embedFallbackUrl != null) ...[
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
+                            onPressed: _openEmbedFallback,
+                            icon: const Icon(Icons.web),
+                            label: Text('فتح ${_embedFallbackName ?? 'السيرفر المضمّن'}'),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
                         FilledButton(
                           style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
                           onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
@@ -4928,7 +4954,25 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
                         style: const TextStyle(color: Colors.white)),
                       subtitle: Text(StreamSourceDetector.sourceName(url) + ' • ' + host, maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: Colors.white60, fontSize: 11)),
-                      trailing: Icon(direct ? Icons.play_circle_outline : Icons.open_in_browser, color: gold),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'نسخ الرابط',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.copy, color: Colors.white70, size: 20),
+                            onPressed: () async {
+                              await Clipboard.setData(ClipboardData(text: url));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('تم نسخ الرابط')),
+                                );
+                              }
+                            },
+                          ),
+                          Icon(direct ? Icons.play_circle_outline : Icons.open_in_browser, color: gold),
+                        ],
+                      ),
                       onTap: () async {
                         Navigator.pop(sheetContext);
                         if (direct) {
