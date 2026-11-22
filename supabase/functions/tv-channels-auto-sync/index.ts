@@ -272,13 +272,13 @@ async function syncChannels(db: any) {
   }
 
   // Upsert channel rows in batches; stable source keys prevent duplicate channels on each run.
-  for (let i=0; i<channelRows.length; i+=500) {
-    const { error } = await db.from("channels").upsert(channelRows.slice(i,i+500), { onConflict:"external_source_key" });
-    if (error) throw error;
+  for (let i=0; i<channelRows.length; i+=100) {
+    const { error } = await db.from("channels").upsert(channelRows.slice(i,i+100), { onConflict:"external_source_key" });
+    if (error) throw new Error("channels upsert: " + JSON.stringify(error));
   }
   const { data: syncedChannels, error: syncedError } = await db.from("channels")
     .select("id,external_source_key").not("external_source_key","is",null).limit(50000);
-  if (syncedError) throw syncedError;
+  if (syncedError) throw new Error("channel ID lookup: " + JSON.stringify(syncedError));
   const channelIds = new Map((syncedChannels || []).map((x:any)=>[x.external_source_key,x.id]));
   const serverRows = streamRows.map((row:any) => {
     const channelId = channelIds.get(row.channel_key);
@@ -290,7 +290,7 @@ async function syncChannels(db: any) {
   // for links still present, while older links that disappeared remain as fallbacks.
   for (let i=0; i<serverRows.length; i+=500) {
     const { error } = await db.from("playback_servers").upsert(serverRows.slice(i,i+500), { onConflict:"source_key" });
-    if (error) throw error;
+    if (error) throw new Error("playback server upsert: " + JSON.stringify(error));
   }
 
   // Keep only the two most recently observed URLs for each channel + source pair.
@@ -301,7 +301,7 @@ async function syncChannels(db: any) {
     .order("source_seen_at",{ascending:false,nullsFirst:false})
     .order("source_position",{ascending:false,nullsFirst:false})
     .limit(50000);
-  if (sourceServersError) throw sourceServersError;
+  if (sourceServersError) throw new Error("server retention lookup: " + JSON.stringify(sourceServersError));
   const groupedServers = new Map<string, any[]>();
   const successfullySyncedSourceIds = new Set(sourceResults.map(x => x.source.id));
   for (const server of sourceServers || []) {
@@ -327,10 +327,10 @@ async function syncChannels(db: any) {
   }));
   const { error: packageError } = await db.from("content_packages")
     .upsert(packageRows, { onConflict:"content_type,name" });
-  if (packageError) throw packageError;
+  if (packageError) throw new Error("package upsert: " + JSON.stringify(packageError));
   const { data: packages, error: packagesError } = await db.from("content_packages")
     .select("id,name").like("name","قنوات تلقائية — %").eq("content_type","channel");
-  if (packagesError) throw packagesError;
+  if (packagesError) throw new Error("package lookup: " + JSON.stringify(packagesError));
   const packageIds = new Map((packages || []).map((x:any)=>[x.name,x.id]));
   const itemRows: Record<string,unknown>[] = [];
   for (const [key,category] of categoryByKey) {
