@@ -4908,7 +4908,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
                   child: Row(children: [
                     Icon(Icons.travel_explore, color: gold),
                     const SizedBox(width: 10),
-                    Expanded(child: Text('الروابط المكتشفة (\u0024{entries.length})',
+                    Expanded(child: Text('الروابط المكتشفة (' + entries.length.toString() + ')',
                       style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
                   ]),
                 ),
@@ -4926,7 +4926,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
                       leading: Icon(direct ? Icons.video_file : Icons.web, color: direct ? Colors.greenAccent : gold),
                       title: Text(valueOf(item['label'], direct ? 'رابط فيديو مباشر' : 'صفحة تضمين'),
                         style: const TextStyle(color: Colors.white)),
-                      subtitle: Text(host, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      subtitle: Text(StreamSourceDetector.sourceName(url) + ' • ' + host, maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: Colors.white60, fontSize: 11)),
                       trailing: Icon(direct ? Icons.play_circle_outline : Icons.open_in_browser, color: gold),
                       onTap: () async {
