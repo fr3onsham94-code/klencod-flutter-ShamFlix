@@ -10,6 +10,7 @@ import 'app_theme.dart';
 import 'admin_packages_page.dart';
 import 'supabase_service.dart';
 import 'content_page_import_service.dart';
+import 'content_import_page.dart';
 
 Color get adminBg => AppTheme.background;
 Color get adminGold => AppTheme.primary;
@@ -497,8 +498,7 @@ class _AdminPageState extends State<AdminPage> {
                 labelStyle: TextStyle(color: AppTheme.secondaryText),
                 enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                 focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: adminGold)),
-              ),
-              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
+              ),              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
               onChanged: (value) { if (value != null) setState(() => selectedThemeSection = value); },
             ),
             const SizedBox(height: 14),
@@ -997,8 +997,7 @@ class _AdminPageState extends State<AdminPage> {
       );
 
       if (response.statusCode != 200) {
-        throw Exception(_readError(response));
-      }
+        throw Exception(_readError(response));      }
 
       final data = jsonDecode(response.body) as List;
 
@@ -1497,8 +1496,7 @@ class _AdminPageState extends State<AdminPage> {
                               : const Icon(Icons.cloud_download_outlined),
                           label: Text(tmdbLoading ? 'جارٍ جلب بيانات المسلسل...' : 'جلب بيانات المسلسل من TMDB'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: adminGold,
-                            side: BorderSide(color: adminGold),
+                            foregroundColor: adminGold,                            side: BorderSide(color: adminGold),
                             padding: const EdgeInsets.symmetric(vertical: 13),
                           ),
                         ),
@@ -1997,8 +1995,7 @@ class _AdminPageState extends State<AdminPage> {
                       IconButton(
                         tooltip: 'حذف السيرفر',
                         onPressed: () => setDialogState(() {
-                          final removed = drafts.removeAt(index);
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                          final removed = drafts.removeAt(index);                          WidgetsBinding.instance.addPostFrameCallback((_) {
                             (removed['name'] as TextEditingController).dispose();
                             (removed['url'] as TextEditingController).dispose();
                           });
@@ -2497,8 +2494,7 @@ class _AdminPageState extends State<AdminPage> {
                                       icon: Icon(Icons.dns_outlined, color: adminGold),
                                     ),
                                     IconButton(
-                                      tooltip: 'تعديل',
-                                      onPressed: () => _editEpisode(seasonId, existing: episode, onSaved: () => setDialogState(() {})),
+                                      tooltip: 'تعديل',                                      onPressed: () => _editEpisode(seasonId, existing: episode, onSaved: () => setDialogState(() {})),
                                       icon: const Icon(Icons.edit, color: Colors.lightBlueAccent),
                                     ),
                                     IconButton(
@@ -2997,8 +2993,7 @@ class _AdminPageState extends State<AdminPage> {
       final tmdb =
           movie['tmdb_id']?.toString().toLowerCase() ?? '';
 
-      final category =
-          movie['category']?.toString().toLowerCase() ?? '';
+      final category =          movie['category']?.toString().toLowerCase() ?? '';
 
       final year =
           movie['release_year']?.toString().toLowerCase() ?? '';
@@ -3497,8 +3492,7 @@ class _AdminPageState extends State<AdminPage> {
                     itemCount: list.length,
                     itemBuilder: (context, index) {
                       return userCard(list[index]);
-                    },
-                  ),
+                    },                  ),
                 ),
         ),
       ],
@@ -3997,8 +3991,7 @@ class _AdminPageState extends State<AdminPage> {
 
                       Navigator.pop(dialogContext, {
                         'title': title,
-                        'tmdb_id': tmdbId,
-                        'poster_url':
+                        'tmdb_id': tmdbId,                        'poster_url':
                             posterController.text.trim(),
                         'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
                         'description':
@@ -4332,6 +4325,14 @@ class _AdminPageState extends State<AdminPage> {
           onTap: () => navigateTo('series'),
         ),
         _homeCard(
+          title: 'استيراد المحتوى من المواقع',
+          subtitle: 'اكتشاف الأفلام والمسلسلات من رابط قسم وإضافتها إلى الباقة تلقائياً',
+          icon: Icons.travel_explore,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const ContentImportPage(),
+          )),
+        ),
+        _homeCard(
           title: 'القنوات',
           subtitle: 'إضافة وتعديل وحذف وإدارة البث المباشر',
           icon: Icons.tv,
@@ -4497,8 +4498,7 @@ class _AdminPageState extends State<AdminPage> {
                 onPressed: loadMovies,
                 icon: Icon(
                   Icons.refresh,
-                  color: adminGold,
-                ),
+                  color: adminGold,                ),
               ),
             if (isCatalog)
               IconButton(
