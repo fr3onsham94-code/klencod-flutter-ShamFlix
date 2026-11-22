@@ -239,6 +239,7 @@ async function syncChannels(db: any) {
     const existing = byExternalKey.get(key) || (nameMatch && !nameMatch.external_source_key && !claimedManualIds.has(nameMatch.id) ? nameMatch : null);
     if (existing?.id && !existing.external_source_key) claimedManualIds.add(existing.id);
     const channelRow: Record<string,unknown> = {
+      id: existing?.id || crypto.randomUUID(),
       name: channelName,
       name_en: preferred.name,
       aliases,
@@ -250,7 +251,6 @@ async function syncChannels(db: any) {
       external_source_key: key,
       updated_at: new Date().toISOString(),
     };
-    if (existing?.id) channelRow.id = existing.id;
     channelRows.push(channelRow);
     categoryByKey.set(key,category);
     for (const stream of uniqueStreams) {
