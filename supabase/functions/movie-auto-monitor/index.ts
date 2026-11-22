@@ -163,7 +163,7 @@ function extractSources(html: string, page: URL) {
   const add = (raw: string | undefined, name: string) => {
     if (!raw) return;
     try {
-      let value = raw.replace(/&amp;/g,"&").replace(/\\\\\\//g,"/").replace(/\\\\u0026/g,"&").trim();
+      let value = raw.replace(/&amp;/g,"&").replace(/\\\//g,"/").replace(/\\u0026/g,"&").trim();
       if (value.startsWith("//")) value = page.protocol + value;
       const url = validateUrl(new URL(value,page).toString());
       found.set(url.toString(),{url:url.toString(),name});
@@ -171,7 +171,7 @@ function extractSources(html: string, page: URL) {
   };
 
   // Match the manual importer: accept only actual player elements and media files.
-  for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\\b[^>]*>/gi)) {
+  for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)) {
     const a = attrs(m[0]);
     const raw = a.src || a["data-src"] || a["data-lazy-src"] || a["data-url"] ||
       a["data-embed"] || a["data-video"] || a["data-href"] || a["data-file"] || a.data;
@@ -179,8 +179,8 @@ function extractSources(html: string, page: URL) {
   }
 
   // Some Akwam player pages place the media URL inside inline scripts.
-  const normalizedHtml = html.replace(/\\\\\\//g,"/").replace(/\\\\u0026/g,"&");
-  const directMedia = /https?:\\/\\/[^\\s"'<>\\\\]+?\\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd)(?:\\?[^\\s"'<>]*)?/gi;
+  const normalizedHtml = html.replace(/\\\//g,"/").replace(/\\u0026/g,"&");
+  const directMedia = /https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd)(?:\?[^\s"'<>]*)?/gi;
   for (const m of normalizedHtml.matchAll(directMedia)) {
     add(m[0],"رابط تشغيل مباشر");
     if (found.size >= 60) break;
