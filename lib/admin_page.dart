@@ -9,6 +9,7 @@ import 'admin_auth_service.dart';
 import 'app_theme.dart';
 import 'admin_packages_page.dart';
 import 'supabase_service.dart';
+import 'content_page_import_service.dart';
 
 Color get adminBg => AppTheme.background;
 Color get adminGold => AppTheme.primary;
@@ -1215,6 +1216,17 @@ class _AdminPageState extends State<AdminPage> {
     }).toList();
   }
 
+  Future<Map<String, dynamic>> _inspectContentPage(String rawUrl, String expectedType) async {
+    final data = await ContentPageImportService.inspect(rawUrl);
+    final detected = data['media_type']?.toString() ?? 'unknown';
+    if (detected != 'unknown' && detected != expectedType) {
+      throw Exception(expectedType == 'movie'
+          ? 'الصفحة تبدو لمسلسل وليست فيلماً'
+          : 'الصفحة تبدو لفيلم وليست مسلسلاً');
+    }
+    return data;
+  }
+
   Future<void> openCatalogForm(
     String section, {
     Map<String, dynamic>? existing,
@@ -1253,6 +1265,10 @@ class _AdminPageState extends State<AdminPage> {
     final tmdbController = TextEditingController(
       text: existing?['tmdb_id']?.toString() ?? '',
     );
+    final pageUrlController = TextEditingController();
+    bool pageImportLoading = false;
+    final pageUrlController = TextEditingController();
+    bool pageImportLoading = false;
     bool published = existing?['is_published'] == true;
     bool isLive = existing?['is_live'] != false;
     bool tmdbLoading = false;
@@ -1289,6 +1305,43 @@ class _AdminPageState extends State<AdminPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     adminField(titleController, isSeries ? 'اسم المسلسل' : 'اسم القناة', required: true),
+                    if (isSeries) ...[
+                      adminField(pageUrlController, 'رابط صفحة المسلسل من أي موقع'),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: pageImportLoading ? null : () async {
+                            if (pageUrlController.text.trim().isEmpty) {
+                              showMessage('أدخل رابط الصفحة أولاً', isError: true);
+                              return;
+                            }
+                            setDialogState(() => pageImportLoading = true);
+                            try {
+                              final data = await _inspectContentPage(pageUrlController.text, 'series');
+                              if (!dialogContext.mounted) return;
+                              setDialogState(() {
+                                titleController.text = data['title']?.toString() ?? titleController.text;
+                                posterController.text = data['poster_url']?.toString() ?? '';
+                                backdropController.text = data['backdrop_url']?.toString() ?? '';
+                                descriptionController.text = data['description']?.toString() ?? '';
+                                directorController.text = data['director']?.toString() ?? '';
+                                castController.text = data['cast']?.toString() ?? '';
+                                categoryController.text = data['category']?.toString() ?? '';
+                                yearController.text = data['release_year']?.toString() ?? '';
+                                ratingController.text = data['rating']?.toString() ?? '';
+                              });
+                              showMessage('تم تحليل الصفحة وجلب البيانات المتاحة');
+                            } catch (e) {
+                              if (dialogContext.mounted) showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
+                            } finally {
+                              if (dialogContext.mounted) setDialogState(() => pageImportLoading = false);
+                            }
+                          },
+                          icon: pageImportLoading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.travel_explore),
+                          label: Text(pageImportLoading ? 'جارٍ تحليل الصفحة...' : 'تحليل الرابط وجلب بيانات المسلسل'),
+                        ),
+                      ),
+                    ],
                     if (isSeries) ...[
                       adminField(tmdbController, 'رابط صفحة المسلسل من TMDB أو رقم المسلسل'),
                       SizedBox(
@@ -1501,6 +1554,7 @@ class _AdminPageState extends State<AdminPage> {
     ratingController.dispose();
     streamController.dispose();
     tmdbController.dispose();
+    pageUrlController.dispose();
     if (result == null) {
       _disposeServerDrafts(serverDrafts);
       return;
@@ -3521,6 +3575,41 @@ class _AdminPageState extends State<AdminPage> {
                           'اسم الفيلم',
                           required: true,
                         ),
+                        adminField(pageUrlController, 'رابط صفحة الفيلم من أي موقع'),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: pageImportLoading ? null : () async {
+                              if (pageUrlController.text.trim().isEmpty) {
+                                showMessage('أدخل رابط الصفحة أولاً', isError: true);
+                                return;
+                              }
+                              setDialogState(() => pageImportLoading = true);
+                              try {
+                                final data = await _inspectContentPage(pageUrlController.text, 'movie');
+                                if (!dialogContext.mounted) return;
+                                setDialogState(() {
+                                  titleController.text = data['title']?.toString() ?? titleController.text;
+                                  posterController.text = data['poster_url']?.toString() ?? '';
+                                  backdropController.text = data['backdrop_url']?.toString() ?? '';
+                                  descriptionController.text = data['description']?.toString() ?? '';
+                                  directorController.text = data['director']?.toString() ?? '';
+                                  castController.text = data['cast']?.toString() ?? '';
+                                  categoryController.text = data['category']?.toString() ?? '';
+                                  yearController.text = data['release_year']?.toString() ?? '';
+                                  ratingController.text = data['rating']?.toString() ?? '';
+                                });
+                                showMessage('تم تحليل الصفحة وجلب البيانات المتاحة');
+                              } catch (e) {
+                                if (dialogContext.mounted) showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
+                              } finally {
+                                if (dialogContext.mounted) setDialogState(() => pageImportLoading = false);
+                              }
+                            },
+                            icon: pageImportLoading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.travel_explore),
+                            label: Text(pageImportLoading ? 'جارٍ تحليل الصفحة...' : 'تحليل الرابط وجلب بيانات الفيلم'),
+                          ),
+                        ),
                         adminField(
                           tmdbController,
                           'رابط صفحة TMDB أو رقم الفيلم',
@@ -3794,6 +3883,7 @@ class _AdminPageState extends State<AdminPage> {
 
     titleController.dispose();
     tmdbController.dispose();
+    pageUrlController.dispose();
     posterController.dispose();
     backdropController.dispose();
     descriptionController.dispose();
