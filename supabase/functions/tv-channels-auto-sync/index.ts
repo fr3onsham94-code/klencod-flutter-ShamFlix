@@ -59,9 +59,13 @@ function safeStreamUrl(raw: string): string | null {
     const u = new URL(raw.trim());
     if (!["http:", "https:"].includes(u.protocol) || u.username || u.password) return null;
     const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" ||
-        host === "::1" || /^127\./.test(host) || /^10\./.test(host) ||
-        /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) return null;
+    const ipHost = host.replace(/^\[|\]$/g, "");
+    if (host === "localhost" || host.endsWith(".localhost") || ipHost === "0.0.0.0" ||
+        ipHost === "::" || ipHost === "::1" || /^127\./.test(ipHost) ||
+        /^10\./.test(ipHost) || /^192\.168\./.test(ipHost) ||
+        /^169\.254\./.test(ipHost) || /^172\.(1[6-9]|2\d|3[01])\./.test(ipHost) ||
+        /^f[cd][0-9a-f]{2}:/i.test(ipHost) || /^fe80:/i.test(ipHost) ||
+        /^::ffff:(127|10|192\.168|169\.254)\./i.test(ipHost)) return null;
     if (/youtube\.com|youtu\.be|twitch\.tv|facebook\.com|instagram\.com/i.test(host)) return null;
     if (!/\.m3u8?(?:$|\?)|\.mpd(?:$|\?)/i.test(u.pathname + u.search)) return null;
     u.hash = "";
@@ -143,7 +147,9 @@ async function hash(value: string): Promise<string> {
 function arabicAlias(name: string): string | null {
   const n = normalizeName(name);
   const known: Record<string,string> = {
-    aljazeera: "الجزيرة", aljazeeraenglish: "الجزيرة الإنجليزية",
+    aljazeera: "الجزيرة الإخبارية", aljazeeraenglish: "الجزيرة الإنجليزية",
+    aljazeeraarabic: "الجزيرة الإخبارية", "الجزيرةالاخباريه": "الجزيرة الإخبارية",
+    "قناةالجزيرة": "الجزيرة الإخبارية", "الجزيرة": "الجزيرة الإخبارية",
     alarabiya: "العربية", alhadath: "الحدث",
     skynewsarabia: "سكاي نيوز عربية", bbcnewsarabic: "بي بي سي عربي",
     alhurra: "الحرة", almayadeen: "الميادين",
@@ -288,12 +294,14 @@ async function probeServer(url: string): Promise<"ok"|"blocked"|"bad"> {
   try {
     const response = await fetch(url, {
       method: "GET",
-      redirect: "follow",
+      // Do not follow arbitrary playlist redirects from the server-side health checker.
+      redirect: "manual",
       signal: AbortSignal.timeout(7000),
       headers: { "Range": "bytes=0-1023", "User-Agent": "ShamFlix-TV-Health/1.0", "Accept": "*/*" },
     });
     if (response.body) await response.body.cancel().catch(() => {});
-    if (response.status === 401 || response.status === 403 || response.status === 451) return "blocked";
+    if ((response.status >= 300 && response.status < 400) ||
+        response.status === 401 || response.status === 403 || response.status === 451) return "blocked";
     if (response.status === 404 || response.status === 410 || response.status >= 500) return "bad";
     return response.ok || response.status === 206 ? "ok" : "bad";
   } catch { return "bad"; }
@@ -301,8 +309,8 @@ async function probeServer(url: string): Promise<"ok"|"blocked"|"bad"> {
 
 async function healthCheck(db: any) {
   const { data: servers, error } = await db.from("playback_servers")
-    .select("id,stream_url,source_failures")
-    .not("source_id","is",null).eq("is_active",true)
+    .select("id,stream_url,source_failures,is_active")
+    .not("source_id","is",null)
     .order("source_checked_at",{ascending:true,nullsFirst:true}).limit(MAX_HEALTH_CHECKS);
   if (error) throw error;
   let checked=0, recovered=0, disabled=0, blocked=0;
@@ -322,7 +330,7 @@ async function healthCheck(db: any) {
       checked++;
       if (result === "blocked") blocked++;
       if (result === "ok" && failures > 0) recovered++;
-      if (!active) disabled++;
+      if (server.is_active && !active) disabled++;
     }));
   }
   return { checked, recovered, disabled, geoBlockedOrAuthProtected: blocked };
