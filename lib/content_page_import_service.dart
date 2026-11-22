@@ -119,7 +119,7 @@ class ContentPageImportService {
       final episodeUri = _validatedUri(entry.key);
       final episodeHtml = await _fetchPublicHtml(episodeUri);
       String? watchUrl;
-      for (final match in RegExp(r'<a\\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
+      for (final match in RegExp(r'<a\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
         final attrs = _attributes(match.group(0)!);
         final href = attrs['href'] ?? '';
         if (href.contains('/watch/')) {
