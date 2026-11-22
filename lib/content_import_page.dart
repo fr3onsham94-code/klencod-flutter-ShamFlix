@@ -19,6 +19,10 @@ class _ContentImportPageState extends State<ContentImportPage> {
   List<Map<String, dynamic>> items = [];
   final Set<String> selected = {};
   bool loadingPackages = true, scanning = false, importing = false, publish = true;
+  bool monitorSeries = true;
+  int monitorInterval = 60;
+  int monitorsCreated = 0;
+  int monitorFailures = 0;
   int imported = 0, duplicates = 0, failed = 0;
   String? error;
 
@@ -73,7 +77,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
   Future<void> importSelected() async {
     final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
     if (chosen.isEmpty || packageId == null) return;
-    setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; });
+    setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; });
     try {
       final table = type == 'movie' ? 'movies' : 'series';
       final rows = await AuthService.client.from(table).select('id,title,release_year');
@@ -106,6 +110,30 @@ class _ContentImportPageState extends State<ContentImportPage> {
           await AuthService.client.from('content_package_items').insert({
             'package_id': packageId, 'content_type': type, 'content_id': id,
           });
+
+          if (type == 'series' && monitorSeries) {
+            final sourceUrl = item['page_url']?.toString().trim() ?? '';
+            final sourceUri = Uri.tryParse(sourceUrl);
+            if (sourceUri != null &&
+                (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
+                sourceUri.host.isNotEmpty) {
+              try {
+                await AuthService.client.from('series_source_monitors').upsert({
+                  'series_id': id,
+                  'source_url': sourceUri.toString(),
+                  'source_host': sourceUri.host,
+                  'season_number': 1,
+                  'check_interval_minutes': monitorInterval,
+                  'is_active': true,
+                }, onConflict: 'series_id,source_url');
+                monitorsCreated++;
+              } catch (_) {
+                monitorFailures++;
+              }
+            } else {
+              monitorFailures++;
+            }
+          }
           final sources = (item['stream_sources'] as List? ?? [])
               .whereType<Map>().map((e) => Map<String, dynamic>.from(e))
               .where((e) => (e['url']?.toString() ?? '').trim().isNotEmpty).toList();
@@ -126,7 +154,10 @@ class _ContentImportPageState extends State<ContentImportPage> {
           setState(() => imported++);
         } catch (_) { setState(() => failed++); }
       }
-      message('اكتمل الاستيراد: $imported جديد • $duplicates مكرر • $failed تعذر استيراده');
+      message('اكتمل الاستيراد: $imported جديد • $duplicates مكرر • $failed تعذر استيراده' +
+          (type == 'series' && monitorSeries
+              ? ' • تمت جدولة $monitorsCreated للمراقبة • تعذر تفعيل المراقبة لـ $monitorFailures'
+              : ''));
     } catch (e) { message('تعذر الاستيراد: $e', true); }
     finally { if (mounted) setState(() => importing = false); }
   }
@@ -206,6 +237,33 @@ class _ContentImportPageState extends State<ContentImportPage> {
                 subtitle: const Text('عند إيقافه تُحفظ العناصر كمسودات'),
                 onChanged: scanning || importing ? null : (v) => setState(() => publish = v),
               ),
+              if (type == 'series') ...[
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: monitorSeries,
+                  activeColor: accent,
+                  title: const Text('مراقبة المسلسلات وإضافة الحلقات تلقائياً'),
+                  subtitle: const Text('يحفظ رابط صفحة كل مسلسل ويفحص الحلقات الجديدة بالخلفية'),
+                  onChanged: scanning || importing ? null : (v) => setState(() => monitorSeries = v),
+                ),
+                if (monitorSeries)
+                  DropdownButtonFormField<int>(
+                    value: monitorInterval,
+                    dropdownColor: panel,
+                    decoration: const InputDecoration(labelText: 'فترة فحص الحلقات'),
+                    items: const [
+                      DropdownMenuItem(value: 30, child: Text('كل 30 دقيقة')),
+                      DropdownMenuItem(value: 60, child: Text('كل ساعة')),
+                      DropdownMenuItem(value: 180, child: Text('كل 3 ساعات')),
+                      DropdownMenuItem(value: 360, child: Text('كل 6 ساعات')),
+                      DropdownMenuItem(value: 720, child: Text('كل 12 ساعة')),
+                      DropdownMenuItem(value: 1440, child: Text('كل 24 ساعة')),
+                    ],
+                    onChanged: scanning || importing ? null : (v) {
+                      if (v != null) setState(() => monitorInterval = v);
+                    },
+                  ),
+              ],
               OutlinedButton.icon(
                 onPressed: scanning || importing ? null : scan,
                 icon: scanning ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
