@@ -3859,7 +3859,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             Positioned.fill(child:Row(
               textDirection: TextDirection.ltr,
               children: [
-                if (packages.isNotEmpty) _packageSidebar(),
+
                 Expanded(
                   child: Directionality(
                     textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
