@@ -1267,8 +1267,6 @@ class _AdminPageState extends State<AdminPage> {
     );
     final pageUrlController = TextEditingController();
     bool pageImportLoading = false;
-    final pageUrlController = TextEditingController();
-    bool pageImportLoading = false;
     bool published = existing?['is_published'] == true;
     bool isLive = existing?['is_live'] != false;
     bool tmdbLoading = false;
