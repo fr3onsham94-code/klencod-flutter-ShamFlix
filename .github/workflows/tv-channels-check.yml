@@ -1,0 +1,24 @@
+name: TV Channels Sync Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "supabase/functions/tv-channels-auto-sync/**"
+      - "supabase/migrations/*tv_channel*"
+      - "supabase/migrations/*schedule_tv_channels_sync*"
+      - ".github/workflows/tv-channels-check.yml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check Edge Function
+        run: deno check supabase/functions/tv-channels-auto-sync/index.ts
