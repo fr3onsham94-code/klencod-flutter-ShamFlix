@@ -106,7 +106,7 @@ class ContentPageImportService {
 
     void add(String? raw, {required String kind}) {
       if (raw == null || raw.trim().isEmpty) return;
-      final cleaned = raw.trim().replaceAll('&amp;', '&').replaceAll(r'\\/', '/');
+      final cleaned = raw.trim().replaceAll('&amp;', '&').replaceAll(r'\/', '/');
       final resolved = Uri.tryParse(cleaned);
       if (resolved == null) return;
       final uri = pageUri.resolveUri(resolved);
@@ -125,17 +125,17 @@ class ContentPageImportService {
       };
     }
 
-    for (final match in RegExp(r'<(?:iframe|frame)\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+    for (final match in RegExp(r'<(?:iframe|frame)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
       add(attrs['src'], kind: 'iframe');
     }
-    for (final match in RegExp(r'<(?:video|source|embed)\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+    for (final match in RegExp(r'<(?:video|source|embed)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
       add(attrs['src'] ?? attrs['data'], kind: 'media');
     }
 
     final directPattern = RegExp(
-      r'''https?://[^\\s"'<>\\\\]+?\\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:\\?[^\\s"'<>]*)?''',
+      r'''https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:\?[^\s"'<>]*)?''',
       caseSensitive: false,
     );
     for (final match in directPattern.allMatches(html)) {
