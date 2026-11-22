@@ -4866,44 +4866,77 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
   bool inspectingSources = false;
 
   static const String _playerOnlyScript = r'''(() => {
-    const isolate = () => {
-      const candidates = [...document.querySelectorAll('video, iframe, embed, object')];
-      const visible = candidates.map(el => {
-        const r = el.getBoundingClientRect();
-        const style = getComputedStyle(el);
-        return {el, area: Math.max(0, r.width) * Math.max(0, r.height), visible: r.width > 40 && r.height > 40 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'};
-      }).filter(x => x.visible).sort((a,b) => b.area-a.area);
-      const player = visible.length ? visible[0].el : null;
-      if (player) {
-        let node = player;
-        while (node && node !== document.body) {
-          const parent = node.parentElement;
-          if (!parent) break;
-          [...parent.children].forEach(sibling => { if (sibling !== node) sibling.style.setProperty('display','none','important'); });
-          node.style.setProperty('display','block','important');
-          node.style.setProperty('width','100%','important');
-          node.style.setProperty('height','100%','important');
-          node.style.setProperty('max-width','none','important');
-          node.style.setProperty('max-height','none','important');
-          node.style.setProperty('margin','0','important');
-          node.style.setProperty('padding','0','important');
-          node = parent;
-        }
-        player.style.setProperty('width','100%','important');
-        player.style.setProperty('height','100%','important');
-        player.style.setProperty('max-width','100vw','important');
-        player.style.setProperty('max-height','100vh','important');
-      } else {
-        document.querySelectorAll('header, footer, nav, .header, .footer, .navbar, .advertisement, .ads, [class*=ad-container], [id*=advert]').forEach(el => el.style.setProperty('display','none','important'));
-      }
-      document.documentElement.style.cssText += ';width:100%!important;height:100%!important;margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important';
-      document.body.style.cssText += ';width:100%!important;height:100%!important;margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important';
+(() => {
+    const score = (el) => {
+      const tag = el.tagName.toLowerCase();
+      const r = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const src = (el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || el.getAttribute('data') || '').toLowerCase();
+      const hint = ((el.id || '') + ' ' + (typeof el.className === 'string' ? el.className : '') + ' ' + (el.getAttribute('title') || '') + ' ' + src).toLowerCase();
+      const adLike = /(^|[\\s_-])(ad|ads|advert|banner|promo|popup|sponsor|tracking)([\\s_-]|$)/i.test(hint);
+      const visible = r.width > 100 && r.height > 70 &&
+        r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth &&
+        style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+      if (!visible || adLike) return -1;
+      const area = Math.min(r.width, innerWidth) * Math.min(r.height, innerHeight);
+      const playerHint = /player|video|embed|stream|watch|hls|movie/i.test(hint) ? 50000 : 0;
+      const tagPriority = tag === 'video' ? 300000 : tag === 'iframe' ? 100000 : 50000;
+      return tagPriority + playerHint + area;
     };
-    isolate();
-    const observer = new MutationObserver(() => isolate());
-    observer.observe(document.documentElement, {childList:true,subtree:true,attributes:true,attributeFilter:['src']});
+    const candidates = [...document.querySelectorAll('video, iframe, embed, object')]
+      .map(el => ({el, score: score(el)}))
+      .filter(x => x.score >= 0)
+      .sort((a, b) => b.score - a.score);
+    const chosen = candidates.length ? candidates[0].el : null;
+    if (chosen) {
+      let node = chosen;
+      let depth = 0;
+      while (node && node !== document.body && depth++ < 8) {
+        const parent = node.parentElement;
+        if (!parent) break;
+        [...parent.children].forEach(sibling => {
+          if (sibling !== node) sibling.style.setProperty('display', 'none', 'important');
+        });
+        node.style.setProperty('display', 'block', 'important');
+        node.style.setProperty('visibility', 'visible', 'important');
+        node.style.setProperty('opacity', '1', 'important');
+        node.style.setProperty('width', '100%', 'important');
+        node.style.setProperty('height', '100%', 'important');
+        node.style.setProperty('max-width', 'none', 'important');
+        node.style.setProperty('max-height', 'none', 'important');
+        node.style.setProperty('margin', '0', 'important');
+        node.style.setProperty('padding', '0', 'important');
+        node.style.setProperty('position', 'relative', 'important');
+        node = parent;
+      }
+      chosen.style.setProperty('width', '100vw', 'important');
+      chosen.style.setProperty('height', '100vh', 'important');
+      chosen.style.setProperty('max-width', '100vw', 'important');
+      chosen.style.setProperty('max-height', '100vh', 'important');
+      chosen.style.setProperty('border', '0', 'important');
+    } else {
+      // Keep the page visible until a real player element appears.
+      document.querySelectorAll('header, footer, nav, .header, .footer, .navbar, .advertisement, .ads, [class*=ad-container], [id*=advert]').forEach(el => el.style.setProperty('display', 'none', 'important'));
+    }
+    document.documentElement.style.setProperty('width', '100%', 'important');
+    document.documentElement.style.setProperty('height', '100%', 'important');
+    document.documentElement.style.setProperty('margin', '0', 'important');
+    document.documentElement.style.setProperty('padding', '0', 'important');
+    document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+    document.documentElement.style.setProperty('background', '#000', 'important');
+    document.body.style.setProperty('width', '100%', 'important');
+    document.body.style.setProperty('height', '100%', 'important');
+    document.body.style.setProperty('margin', '0', 'important');
+    document.body.style.setProperty('padding', '0', 'important');
+    document.body.style.setProperty('overflow', 'hidden', 'important');
+    document.body.style.setProperty('background', '#000', 'important');
+    const observer = new MutationObserver(() => {
+      const player = document.querySelector('video, iframe, embed, object');
+      if (player) observer.disconnect();
+    });
+    observer.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['src']});
     setTimeout(() => observer.disconnect(), 20000);
-  })();''';
+  })();
 
   static const String _sourceScanScript = r'''
 (() => {
