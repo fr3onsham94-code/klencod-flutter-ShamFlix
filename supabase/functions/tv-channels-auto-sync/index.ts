@@ -275,7 +275,10 @@ async function syncChannels(db: any) {
     .limit(50000);
   if (sourceServersError) throw sourceServersError;
   const groupedServers = new Map<string, any[]>();
+  const successfullySyncedSourceIds = new Set(sourceResults.map(x => x.source.id));
   for (const server of sourceServers || []) {
+    // Never prune a source whose playlist failed to fetch or parse in this run.
+    if (!successfullySyncedSourceIds.has(server.source_id)) continue;
     const groupKey = server.channel_id + "|" + server.source_id;
     const group = groupedServers.get(groupKey) || [];
     group.push(server);
