@@ -2974,7 +2974,7 @@ class _DetailsPageState extends State<DetailsPage> {
     if (!_isDirectMediaUrl(url)) {
       if (uri.scheme == 'http' || uri.scheme == 'https') {
         Navigator.push(context, MaterialPageRoute(
-          builder: (_) => ShamFlixWebPage(url: url, title: title),
+          builder: (_) => ShamFlixWebPage(url: url, title: title, playerOnly: true),
         ));
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3955,7 +3955,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final url = _embedFallbackUrl;
     if (url == null || url.isEmpty || !mounted) return;
     await Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ShamFlixWebPage(url: url, title: widget.title),
+      builder: (_) => ShamFlixWebPage(url: url, title: widget.title, playerOnly: true),
     ));
   }
 
@@ -4325,6 +4325,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final url = valueOf(widget.servers[index]['stream_url']).trim();
     if (url.isEmpty) {
       _message('رابط هذا السيرفر غير متوفر');
+      return;
+    }
+    if (!StreamSourceDetector.isDirectMediaUrl(url)) {
+      await Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ShamFlixWebPage(url: url, title: widget.title, playerOnly: true),
+      ));
       return;
     }
     controlsTimer?.cancel();
@@ -4836,13 +4842,54 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 class ShamFlixWebPage extends StatefulWidget {
   final String url;
   final String title;
-  const ShamFlixWebPage({super.key, required this.url, required this.title});
+  final bool playerOnly;
+  const ShamFlixWebPage({super.key, required this.url, required this.title, this.playerOnly = false});
   @override
   State<ShamFlixWebPage> createState() => _ShamFlixWebPageState();
 }
 class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
   late final WebViewController controller;
   bool inspectingSources = false;
+
+  static const String _playerOnlyScript = r'''(() => {
+    const isolate = () => {
+      const candidates = [...document.querySelectorAll('video, iframe, embed, object, canvas')];
+      const visible = candidates.map(el => {
+        const r = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return {el, area: Math.max(0, r.width) * Math.max(0, r.height), visible: r.width > 40 && r.height > 40 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'};
+      }).filter(x => x.visible).sort((a,b) => b.area-a.area);
+      const player = visible.length ? visible[0].el : null;
+      if (player) {
+        let node = player;
+        while (node && node !== document.body) {
+          const parent = node.parentElement;
+          if (!parent) break;
+          [...parent.children].forEach(sibling => { if (sibling !== node) sibling.style.setProperty('display','none','important'); });
+          node.style.setProperty('display','block','important');
+          node.style.setProperty('width','100%','important');
+          node.style.setProperty('height','100%','important');
+          node.style.setProperty('max-width','none','important');
+          node.style.setProperty('max-height','none','important');
+          node.style.setProperty('margin','0','important');
+          node.style.setProperty('padding','0','important');
+          node = parent;
+        }
+        player.style.setProperty('width','100%','important');
+        player.style.setProperty('height','100%','important');
+        player.style.setProperty('max-width','100vw','important');
+        player.style.setProperty('max-height','100vh','important');
+      } else {
+        document.querySelectorAll('header, footer, nav, .header, .footer, .navbar, .advertisement, .ads, [class*=ad-container], [id*=advert]').forEach(el => el.style.setProperty('display','none','important'));
+      }
+      document.documentElement.style.cssText += ';width:100%!important;height:100%!important;margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important';
+      document.body.style.cssText += ';width:100%!important;height:100%!important;margin:0!important;padding:0!important;overflow:hidden!important;background:#000!important';
+    };
+    isolate();
+    const observer = new MutationObserver(() => isolate());
+    observer.observe(document.documentElement, {childList:true,subtree:true,attributes:true,attributeFilter:['src','style','class']});
+    setTimeout(() => observer.disconnect(), 20000);
+  })();''';
 
   static const String _sourceScanScript = r'''
 (() => {
@@ -5019,6 +5066,9 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
           if (mounted) setState(() => pageError = null);
         },
         onPageFinished: (_) async {
+          if (widget.playerOnly) {
+            try { await controller.runJavaScript(_playerOnlyScript); } catch (_) {}
+          }
           final back = await controller.canGoBack();
           final forward = await controller.canGoForward();
           if (mounted) setState(() {
@@ -5035,9 +5085,43 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
         },
       ))
       ..loadRequest(Uri.parse(widget.url));
+    if (widget.playerOnly) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
+      unawaited(SystemChrome.setPreferredOrientations(const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]));
+    }
   }
+
+  @override
+  void dispose() {
+    if (widget.playerOnly) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+      unawaited(applyAppOrientationPolicy());
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.playerOnly) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(fit: StackFit.expand, children: [
+          WebViewWidget(controller: controller),
+          Positioned(
+            top: 8, left: 8,
+            child: SafeArea(child: Material(
+              color: Colors.black54,
+              shape: const CircleBorder(),
+              child: IconButton(
+                tooltip: 'إغلاق المشغل',
+                onPressed: () => Navigator.maybePop(context),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+              ),
+            )),
+          ),
+        ]),
+      );
+    }
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
