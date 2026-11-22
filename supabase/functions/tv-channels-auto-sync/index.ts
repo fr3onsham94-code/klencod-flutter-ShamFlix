@@ -224,6 +224,7 @@ async function syncChannels(db: any) {
   const channelRows: Record<string,unknown>[] = [];
   const streamRows: Record<string,unknown>[] = [];
   const categoryByKey = new Map<string,string>();
+  const assignedChannelIds = new Set<string>();
   for (const [key, entries] of grouped) {
     // The same URL may legitimately belong to multiple sources; dedupe only within a source.
     const uniqueStreams = [...new Map(entries.map(e => [e.sourceId + "|" + e.url,e])).values()];
@@ -238,8 +239,10 @@ async function syncChannels(db: any) {
     const nameMatch = byName.get(normalizeName(channelName)) || byName.get(normalizeName(preferred.name));
     const existing = byExternalKey.get(key) || (nameMatch && !nameMatch.external_source_key && !claimedManualIds.has(nameMatch.id) ? nameMatch : null);
     if (existing?.id && !existing.external_source_key) claimedManualIds.add(existing.id);
+    const assignedId = existing?.id && !assignedChannelIds.has(existing.id) ? existing.id : crypto.randomUUID();
+    assignedChannelIds.add(assignedId);
     const channelRow: Record<string,unknown> = {
-      id: existing?.id || crypto.randomUUID(),
+      id: assignedId,
       name: channelName,
       name_en: preferred.name,
       aliases,
