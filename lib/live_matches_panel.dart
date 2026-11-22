@@ -10,7 +10,7 @@ class _LiveMatchesPanelState extends State<LiveMatchesPanel>{
   final Map<String,List<Map<String,dynamic>>> serversByMatch={};
   final Set<String> expandedMatches={},loadingServers={};
   @override void initState(){super.initState();_load();}
-  Future<void> _load() async {if(mounted)setState(()=>{loading=true,error=null});try{matches=await SupabaseService.getLiveMatches();serversByMatch.clear();expandedMatches.clear();}catch(e){error='تعذر تحميل جدول المباريات: $e';}if(mounted)setState(()=>loading=false);}
+  Future<void> _load() async {if(mounted)setState(() { loading=true; error=null; });try{matches=await SupabaseService.getLiveMatches();serversByMatch.clear();expandedMatches.clear();}catch(e){error='تعذر تحميل جدول المباريات: $e';}if(mounted)setState(()=>loading=false);}
   Future<void> _toggle(Map<String,dynamic> match) async {final id=match['id']?.toString()??'';if(id.isEmpty)return;if(expandedMatches.contains(id)){setState(()=>expandedMatches.remove(id));return;}setState(()=>expandedMatches.add(id));if(serversByMatch.containsKey(id)||loadingServers.contains(id))return;setState(()=>loadingServers.add(id));try{serversByMatch[id]=await SupabaseService.getLiveMatchServers(id);}catch(_){serversByMatch[id]=[];}if(mounted)setState(()=>loadingServers.remove(id));}
   String _status(Map<String,dynamic> m){switch((m['match_status']??'scheduled').toString().toLowerCase()){case 'live':case 'in_progress':return 'مباشرة';case 'finished':case 'completed':return 'انتهت';default:return 'لم تبدأ';}}
   Color _statusColor(Map<String,dynamic> m)=>_status(m)=='مباشرة'?Colors.redAccent:_status(m)=='انتهت'?Colors.white54:const Color(0xFFD6AC55);
