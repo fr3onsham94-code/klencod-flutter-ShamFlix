@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_auth_service.dart';
 import 'app_theme.dart';
@@ -41,6 +42,8 @@ class _AdminPageState extends State<AdminPage> {
   final Set<String> selectedMovieIds = {};
   final Set<String> selectedCatalogIds = {};
   bool bulkDeleting = false;
+  bool mergingSeries = false;
+  double sidebarWidth=110, sidebarButtonSize=42, packageFontSize=11, sectionFontSize=12, packageIconSize=15, packageItemHeight=38;
   List<Map<String, dynamic>> users = [];
   List<Map<String, dynamic>> activeSessions = [];
   bool presenceLoading = false;
@@ -120,6 +123,7 @@ class _AdminPageState extends State<AdminPage> {
     loadCatalogGridColumnsSetting();
     loadAppLinksAndUpdateSettings();
     loadThemePaletteSetting();
+    _loadAdminSidebarSettings();
   }
 
   @override
@@ -617,6 +621,7 @@ class _AdminPageState extends State<AdminPage> {
       padding: const EdgeInsets.all(14),
       children: [
         themePaletteSection(),
+        _sidebarSettingsCard(),
         Card(
           color: adminPanel,
           child: SwitchListTile(
@@ -1816,6 +1821,85 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+
+  Future<void> _mergeSelectedSeries() async {
+    if(selectedCatalogIds.length!=2 || mergingSeries)return;
+    final ids=selectedCatalogIds.toList();
+    final a=series.firstWhere((x)=>x['id'].toString()==ids[0]);
+    final b=series.firstWhere((x)=>x['id'].toString()==ids[1]);
+    String primary=ids[0]; int aStart=1,bStart=2;
+    final ok=await showDialog<bool>(context:context,builder:(ctx)=>StatefulBuilder(builder:(ctx,dlg)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
+      backgroundColor:adminPanel,title:Text('دمج مسلسلين',style:TextStyle(color:adminGold)),
+      content:Column(mainAxisSize:MainAxisSize.min,children:[
+        Text('اختر المسلسل الأساسي الذي سيبقى باسمه وبوستره:',style:TextStyle(color:AppTheme.text)),
+        DropdownButton<String>(isExpanded:true,value:primary,items:[DropdownMenuItem(value:ids[0],child:Text(a['title']?.toString()??'الأول')),DropdownMenuItem(value:ids[1],child:Text(b['title']?.toString()??'الثاني'))],onChanged:(v){if(v!=null)dlg(()=>primary=v);}),
+        DropdownButton<int>(isExpanded:true,value:aStart,items:List.generate(30,(i)=>i+1).map((v)=>DropdownMenuItem(value:v,child:Text('المسلسل الأول يبدأ من الموسم $v'))).toList(),onChanged:(v){if(v!=null)dlg(()=>aStart=v);}),
+        DropdownButton<int>(isExpanded:true,value:bStart,items:List.generate(30,(i)=>i+1).map((v)=>DropdownMenuItem(value:v,child:Text('المسلسل الثاني يبدأ من الموسم $v'))).toList(),onChanged:(v){if(v!=null)dlg(()=>bStart=v);}),
+        Text('سيتم نقل المواسم والحلقات وسيرفراتها مع الاحتفاظ ببيانات المسلسل الأساسي.',style:TextStyle(color:AppTheme.secondaryText,fontSize:12)),
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('إلغاء')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('تأكيد الدمج'))],
+    ))));
+    if(ok!=true)return;
+    if(aStart==bStart){showMessage('اختر رقم بداية مختلفاً لكل مسلسل',isError:true);return;}
+    final source=primary==ids[0]?ids[1]:ids[0];
+    final sourceStart=primary==ids[0]?bStart:aStart;
+    final targetStart=primary==ids[0]?aStart:bStart;
+    setState(()=>mergingSeries=true);
+    try{
+      final targetSeasons=await _extraLoad('seasons',{'series_id':'eq.$primary'});
+      final sourceSeasons=await _extraLoad('seasons',{'series_id':'eq.$source'});
+      if(sourceSeasons.isEmpty)throw Exception('المسلسل الثاني لا يحتوي مواسم.');
+      final used=<int>{};
+      for(final s in targetSeasons){final n=targetStart+(int.tryParse(s['season_number'].toString())??1)-1;if(!used.add(n))throw Exception('تداخل أرقام مواسم المسلسل الأساسي');}
+      for(final s in sourceSeasons){final n=sourceStart+(int.tryParse(s['season_number'].toString())??1)-1;if(!used.add(n))throw Exception('أرقام المواسم متداخلة، اختر بدايات مختلفة');}
+      for(final s in targetSeasons){
+        final n=targetStart+(int.tryParse(s['season_number'].toString())??1)-1;
+        final r=await http.patch(_extraTableUrl('seasons').replace(queryParameters:{'id':'eq.${s['id']}'}),headers:headers,body:jsonEncode({'season_number':n,'name':'الموسم $n'}));
+        if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
+      }
+      for(final s in sourceSeasons){
+        final n=sourceStart+(int.tryParse(s['season_number'].toString())??1)-1;
+        final r=await http.patch(_extraTableUrl('seasons').replace(queryParameters:{'id':'eq.${s['id']}'}),headers:headers,body:jsonEncode({'series_id':primary,'season_number':n,'name':'الموسم $n'}));
+        if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
+      }
+      final p1=await _loadAssignedPackageIds('series',primary),p2=await _loadAssignedPackageIds('series',source);
+      await _saveContentPackageAssignments('series',primary,{...p1,...p2}.toList());
+      await AuthService.client.from('content_package_items').delete().eq('content_type','series').eq('content_id',source);
+      final monitors=await _extraLoad('series_source_monitors',{'series_id':'eq.$source'});
+      for(final monitor in monitors){
+        final r=await http.patch(_extraTableUrl('series_source_monitors').replace(queryParameters:{'id':'eq.${monitor['id']}'}),headers:headers,body:jsonEncode({'series_id':primary}));
+        if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
+      }
+      final r=await http.delete(catalogUrl('series').replace(queryParameters:{'id':'eq.$source'}),headers:headers);
+      if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
+      selectedCatalogIds.clear();await loadCatalog('series');showMessage('تم دمج المسلسلين ونقل المواسم والحلقات والسيرفرات');
+    }catch(e){await loadCatalog('series');showMessage('تعذر إكمال الدمج: $e',isError:true);}
+    finally{if(mounted)setState(()=>mergingSeries=false);}
+  }
+
+  Future<void> _loadAdminSidebarSettings() async {
+    final p=await SharedPreferences.getInstance(); if(!mounted)return;
+    setState(()=>{sidebarWidth=(p.getDouble('shamflix_catalog_sidebar_width')??110).clamp(90,160).toDouble(),sidebarButtonSize=(p.getDouble('shamflix_catalog_sidebar_button')??42).clamp(34,56).toDouble(),packageFontSize=(p.getDouble('shamflix_catalog_package_font')??11).clamp(9,15).toDouble(),sectionFontSize=(p.getDouble('shamflix_catalog_section_font')??12).clamp(10,16).toDouble(),packageIconSize=(p.getDouble('shamflix_catalog_package_icon')??15).clamp(12,22).toDouble(),packageItemHeight=(p.getDouble('shamflix_catalog_package_height')??38).clamp(30,60).toDouble()});
+  }
+  Widget _sidebarSettingsCard()=>Card(color:adminPanel,child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    Text('إعدادات الزر والقائمة العائمة',style:TextStyle(color:adminGold,fontWeight:FontWeight.bold)),
+    for(final item in <List<dynamic>>[
+      ['عرض القائمة','shamflix_catalog_sidebar_width',sidebarWidth,90.0,160.0],
+      ['حجم الزر العائم','shamflix_catalog_sidebar_button',sidebarButtonSize,34.0,56.0],
+      ['حجم خط الباقات','shamflix_catalog_package_font',packageFontSize,9.0,15.0],
+      ['حجم خط العنوان','shamflix_catalog_section_font',sectionFontSize,10.0,16.0],
+      ['حجم الأيقونات','shamflix_catalog_package_icon',packageIconSize,12.0,22.0],
+      ['ارتفاع الباقة','shamflix_catalog_package_height',packageItemHeight,30.0,60.0],
+    ]) Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text('${item[0]}: ${(item[2] as double).toStringAsFixed(0)}',style:TextStyle(color:AppTheme.text)),
+      Slider(value:item[2] as double,min:item[3] as double,max:item[4] as double,activeColor:adminGold,onChanged:(v)async{
+        final p=await SharedPreferences.getInstance();await p.setDouble(item[1] as String,v);
+        await _loadAdminSidebarSettings();appSettingsRefreshNotifier.value++;
+      }),
+    ]),
+    TextButton(onPressed:()async{final p=await SharedPreferences.getInstance();for(final e in <String,double>{'shamflix_catalog_sidebar_width':110,'shamflix_catalog_sidebar_button':42,'shamflix_catalog_package_font':11,'shamflix_catalog_section_font':12,'shamflix_catalog_package_icon':15,'shamflix_catalog_package_height':38}.entries){await p.setDouble(e.key,e.value);}await _loadAdminSidebarSettings();appSettingsRefreshNotifier.value++;},child:const Text('إعادة ضبط')),
+  ])));
+
   Widget catalogCard(String section, Map<String, dynamic> item) {
     final isSeries = section == 'series';
     final title = item[isSeries ? 'title' : 'name']?.toString() ?? 'بدون اسم';
@@ -1919,6 +2003,8 @@ class _AdminPageState extends State<AdminPage> {
           )),
           clearSelection: () => setState(() => selectedCatalogIds.clear()),
           deleteSelected: _deleteSelectedCatalog,
+          mergeSelected: isSeries ? _mergeSelectedSeries : null,
+          merging: mergingSeries,
         ),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
@@ -4388,6 +4474,8 @@ class _AdminPageState extends State<AdminPage> {
     required VoidCallback selectAll,
     required VoidCallback clearSelection,
     required VoidCallback deleteSelected,
+    VoidCallback? mergeSelected,
+    bool merging = false,
   }) {
     if (items.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -4415,6 +4503,7 @@ class _AdminPageState extends State<AdminPage> {
               icon: const Icon(Icons.deselect, size: 18),
               label: const Text('إلغاء التحديد'),
             ),
+            if (mergeSelected != null) FilledButton.tonalIcon(onPressed: bulkDeleting || merging || selectedIds.length != 2 ? null : mergeSelected,icon: merging ? const SizedBox(width:15,height:15,child:CircularProgressIndicator(strokeWidth:2)) : const Icon(Icons.merge_type),label:const Text('دمج المسلسلين')),
             FilledButton.tonalIcon(
               onPressed: bulkDeleting || selectedIds.isEmpty ? null : deleteSelected,
               icon: bulkDeleting
