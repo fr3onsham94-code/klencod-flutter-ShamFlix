@@ -3060,6 +3060,36 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                               final server = servers[serverIndex];
                               final url = valueOf(server['stream_url']).trim();
                               if (url.isEmpty) return;
+                              final serverHeaders = <String, String>{};
+                              final rawHeaders = server['request_headers'];
+                              if (rawHeaders is Map) {
+                                for (final entry in rawHeaders.entries) {
+                                  final key = entry.key.toString();
+                                  final value = entry.value?.toString() ?? '';
+                                  if (value.isNotEmpty &&
+                                      !RegExp(r'^(host|content-length|connection|cookie|authorization|proxy-|origin|forwarded|x-forwarded-)', caseSensitive: false).hasMatch(key)) {
+                                    serverHeaders[key] = value;
+                                  }
+                                }
+                              }
+                              final userAgent = valueOf(server['user_agent']).trim();
+                              final referer = valueOf(server['referer']).trim();
+                              if (userAgent.isNotEmpty) serverHeaders['User-Agent'] = userAgent;
+                              if (referer.isNotEmpty) serverHeaders['Referer'] = referer;
+                              if (url.contains('/albaplayer/') ||
+                                  RegExp(r'\\.php(?:\\?|$)', caseSensitive: false).hasMatch(url)) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ShamFlixWebPage(
+                                      url: url,
+                                      title: '${match['home_team']} × ${match['away_team']}',
+                                      headers: serverHeaders,
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
                               setState(() {
                                 selectedChannel = {
                                   'id': match['id'],
@@ -4055,7 +4085,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 class ShamFlixWebPage extends StatefulWidget {
   final String url;
   final String title;
-  const ShamFlixWebPage({super.key, required this.url, required this.title});
+  final Map<String, String> headers;
+  const ShamFlixWebPage({
+    super.key,
+    required this.url,
+    required this.title,
+    this.headers = const {},
+  });
   @override
   State<ShamFlixWebPage> createState() => _ShamFlixWebPageState();
 }
@@ -4093,9 +4129,27 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
                 'تعذر تحميل الصفحة. تحقق من اتصال الإنترنت أو جرّب سيرفراً آخر.');
           }
         },
-      ))
-      ..loadRequest(Uri.parse(widget.url));
+      ));
+    _loadWebPage();
   }
+
+  Future<void> _loadWebPage() async {
+    final requestHeaders = Map<String, String>.from(widget.headers);
+    String userAgent = '';
+    for (final key in requestHeaders.keys.toList()) {
+      if (key.toLowerCase() == 'user-agent') {
+        userAgent = requestHeaders.remove(key) ?? '';
+      }
+    }
+    if (userAgent.isNotEmpty) {
+      await controller.setUserAgent(userAgent);
+    }
+    await controller.loadRequest(
+      Uri.parse(widget.url),
+      headers: requestHeaders,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
