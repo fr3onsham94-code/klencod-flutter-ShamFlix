@@ -52,7 +52,16 @@ jobs:
       - name: Analyze Dart code
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check live match monitor Edge Function
+        run: deno check supabase/functions/live-matches-auto-monitor/index.ts
+
       - name: Configure Android release signing
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -74,9 +83,11 @@ jobs:
           } > android/key.properties
 
       - name: Build APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: flutter build apk --release
 
       - name: Upload APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: app-release

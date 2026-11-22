@@ -3786,28 +3786,44 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     if (referer.isNotEmpty) headers['Referer'] = referer;
 
     final title = '${match['home_team']} × ${match['away_team']}';
-    final isWebPage = url.contains('/albaplayer/') ||
-        url.contains('syrialive.my/matches/') ||
-        url.contains('pandab-hd.com/') ||
-        RegExp(r'\.php(?:\?|$)', caseSensitive: false).hasMatch(url);
-    if (isWebPage) {
-      await Navigator.push(context, MaterialPageRoute(
-        builder: (_) => ShamFlixWebPage(
-          url: url,
-          title: title,
-          headers: headers,
+    var playbackUrl = url;
+    var playbackHeaders = Map<String, String>.from(headers);
+
+    if (!StreamSourceDetector.isDirectMediaUrl(url)) {
+      final resolved = await Navigator.push<Map<String, dynamic>>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShamFlixServerResolverPage(
+            url: url,
+            title: title,
+            headers: headers,
+          ),
         ),
-      ));
-      return;
+      );
+      if (!mounted || resolved == null) return;
+      playbackUrl = valueOf(resolved['url']).trim();
+      final resolvedHeaders = resolved['headers'];
+      if (resolvedHeaders is Map) {
+        playbackHeaders = resolvedHeaders.map(
+          (key, value) => MapEntry(key.toString(), value.toString()),
+        );
+      }
+      if (playbackUrl.isEmpty || !StreamSourceDetector.isDirectMediaUrl(playbackUrl)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لم يتم العثور على رابط فيديو مباشر قابل للتشغيل.')),
+        );
+        return;
+      }
     }
 
     await Navigator.push(context, MaterialPageRoute(
       builder: (_) => ShamFlixPlayerPage(
-        url: url,
+        url: playbackUrl,
         title: title,
         servers: servers,
         initialServerIndex: serverIndex,
         progressKey: 'match-${match['id']}',
+        headers: playbackHeaders,
       ),
     ));
   }
@@ -4108,6 +4124,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
   final String progressKey;
   final bool embedded;
   final VoidCallback? onClose;
+  final Map<String, String> headers;
 
   const ShamFlixPlayerPage({
     super.key,
@@ -4118,6 +4135,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
     this.progressKey = '',
     this.embedded = false,
     this.onClose,
+    this.headers = const {},
   });
 
   @override
@@ -4184,9 +4202,38 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     );
   }
 
+  Map<String, String> _headersForServer([int? serverIndex]) {
+    final result = serverIndex == null ? Map<String, String>.from(widget.headers) : <String, String>{};
+    final index = serverIndex ?? currentServerIndex;
+    if (index >= 0 && index < widget.servers.length) {
+      final server = widget.servers[index];
+      final rawHeaders = server['request_headers'];
+      if (rawHeaders is Map) {
+        for (final entry in rawHeaders.entries) {
+          final key = entry.key.toString();
+          final value = entry.value?.toString() ?? '';
+          if (value.isNotEmpty &&
+              !RegExp(r'^(host|content-length|connection|cookie|authorization|proxy-|origin|forwarded|x-forwarded-)', caseSensitive: false).hasMatch(key) &&
+              !result.keys.any((existing) => existing.toLowerCase() == key.toLowerCase())) {
+            result[key] = value;
+          }
+        }
+      }
+      final userAgent = valueOf(server['user_agent']).trim();
+      final referer = valueOf(server['referer']).trim();
+      if (userAgent.isNotEmpty && !result.keys.any((key) => key.toLowerCase() == 'user-agent')) {
+        result['User-Agent'] = userAgent;
+      }
+      if (referer.isNotEmpty && !result.keys.any((key) => key.toLowerCase() == 'referer')) {
+        result['Referer'] = referer;
+      }
+    }
+    return result;
+  }
+
   Future<void> _open([String? url]) async {
     try {
-      await player.open(Media(url ?? widget.url)).timeout(const Duration(seconds: 20));
+      await player.open(Media(url ?? widget.url, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
       if (!mounted) return;
       await _savePreferredServer();
       final prefs = await SharedPreferences.getInstance();
@@ -4321,7 +4368,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
         }
         try {
-          await player.open(Media(nextUrl)).timeout(const Duration(seconds: 20));
+          await player.open(Media(nextUrl, httpHeaders: _headersForServer(next))).timeout(const Duration(seconds: 20));
           if (!mounted) return;
           final playbackPrefs = await SharedPreferences.getInstance();
           await _restoreTrackPreferences(playbackPrefs);
@@ -5237,6 +5284,273 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     );
   }
 }
+
+
+class ShamFlixServerResolverPage extends StatefulWidget {
+  final String url;
+  final String title;
+  final Map<String, String> headers;
+
+  const ShamFlixServerResolverPage({
+    super.key,
+    required this.url,
+    required this.title,
+    this.headers = const {},
+  });
+
+  @override
+  State<ShamFlixServerResolverPage> createState() => _ShamFlixServerResolverPageState();
+}
+
+class _ShamFlixServerResolverPageState extends State<ShamFlixServerResolverPage> {
+  late final WebViewController controller;
+  Timer? timeoutTimer;
+  String currentUrl = '';
+  bool checking = false;
+  bool fallbackVisible = false;
+  int navigationDepth = 0;
+  int scanAttempts = 0;
+  final Set<String> visitedUrls = <String>{};
+
+  static const String _scanScript = r'''
+(() => {
+  const media = new Set();
+  const frames = [];
+  const addMedia = raw => {
+    if (!raw || typeof raw !== 'string') return;
+    try {
+      const u = new URL(raw.trim(), location.href);
+      if (!/^https?:$/i.test(u.protocol)) return;
+      if (/\.(m3u8|mp4|m4v|mkv|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mp3|aac|m4a|ogg|wav)(?:$|[?#])/i.test(u.href)) {
+        media.add(u.href.split('#')[0]);
+      }
+    } catch (_) {}
+  };
+  document.querySelectorAll('video, audio, source').forEach(el => {
+    addMedia(el.currentSrc || el.src || el.getAttribute('src') ||
+      el.getAttribute('data-src') || el.getAttribute('data-file'));
+  });
+  try {
+    performance.getEntriesByType('resource').forEach(entry => addMedia(entry.name));
+  } catch (_) {}
+  const html = document.documentElement ? document.documentElement.innerHTML : '';
+  const patterns = [
+    /https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|m4v|mkv|mpd|ts)(?:\?[^\s"'<>\\]*)?/ig,
+    /(?:file|src|source|hls|playlist)\s*[:=]\s*["']([^"']+)["']/ig
+  ];
+  patterns.forEach((pattern, index) => {
+    let match, count = 0;
+    while ((match = pattern.exec(html)) && count++ < 80) {
+      addMedia(index === 0 ? match[0] : match[1]);
+    }
+  });
+  [...document.querySelectorAll('iframe, frame')].forEach(el => {
+    const rect = el.getBoundingClientRect();
+    const raw = el.src || el.getAttribute('src') || el.getAttribute('data-src');
+    const hint = ((el.id || '') + ' ' + (el.className || '') + ' ' + (el.title || '')).toLowerCase();
+    const ad = /advert|(^|[\s_-])(ad|ads|banner|popup|promo)([\s_-]|$)/i.test(hint);
+    if (!raw || ad || (rect.width < 100 && rect.height < 70)) return;
+    try {
+      const u = new URL(raw, location.href);
+      if (/^https?:$/.test(u.protocol)) {
+        frames.push({url:u.href, score:(/player|video|embed|stream|watch/i.test(hint) ? 100000 : 0) + rect.width * rect.height});
+      }
+    } catch (_) {}
+  });
+  frames.sort((a,b) => b.score-a.score);
+  return JSON.stringify({media:[...media].slice(0,40),frames:frames.slice(0,12).map(x=>x.url)});
+})()
+''';
+
+  Map<String, String> _safeHeaders({String? referer}) {
+    final safe = <String, String>{};
+    for (final entry in widget.headers.entries) {
+      if (RegExp(r'^(cookie|authorization|proxy-authorization|origin|host|content-length|connection|forwarded|x-forwarded-)', caseSensitive: false).hasMatch(entry.key)) {
+        continue;
+      }
+      safe[entry.key] = entry.value;
+    }
+    if (referer != null && referer.isNotEmpty) safe['Referer'] = referer;
+    return safe;
+  }
+
+  bool _validPageUrl(String raw) {
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !uri.hasAuthority || (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.userInfo.isNotEmpty) return false;
+    final host = uri.host.toLowerCase();
+    return host.isNotEmpty && host != 'localhost' &&
+        !host.endsWith('.localhost') && !host.endsWith('.local') &&
+        !host.endsWith('.internal');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    currentUrl = widget.url;
+    visitedUrls.add(widget.url);
+    controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageStarted: (url) {
+          currentUrl = url;
+          scanAttempts = 0;
+          if (mounted) setState(() => fallbackVisible = false);
+        },
+        onPageFinished: (url) {
+          currentUrl = url;
+          Future<void>.delayed(const Duration(milliseconds: 900), _inspectPage);
+        },
+        onWebResourceError: (error) {
+          if (error.isForMainFrame == true) _showFallback();
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.url), headers: _safeHeaders());
+    timeoutTimer = Timer(const Duration(seconds: 35), _showFallback);
+  }
+
+  Future<void> _inspectPage() async {
+    if (!mounted || checking || fallbackVisible) return;
+    checking = true;
+    try {
+      final raw = await controller.runJavaScriptReturningResult(_scanScript);
+      dynamic decoded = raw;
+      if (decoded is String) {
+        decoded = jsonDecode(decoded);
+        if (decoded is String) decoded = jsonDecode(decoded);
+      }
+      if (decoded is! Map) {
+        _showFallback();
+        return;
+      }
+      final media = decoded['media'] is List ? decoded['media'] as List : const [];
+      final direct = media.map((item) => item.toString()).firstWhere(
+        (url) => StreamSourceDetector.isDirectMediaUrl(url),
+        orElse: () => '',
+      );
+      if (direct.isNotEmpty) {
+        final playbackHeaders = _safeHeaders(referer: currentUrl);
+        timeoutTimer?.cancel();
+        if (mounted) Navigator.pop<Map<String, dynamic>>(context, {
+          'url': direct,
+          'headers': playbackHeaders,
+        });
+        return;
+      }
+
+      final frames = decoded['frames'] is List ? decoded['frames'] as List : const [];
+      for (final item in frames) {
+        final candidate = item.toString();
+        if (!_validPageUrl(candidate) || !visitedUrls.add(candidate)) continue;
+        if (navigationDepth >= 5) break;
+        navigationDepth++;
+        final previousUrl = currentUrl;
+        await controller.loadRequest(
+          Uri.parse(candidate),
+          headers: _safeHeaders(referer: previousUrl),
+        );
+        return;
+      }
+      scanAttempts++;
+      if (scanAttempts >= 12) {
+        _showFallback();
+      } else {
+        Future<void>.delayed(const Duration(seconds: 2), _inspectPage);
+      }
+    } catch (_) {
+      scanAttempts++;
+      if (scanAttempts >= 12) {
+        _showFallback();
+      } else {
+        Future<void>.delayed(const Duration(seconds: 2), _inspectPage);
+      }
+    } finally {
+      checking = false;
+    }
+  }
+
+  void _showFallback() {
+    if (!mounted || fallbackVisible) return;
+    setState(() => fallbackVisible = true);
+  }
+
+  void _openOriginalPage() {
+    Navigator.pushReplacement(context, MaterialPageRoute(
+      builder: (_) => ShamFlixWebPage(
+        url: widget.url,
+        title: widget.title,
+        headers: _safeHeaders(),
+      ),
+    ));
+  }
+
+  @override
+  void dispose() {
+    timeoutTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          IgnorePointer(
+            child: Opacity(
+              opacity: 0.01,
+              child: WebViewWidget(controller: controller),
+            ),
+          ),
+          ColoredBox(
+            color: Colors.black,
+            child: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!fallbackVisible)
+                        CircularProgressIndicator(color: gold)
+                      else
+                        Icon(Icons.video_library_outlined, color: gold, size: 42),
+                      const SizedBox(height: 18),
+                      Text(
+                        fallbackVisible
+                            ? 'تعذّر استخراج رابط فيديو مباشر من هذا السيرفر.'
+                            : 'جارٍ استخراج رابط البث لتشغيله داخل ShamFlix…',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      if (fallbackVisible) ...[
+                        const SizedBox(height: 18),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
+                          onPressed: _openOriginalPage,
+                          icon: const Icon(Icons.open_in_browser),
+                          label: const Text('فتح صفحة السيرفر الأصلية'),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('رجوع', style: TextStyle(color: Colors.white70)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 class ShamFlixWebPage extends StatefulWidget {
   final String url;
