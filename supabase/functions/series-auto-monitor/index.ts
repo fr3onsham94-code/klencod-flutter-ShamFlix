@@ -142,19 +142,19 @@ async function inspectEpisode(link: {url:string;title:string;number:number}, hos
 
 function extractSeriesCards(html: string, base: URL) {
  const found=new Map<string,{url:string;title:string;poster:string}>();
- for(const match of html.matchAll(/<a\\b[^>]*>[\\s\\S]*?<\\/a>/gi)){
-  const opening=/^<a\\b[^>]*>/i.exec(match[0])?.[0]; if(!opening)continue;
+ for(const match of html.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)){
+  const opening=/^<a\b[^>]*>/i.exec(match[0])?.[0]; if(!opening)continue;
   const a=attrs(opening),href=a.href;if(!href||/^javascript:|^#|^mailto:/i.test(href))continue;
   let target:URL;try{target=validateUrl(new URL(href,base).toString());}catch{continue;}
   if(target.hostname!==base.hostname)continue;
   const path=target.pathname.toLowerCase();
-  if(!path||path==="/"||/(?:episode|episodes|الحلقة|season|الموسم)/i.test(path)||/\\.(jpg|jpeg|png|webp|gif|css|js|pdf|zip)$/i.test(path))continue;
-  const imageTag=/<img\\b[^>]*>/i.exec(match[0])?.[0],image=imageTag?attrs(imageTag):{};
+  if(!path||path==="/"||/(?:episode|episodes|الحلقة|season|الموسم)/i.test(path)||/\.(jpg|jpeg|png|webp|gif|css|js|pdf|zip)$/i.test(path))continue;
+  const imageTag=/<img\b[^>]*>/i.exec(match[0])?.[0],image=imageTag?attrs(imageTag):{};
   const raw=image["data-src"]||image["data-lazy-src"]||image.src||image["data-original"]||"";
   let poster="";try{if(raw)poster=new URL(raw,base).toString();}catch{}
   const title=clean(a.title||(imageTag?match[0].replace(imageTag,""):match[0]));
-  const seriesPath=/\\/(series|tv|show|shows|anime|drama)\\//i.test(path);
-  const descriptive=path.split("/").filter(Boolean).length>=2&&!/\\/(page|category|tag|genre|author|login|register|movie|movies|film|films)\\//i.test(path);
+  const seriesPath=/\/(series|tv|show|shows|anime|drama)\//i.test(path);
+  const descriptive=path.split("/").filter(Boolean).length>=2&&!/\/(page|category|tag|genre|author|login|register|movie|movies|film|films)\//i.test(path);
   if(title.length<2||(!seriesPath&&!poster&&!descriptive))continue;
   target.search="";found.set(target.toString(),{url:target.toString(),title,poster});if(found.size>=120)break;
  }
@@ -162,26 +162,26 @@ function extractSeriesCards(html: string, base: URL) {
 }
 function seriesMetadata(html:string,page:URL,fallbackTitle:string,fallbackPoster:string,fallbackCategory:string){
  const meta:Record<string,string>={};
- for(const m of html.matchAll(/<meta\\b[^>]*>/gi)){const a=attrs(m[0]),key=(a.property||a.name||a.itemprop||"").toLowerCase();if(key&&a.content)meta[key]=clean(a.content);}
+ for(const m of html.matchAll(/<meta\b[^>]*>/gi)){const a=attrs(m[0]),key=(a.property||a.name||a.itemprop||"").toLowerCase();if(key&&a.content)meta[key]=clean(a.content);}
  let structured:Record<string,unknown>={};
- for(const m of html.matchAll(/<script\\b[^>]*type=["']application\\/ld\\+json["'][^>]*>([\\s\\S]*?)<\\/script>/gi)){
+ for(const m of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){
   try{const parsed=JSON.parse(m[1].trim());const visit=(v:unknown)=>{if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==="object"){const o=v as Record<string,unknown>;if(!Object.keys(structured).length&&o.name)structured=o;if(o["@graph"])visit(o["@graph"]);}};visit(parsed);}catch{}
  }
- const titleTag=/<title\\b[^>]*>([\\s\\S]*?)<\\/title>/i.exec(html)?.[1]||"";
+ const titleTag=/<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]||"";
  const title=clean(structured.name||structured.headline||meta["og:title"]||meta["twitter:title"]||titleTag||fallbackTitle);
  const iv=structured.image,ir=typeof iv==="string"?iv:Array.isArray(iv)?String(iv[0]||""):iv&&typeof iv==="object"?String((iv as Record<string,unknown>).url||""):"";
  const pr=ir||meta["og:image"]||meta["twitter:image"]||fallbackPoster;
  const description=clean(structured.description||meta["og:description"]||meta.description||"");
  const date=String(structured.datePublished||structured.dateCreated||meta["article:published_time"]||"");
- const year=Number(/\\b(19|20)\\d{2}\\b/.exec(date)?.[0]||/\\b(19|20)\\d{2}\\b/.exec(title)?.[0]||0)||null;
+ const year=Number(/\b(19|20)\d{2}\b/.exec(date)?.[0]||/\b(19|20)\d{2}\b/.exec(title)?.[0]||0)||null;
  const genre=structured.genre||meta.genre||fallbackCategory;
  const category=Array.isArray(genre)?genre.map(x=>clean(String(x))).filter(Boolean).join("، "):clean(String(genre||""));
  let poster="";try{if(pr)poster=new URL(String(pr),page).toString();}catch{}
  return {title:title||fallbackTitle,poster_url:poster||null,description:description||null,release_year:year,category:category||fallbackCategory||null};
 }
 function findSeriesNext(html:string,base:URL):string|null{
- for(const m of html.matchAll(/<a\\b[^>]*>/gi)){const a=attrs(m[0]),rel=(a.rel||"").toLowerCase(),label=clean(a["aria-label"]||a.title||"");
-  if(!a.href||!(rel.split(/\\s+/).includes("next")||/^(next|التالي|التالية|›|»|→)$/i.test(label)))continue;
+ for(const m of html.matchAll(/<a\b[^>]*>/gi)){const a=attrs(m[0]),rel=(a.rel||"").toLowerCase(),label=clean(a["aria-label"]||a.title||"");
+  if(!a.href||!(rel.split(/\s+/).includes("next")||/^(next|التالي|التالية|›|»|→)$/i.test(label)))continue;
   try{const u=validateUrl(new URL(a.href,base).toString());if(u.hostname===base.hostname)return u.toString();}catch{}
  }return null;
 }
