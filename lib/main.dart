@@ -4520,50 +4520,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                       ),
                     if (opening)
                       Center(child: CircularProgressIndicator(color: gold)),
-                    if (!opening)
-                      StreamBuilder<bool>(
-                        stream: player.stream.buffering,
-                        builder: (context, snapshot) => snapshot.data == true
-                            ? Center(child: CircularProgressIndicator(color: gold))
-                            : const SizedBox.shrink(),
-                      ),
-                    Positioned(
-                      top: 12,
-                      right: 14,
-                      child: SafeArea(
-                        child: AnimatedOpacity(
-                          opacity: controlsVisible ? 1 : 0,
-                          duration: const Duration(milliseconds: 250),
-                          child: IgnorePointer(
-                            ignoring: !controlsVisible,
-                            child: StreamBuilder<bool>(
-                              stream: player.stream.buffering,
-                              builder: (context, snapshot) {
-                                final buffering = snapshot.data == true;
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.68),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: buffering ? gold : Colors.green),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.circle, size: 7,
-                                        color: buffering ? gold : Colors.greenAccent),
-                                      const SizedBox(width: 6),
-                                      Text(buffering ? appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor') : appText('البث متصل', 'Stream Connected', 'Yayın Bağlandı'),
-                                        style: TextStyle(color: Colors.white, fontSize: 10)),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                     if (controlsLocked)
                       Positioned(
                         bottom: 20,
@@ -4680,14 +4636,50 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                             },
                                           ),
                                           const SizedBox(width: 30),
-                                          _controlButton(
-                                            icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                            size: 66,
-                                            onTap: () async {
-                                              await player.playOrPause();
-                                              _showControls();
-                                            },
-                                            filled: true,
+                                          Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _controlButton(
+                                                icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                                size: 66,
+                                                onTap: () async {
+                                                  await player.playOrPause();
+                                                  _showControls();
+                                                },
+                                                filled: true,
+                                              ),
+                                              const SizedBox(height: 7),
+                                              StreamBuilder<bool>(
+                                                stream: player.stream.buffering,
+                                                builder: (context, snapshot) {
+                                                  if (snapshot.data != true) {
+                                                    return const SizedBox.shrink();
+                                                  }
+                                                  return Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      SizedBox(
+                                                        width: 12,
+                                                        height: 12,
+                                                        child: CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                          color: gold,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Text(
+                                                        appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor'),
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            ],
                                           ),
                                           const SizedBox(width: 30),
                                           _controlButton(
@@ -4774,6 +4766,19 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                   child: Row(
                                                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                                     children: [
+                                                      StreamBuilder<bool>(
+                                                        stream: player.stream.buffering,
+                                                        builder: (context, snapshot) {
+                                                          final buffering = snapshot.data == true;
+                                                          return _toolButton(
+                                                            icon: Icons.wifi_tethering_rounded,
+                                                            label: buffering
+                                                                ? appText('جاري التحميل', 'Buffering', 'Yükleniyor')
+                                                                : appText('متصل بالبث', 'Connected', 'Bağlandı'),
+                                                            onTap: _showControls,
+                                                          );
+                                                        },
+                                                      ),
                                                       _toolButton(
                                                         icon: Icons.audiotrack_rounded,
                                                         label: appText('الصوت', 'Audio', 'Ses'),
