@@ -4518,7 +4518,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                           ),
                         ),
                       ),
-                    ),                    if (controlsLocked)
+                    ),
+                    if (controlsLocked)
                       Positioned(
                         bottom: 20,
                         left: 0,
