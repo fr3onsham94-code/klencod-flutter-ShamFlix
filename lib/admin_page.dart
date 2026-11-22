@@ -1292,6 +1292,8 @@ class _AdminPageState extends State<AdminPage> {
     return data;
   }
 
+  // Save each imported episode independently so a single bad row or server
+  // cannot prevent the remaining episodes from being added.
   Future<String?> _saveImportedAkwamEpisodes(
     String seriesId,
     List<Map<String, dynamic>> importedEpisodes,
