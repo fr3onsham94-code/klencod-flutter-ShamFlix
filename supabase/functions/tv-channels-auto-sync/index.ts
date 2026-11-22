@@ -52,18 +52,18 @@ function normalizeName(value: string): string {
 
 function baseChannelName(value: string): string {
   return clean(value)
-    .replace(/\\s*[([]?\\s*(?:SD|HD|FHD|UHD|4K|8K|[0-9]{3,4}\\s*[pPiI])\\s*[)\\]]?\\s*$/i, "")
-    .replace(/\\s*[ⓈⒼⓅⒽⓊ]+\\s*$/u, "")
-    .replace(/\\s+/g, " ").trim();
+    .replace(/\s*[([]?\s*(?:SD|HD|FHD|UHD|4K|8K|[0-9]{3,4}\s*[pPiI])\s*[)\]]?\s*$/i, "")
+    .replace(/\s*[ⓈⒼⓅⒽⓊ]+\s*$/u, "")
+    .replace(/\s+/g, " ").trim();
 }
 
 function qualityLabel(name: string, url: string): string {
   const value = name + " " + url;
-  if (/\\b8k\\b|7680\\s*[xX]\\s*4320|4320\\s*[pPiI]/i.test(value)) return "8K";
-  if (/\\b4k\\b|2160\\s*[pPiI]|3840\\s*[xX]\\s*2160/i.test(value)) return "4K";
-  if (/\\b(?:uhd|fhd)\\b|1080\\s*[pPiI]|1920\\s*[xX]\\s*1080/i.test(value)) return "FHD";
-  if (/\\bhd\\b|720\\s*[pPiI]|1280\\s*[xX]\\s*720/i.test(value)) return "HD";
-  if (/\\bsd\\b|480\\s*[pPiI]|576\\s*[pPiI]/i.test(value)) return "SD";
+  if (/\b8k\b|7680\s*[xX]\s*4320|4320\s*[pPiI]/i.test(value)) return "8K";
+  if (/\b4k\b|2160\s*[pPiI]|3840\s*[xX]\s*2160/i.test(value)) return "4K";
+  if (/\b(?:uhd|fhd)\b|1080\s*[pPiI]|1920\s*[xX]\s*1080/i.test(value)) return "FHD";
+  if (/\bhd\b|720\s*[pPiI]|1280\s*[xX]\s*720/i.test(value)) return "HD";
+  if (/\bsd\b|480\s*[pPiI]|576\s*[pPiI]/i.test(value)) return "SD";
   return "غير محددة";
 }
 
@@ -195,7 +195,7 @@ async function validatePublicPlaylistUrl(url: URL) {
       (url.port && url.port !== "443") || !host || host === "localhost" ||
       host.endsWith(".localhost") || host.endsWith(".local") ||
       host.endsWith(".internal") || host.endsWith(".test") ||
-      host.includes(":") || /^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(host)) {
+      host.includes(":") || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) {
     throw new Error("Only public HTTPS playlist URLs are allowed");
   }
   const records: string[] = [];
