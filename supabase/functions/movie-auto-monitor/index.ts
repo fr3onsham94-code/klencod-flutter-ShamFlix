@@ -5,9 +5,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "content-type, x-shamflix-monitor-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const MAX_PAGES = 8;
-const MAX_ITEMS = 120;
-const MAX_NEW_PER_MONITOR = 25;
+const MAX_PAGES = 100;
+const MAX_ITEMS = 500;
+const MAX_NEW_PER_MONITOR = 100;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -228,14 +228,24 @@ Deno.serve(async (req: Request) => {
         try {
           const existsByUrl = await db.from("movies").select("id").eq("source_page_url",card.url).maybeSingle();
           if (existsByUrl.error) throw existsByUrl.error;
+          const movie = await inspectMovie(card,source.hostname,monitor.category || "");
           if (existsByUrl.data) {
+            const movieId=existsByUrl.data.id;
+            if(movie.sources.length){
+              const {data:oldServers,error:readServersError}=await db.from("playback_servers").select("stream_url").eq("movie_id",movieId);
+              if(readServersError)throw readServersError;
+              const oldUrls=new Set((oldServers||[]).map((x:any)=>x.stream_url));
+              const rows=movie.sources.filter(x=>!oldUrls.has(x.url)).map((x,index)=>({movie_id:movieId,server_name:x.name||("السيرفر "+(index+1)),stream_url:x.url,sort_order:(oldServers||[]).length+index,is_active:true}));
+              if(rows.length){const {error:saveServersError}=await db.from("playback_servers").insert(rows);if(saveServersError)throw saveServersError;}
+              const {error:updateMovie}=await db.from("movies").update({stream_url:movie.sources[0].url}).eq("id",movieId);
+              if(updateMovie)throw updateMovie;
+            }
             const {error:linkError} = await db.from("content_package_items").upsert({
-              package_id:monitor.package_id,content_type:"movie",content_id:existsByUrl.data.id
+              package_id:monitor.package_id,content_type:"movie",content_id:movieId
             },{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
             if (linkError) throw linkError;
-            summary.skipped++; continue;
+            summary.skipped++; processed++; continue;
           }
-          const movie = await inspectMovie(card,source.hostname,monitor.category || "");
           if (!movie.title || movie.title.length<2) { summary.skipped++; continue; }
           let duplicateQuery = db.from("movies").select("id").ilike("title",movie.title);
           duplicateQuery = movie.release_year == null
