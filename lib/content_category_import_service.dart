@@ -22,7 +22,7 @@ class ContentCategoryImportService {
 
     for (var page = 0; page < pageLimit && candidates.length < itemLimit; page++) {
       if (!visitedPages.add(current.toString())) break;
-      final html = await _fetch(current);
+      final html = await _fetchWithRetry(current);
       for (final candidate in _extractCards(html, current, itemLimit)) {
         candidates.putIfAbsent(candidate['page_url'] as String, () => candidate);
         if (candidates.length >= itemLimit) break;
@@ -113,6 +113,21 @@ class ContentCategoryImportService {
     } finally {
       client.close();
     }
+  }
+
+  static Future<String> _fetchWithRetry(Uri uri) async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await _fetch(uri);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          await Future.delayed(Duration(milliseconds: 700 * (attempt + 1)));
+        }
+      }
+    }
+    throw Exception('تعذر قراءة صفحة القسم بعد 3 محاولات: $lastError');
   }
 
   static List<Map<String, dynamic>> _extractCards(String html, Uri base, int itemLimit) {
