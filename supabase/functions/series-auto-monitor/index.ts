@@ -308,10 +308,10 @@ Deno.serve(async (req: Request) => {
     try{
       const source=validateUrl(monitor.source_url),cards=new Map<string,{url:string;title:string;poster:string}>(),visited=new Set<string>();
       let next:string|null=source.toString();
-      for(let pageNo=0;pageNo<8&&next&&cards.size<120;pageNo++){
+      for(let pageNo=0;pageNo<100&&next&&cards.size<500;pageNo++){
         if(visited.has(next))break;visited.add(next);
         const listing=await fetchHtml(next,source.hostname);
-        for(const card of extractSeriesCards(listing.html,listing.url)){cards.set(card.url,card);if(cards.size>=120)break;}
+        for(const card of extractSeriesCards(listing.html,listing.url)){cards.set(card.url,card);if(cards.size>=500)break;}
         next=findSeriesNext(listing.html,listing.url);
       }
       if(!cards.size)throw new Error("لم يتم العثور على روابط مسلسلات عامة واضحة في صفحة القسم");
