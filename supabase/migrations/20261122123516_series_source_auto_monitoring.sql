@@ -19,9 +19,6 @@ create index if not exists idx_series_source_monitors_active
   on public.series_source_monitors (is_active, last_checked_at)
   where is_active = true;
 
-create unique index if not exists episodes_season_episode_number_unique
-  on public.episodes (season_id, episode_number);
-
 alter table public.series_source_monitors enable row level security;
 
 grant select, insert, update, delete on public.series_source_monitors to authenticated;
