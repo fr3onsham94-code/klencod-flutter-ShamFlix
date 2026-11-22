@@ -228,8 +228,11 @@ Deno.serve(async (req: Request) => {
           }
           const movie = await inspectMovie(card,source.hostname,monitor.category || "");
           if (!movie.title || movie.title.length<2) { summary.skipped++; continue; }
-          const {data:old,error:duplicateError} = await db.from("movies").select("id")
-            .ilike("title",movie.title).eq("release_year",movie.release_year).limit(1).maybeSingle();
+          let duplicateQuery = db.from("movies").select("id").ilike("title",movie.title);
+          duplicateQuery = movie.release_year == null
+            ? duplicateQuery.is("release_year",null)
+            : duplicateQuery.eq("release_year",movie.release_year);
+          const {data:old,error:duplicateError} = await duplicateQuery.limit(1).maybeSingle();
           if (duplicateError) throw duplicateError;
           let movieId: string;
           if (old?.id) {
