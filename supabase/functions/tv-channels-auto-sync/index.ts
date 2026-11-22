@@ -302,13 +302,19 @@ async function syncChannels(db: any) {
 
   // Keep only the two most recently observed URLs for each channel + source pair.
   // This bounds history without allowing one source to delete another source's servers.
-  const { data: sourceServers, error: sourceServersError } = await db.from("playback_servers")
-    .select("id,channel_id,source_id,source_seen_at")
-    .not("source_id","is",null)
-    .order("source_seen_at",{ascending:false,nullsFirst:false})
-    .order("source_position",{ascending:false,nullsFirst:false})
-    .limit(50000);
-  if (sourceServersError) throw new Error("server retention lookup: " + JSON.stringify(sourceServersError));
+  const sourceServers: any[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("playback_servers")
+      .select("id,channel_id,source_id,source_seen_at,source_position")
+      .not("source_id","is",null)
+      .order("source_seen_at",{ascending:false,nullsFirst:false})
+      .order("source_position",{ascending:false,nullsFirst:false})
+      .order("id",{ascending:true})
+      .range(offset, offset + 999);
+    if (error) throw new Error("server retention lookup: " + JSON.stringify(error));
+    sourceServers.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
   const groupedServers = new Map<string, any[]>();
   const successfullySyncedSourceIds = new Set(sourceResults.map(x => x.source.id));
   for (const server of sourceServers || []) {
