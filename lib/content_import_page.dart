@@ -3,6 +3,7 @@ import 'admin_auth_service.dart';
 import 'admin_packages_page.dart';
 import 'app_theme.dart';
 import 'content_category_import_service.dart';
+import 'content_page_import_service.dart';
 
 class ContentImportPage extends StatefulWidget {
   const ContentImportPage({super.key});
@@ -81,6 +82,139 @@ class _ContentImportPageState extends State<ContentImportPage> {
       .replaceAll('أ', 'ا').replaceAll('إ', 'ا').replaceAll('آ', 'ا').replaceAll('ى', 'ي')
       .replaceAll(RegExp(r'[^a-z0-9\u0600-\u06FF]+'), '');
 
+  bool _isAkwamPage(dynamic value) {
+    final uri = Uri.tryParse(value?.toString().trim() ?? '');
+    final host = uri?.host.toLowerCase() ?? '';
+    return host == 'akwam.ss' || host.endsWith('.akwam.ss');
+  }
+
+  // Import visible Akwam episode pages and their public playback-page links.
+  // Existing episodes/servers are updated or deduplicated, so rerunning a
+  // category import can also backfill episodes for series imported earlier.
+  Future<Map<String, int>> _saveAkwamSeriesEpisodes(
+    String seriesId,
+    String pageUrl,
+  ) async {
+    final importedEpisodes =
+        await ContentPageImportService.inspectAkwamSeries(pageUrl);
+    final seasons = await AuthService.client
+        .from('seasons')
+        .select('id,season_number')
+        .eq('series_id', seriesId);
+    String? seasonId;
+    for (final season in seasons) {
+      if (season['season_number']?.toString() == '1') {
+        seasonId = season['id']?.toString();
+        break;
+      }
+    }
+    if (seasonId == null) {
+      final savedSeason = await AuthService.client.from('seasons').insert({
+        'series_id': seriesId,
+        'season_number': 1,
+        'name': 'الموسم الأول',
+      }).select('id').single();
+      seasonId = savedSeason['id']?.toString();
+    }
+    if (seasonId == null || seasonId.isEmpty) {
+      throw Exception('تعذر إنشاء الموسم الأول');
+    }
+
+    final existingRows = await AuthService.client
+        .from('episodes')
+        .select('id,episode_number,title,stream_url')
+        .eq('season_id', seasonId);
+    final existingByNumber = <int, Map<String, dynamic>>{};
+    for (final row in existingRows) {
+      final number = int.tryParse(row['episode_number']?.toString() ?? '');
+      if (number != null) {
+        existingByNumber[number] = Map<String, dynamic>.from(row);
+      }
+    }
+
+    var savedEpisodes = 0;
+    var savedServers = 0;
+    var failedEpisodes = 0;
+    var episodesWithoutServers = 0;
+    for (final episode in importedEpisodes) {
+      final number = int.tryParse(episode['episode_number']?.toString() ?? '');
+      if (number == null || number < 1) continue;
+      try {
+        final servers = (episode['servers'] as List? ?? [])
+            .whereType<Map>()
+            .map((server) => Map<String, dynamic>.from(server))
+            .where((server) =>
+                (server['url']?.toString() ?? '').trim().isNotEmpty)
+            .toList();
+        final firstUrl = servers.isEmpty ? '' : servers.first['url'].toString();
+        final existing = existingByNumber[number];
+        String episodeId;
+        final episodeData = <String, dynamic>{
+          'title': (episode['title']?.toString().trim().isNotEmpty == true)
+              ? episode['title'].toString().trim()
+              : 'الحلقة $number',
+          'stream_url': firstUrl,
+          'is_published': publish,
+        };
+        if (existing == null) {
+          final saved = await AuthService.client.from('episodes').insert({
+            'season_id': seasonId,
+            'episode_number': number,
+            ...episodeData,
+            'description': null,
+          }).select('id').single();
+          episodeId = saved['id'].toString();
+          existingByNumber[number] = {'id': episodeId, 'episode_number': number};
+        } else {
+          episodeId = existing['id'].toString();
+          await AuthService.client.from('episodes')
+              .update(episodeData).eq('id', episodeId);
+        }
+
+        final currentServers = await AuthService.client
+            .from('playback_servers')
+            .select('stream_url,sort_order')
+            .eq('episode_id', episodeId)
+            .order('sort_order');
+        final knownUrls = currentServers
+            .map((server) => server['stream_url']?.toString() ?? '')
+            .where((value) => value.isNotEmpty)
+            .toSet();
+        final newRows = <Map<String, dynamic>>[];
+        for (final server in servers) {
+          final serverUrl = server['url'].toString().trim();
+          if (!knownUrls.add(serverUrl)) continue;
+          newRows.add({
+            'episode_id': episodeId,
+            'server_name':
+                (server['name']?.toString().trim().isNotEmpty == true)
+                    ? server['name'].toString().trim()
+                    : 'سيرفر ${newRows.length + 1}',
+            'stream_url': serverUrl,
+            'sort_order': currentServers.length + newRows.length,
+            'is_active': true,
+          });
+        }
+        if (newRows.isNotEmpty) {
+          await AuthService.client.from('playback_servers').insert(newRows);
+          savedServers += newRows.length;
+        }
+        if (servers.isEmpty && currentServers.isEmpty) {
+          episodesWithoutServers++;
+        }
+        savedEpisodes++;
+      } catch (_) {
+        failedEpisodes++;
+      }
+    }
+    return {
+      'episodes': savedEpisodes,
+      'servers': savedServers,
+      'failed': failedEpisodes,
+      'without_servers': episodesWithoutServers,
+    };
+  }
+
   Future<void> importSelected() async {
     final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
     if (chosen.isEmpty || packageId == null) return;
@@ -89,16 +223,49 @@ class _ContentImportPageState extends State<ContentImportPage> {
       final table = type == 'movie' ? 'movies' : 'series';
       final rows = await AuthService.client.from(table).select('id,title,release_year');
       final known = <String>{};
+      final existingIdsByKey = <String, String>{};
       for (final row in rows) {
-        known.add(normalize(row['title']?.toString() ?? '') + '|' + (row['release_year']?.toString() ?? ''));
+        final existingKey = normalize(row['title']?.toString() ?? '') +
+            '|' + (row['release_year']?.toString() ?? '');
+        known.add(existingKey);
+        if (row['id'] != null) {
+          existingIdsByKey[existingKey] = row['id'].toString();
+        }
       }
+      var akwamSeriesCount = 0;
+      var episodeCount = 0;
+      var episodeServerCount = 0;
+      var episodeImportFailures = 0;
+      var episodesWithoutServers = 0;
       for (final item in chosen) {
         if (!mounted) break;
         final title = (item['title']?.toString() ?? '').trim();
         if (title.isEmpty) { setState(() => failed++); continue; }
         final year = int.tryParse(item['release_year']?.toString() ?? '');
         final key = normalize(title) + '|' + (year?.toString() ?? '');
-        if (known.contains(key)) { setState(() => duplicates++); continue; }
+        if (known.contains(key)) {
+          setState(() => duplicates++);
+          // Backfill episodes for duplicate series when the user reruns an
+          // Akwam category import after adding the full-series importer.
+          if (type == 'series' && _isAkwamPage(item['page_url'])) {
+            final existingId = existingIdsByKey[key];
+            if (existingId != null) {
+              akwamSeriesCount++;
+              try {
+                final stats = await _saveAkwamSeriesEpisodes(
+                  existingId, item['page_url'].toString(),
+                );
+                episodeCount += stats['episodes'] ?? 0;
+                episodeServerCount += stats['servers'] ?? 0;
+                episodeImportFailures += stats['failed'] ?? 0;
+                episodesWithoutServers += stats['without_servers'] ?? 0;
+              } catch (_) {
+                episodeImportFailures++;
+              }
+            }
+          }
+          continue;
+        }
         try {
           final data = <String, dynamic>{
             'title': title,
@@ -118,6 +285,21 @@ class _ContentImportPageState extends State<ContentImportPage> {
           await AuthService.client.from('content_package_items').insert({
             'package_id': packageId, 'content_type': type, 'content_id': id,
           });
+
+          if (type == 'series' && _isAkwamPage(item['page_url'])) {
+            akwamSeriesCount++;
+            try {
+              final stats = await _saveAkwamSeriesEpisodes(
+                id, item['page_url'].toString(),
+              );
+              episodeCount += stats['episodes'] ?? 0;
+              episodeServerCount += stats['servers'] ?? 0;
+              episodeImportFailures += stats['failed'] ?? 0;
+              episodesWithoutServers += stats['without_servers'] ?? 0;
+            } catch (_) {
+              episodeImportFailures++;
+            }
+          }
 
           if (type == 'series' && monitorSeries) {
             final sourceUrl = item['page_url']?.toString().trim() ?? '';
@@ -193,6 +375,11 @@ class _ContentImportPageState extends State<ContentImportPage> {
         }
       }
       message('اكتمل الاستيراد: $imported جديد • $duplicates مكرر • $failed تعذر استيراده' +
+          (type == 'series' && akwamSeriesCount > 0
+              ? ' • أكوام: تمت معالجة $akwamSeriesCount مسلسل، وحُفظت $episodeCount حلقة و$episodeServerCount سيرفر'
+                  + (episodeImportFailures > 0 ? ' • تعذر استيراد/حفظ $episodeImportFailures' : '')
+                  + (episodesWithoutServers > 0 ? ' • $episodesWithoutServers حلقة بلا سيرفر' : '')
+              : '') +
           (type == 'series' && monitorSeries
               ? ' • تمت جدولة $monitorsCreated للمراقبة • تعذر تفعيل المراقبة لـ $monitorFailures'
               : type == 'movie' && monitorMovies
