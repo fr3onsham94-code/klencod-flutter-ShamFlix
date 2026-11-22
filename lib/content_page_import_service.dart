@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'stream_source_detector.dart';
+
 /// Generic metadata importer for public movie/series pages.
 ///
 /// This intentionally reads page metadata only (Open Graph, JSON-LD and
@@ -59,6 +61,7 @@ class ContentPageImportService {
 
       final html = utf8.decode(response.bodyBytes, allowMalformed: true);
       final metadata = _parseHtml(html);
+      metadata['stream_sources'] = _extractStreamSources(html, uri);
       metadata['poster_url'] = _resolveImage(uri, metadata['poster_url']?.toString() ?? '');
       metadata['backdrop_url'] = _resolveImage(uri, metadata['backdrop_url']?.toString() ?? '');
       metadata['page_url'] = uri.toString();
@@ -95,6 +98,51 @@ class ContentPageImportService {
       throw Exception('لا يمكن تحليل روابط الشبكات المحلية');
     }
     return uri;
+  }
+
+
+  static List<Map<String, dynamic>> _extractStreamSources(String html, Uri pageUri) {
+    final found = <String, Map<String, dynamic>>{};
+
+    void add(String? raw, {required String kind}) {
+      if (raw == null || raw.trim().isEmpty) return;
+      final cleaned = raw.trim().replaceAll('&amp;', '&').replaceAll(r'\\/', '/');
+      final resolved = Uri.tryParse(cleaned);
+      if (resolved == null) return;
+      final uri = pageUri.resolveUri(resolved);
+      if (uri.scheme != 'http' && uri.scheme != 'https') return;
+      try {
+        _validatedUri(uri.toString());
+      } catch (_) {
+        return;
+      }
+      final url = uri.toString();
+      final direct = StreamSourceDetector.isDirectMediaUrl(url);
+      found[url] = {
+        'url': url,
+        'name': StreamSourceDetector.sourceName(url),
+        'kind': direct ? 'media' : kind,
+      };
+    }
+
+    for (final match in RegExp(r'<(?:iframe|frame)\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+      final attrs = _attributes(match.group(0)!);
+      add(attrs['src'], kind: 'iframe');
+    }
+    for (final match in RegExp(r'<(?:video|source|embed)\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+      final attrs = _attributes(match.group(0)!);
+      add(attrs['src'] ?? attrs['data'], kind: 'media');
+    }
+
+    final directPattern = RegExp(
+      r'''https?://[^\\s"'<>\\\\]+?\\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:\\?[^\\s"'<>]*)?''',
+      caseSensitive: false,
+    );
+    for (final match in directPattern.allMatches(html)) {
+      add(match.group(0), kind: 'media');
+      if (found.length >= 80) break;
+    }
+    return found.values.take(80).toList();
   }
 
   static Map<String, dynamic> _parseHtml(String html) {
