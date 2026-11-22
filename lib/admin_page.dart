@@ -2729,6 +2729,67 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> deleteUser(Map<String, dynamic> user) async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+
+    final id = user['id']?.toString();
+    if (id == null || id.isEmpty) return;
+
+    if (id == ownerUserId) {
+      showMessage(
+        'لا يمكن حذف حساب مالك التطبيق الأساسي',
+        isError: true,
+      );
+      return;
+    }
+
+    final email = user['email']?.toString() ?? 'هذا الحساب';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: adminPanel,
+        title: const Text(
+          'حذف الحساب نهائياً',
+          style: TextStyle(color: Colors.redAccent),
+        ),
+        content: Text(
+          'هل أنت متأكد من حذف الحساب نهائياً؟\\n$email\\n\\nلا يمكن التراجع عن هذا الإجراء.',
+          style: TextStyle(color: AppTheme.text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(
+              'إلغاء',
+              style: TextStyle(color: AppTheme.secondaryText),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف نهائي'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await callUsersFunction({
+        'action': 'delete',
+        'user_id': id,
+      });
+      showMessage('تم حذف الحساب نهائياً');
+      await loadUsers();
+    } catch (e) {
+      showMessage(e.toString(), isError: true);
+    }
+  }
+
   // =========================
   // تصفية المستخدمين والبحث
   // =========================
@@ -2912,7 +2973,7 @@ class _AdminPageState extends State<AdminPage> {
                       ),
                     ),
                   ),
-                if (!isOwner)
+                if (AuthService.isOwner && !isOwner)
                   TextButton.icon(
                     onPressed: () => changeAdminRole(
                       user,
@@ -2931,8 +2992,21 @@ class _AdminPageState extends State<AdminPage> {
                         color: adminGold,
                       ),
                     ),
-                  )
-                else
+                  ),
+                if (!isOwner)
+                  TextButton.icon(
+                    onPressed: () => deleteUser(user),
+                    icon: const Icon(
+                      Icons.delete_forever,
+                      color: Colors.redAccent,
+                      size: 19,
+                    ),
+                    label: const Text(
+                      'حذف نهائي',
+                      style: TextStyle(color: Colors.redAccent),
+                    ),
+                  ),
+                if (isOwner)
                   const Padding(
                     padding: EdgeInsets.all(8),
                     child: Text(
