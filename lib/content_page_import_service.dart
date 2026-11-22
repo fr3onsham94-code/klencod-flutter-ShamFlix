@@ -77,6 +77,105 @@ class ContentPageImportService {
     }
   }
 
+  /// Imports publicly visible episode links from an Akwam series page.
+  /// Only follows ordinary public episode/watch pages; it does not bypass
+  /// authentication, anti-bot challenges, DRM, or protected player controls.
+  static Future<List<Map<String, dynamic>>> inspectAkwamSeries(String rawUrl) async {
+    final seriesUri = _validatedUri(rawUrl);
+    if (!seriesUri.host.toLowerCase().endsWith('akwam.ss')) {
+      throw Exception('استيراد الحلقات التلقائي متاح حالياً لصفحات أكوام');
+    }
+    final html = await _fetchPublicHtml(seriesUri);
+    final episodeLinks = <String, Map<String, String>>{};
+    final anchorPattern = RegExp(r'<a\\b[^>]*>[\\s\\S]*?</a>', caseSensitive: false);
+    for (final match in anchorPattern.allMatches(html)) {
+      final tag = match.group(0)!;
+      final opening = RegExp(r'<a\\b[^>]*>', caseSensitive: false).firstMatch(tag)?.group(0);
+      if (opening == null) continue;
+      final attrs = _attributes(opening);
+      final href = attrs['href'] ?? '';
+      if (!href.contains('/episode/')) continue;
+      final uri = seriesUri.resolve(href);
+      try { _validatedUri(uri.toString()); } catch (_) { continue; }
+      final title = _clean(tag.replaceAll(RegExp(r'<[^>]*>'), ' '));
+      final numberMatch = RegExp(r'(?:episode|الحلقة)[^0-9]{0,12}(\\d+)', caseSensitive: false)
+          .firstMatch('$title $href') ?? RegExp(r'-(\\d+)(?:[/?#]|$)').firstMatch(href);
+      final number = int.tryParse(numberMatch?.group(1) ?? '');
+      if (number == null || number < 1) continue;
+      episodeLinks[uri.toString()] = {'title': title.isEmpty ? 'الحلقة $number' : title, 'number': '$number'};
+      if (episodeLinks.length >= 80) break;
+    }
+    if (episodeLinks.isEmpty) {
+      throw Exception('لم أجد روابط حلقات ظاهرة في صفحة أكوام');
+    }
+
+    final episodes = <Map<String, dynamic>>[];
+    final ordered = episodeLinks.entries.toList()
+      ..sort((a, b) => int.parse(a.value['number']!).compareTo(int.parse(b.value['number']!)));
+    for (final entry in ordered) {
+      final episodeUri = _validatedUri(entry.key);
+      final episodeHtml = await _fetchPublicHtml(episodeUri);
+      String? watchUrl;
+      for (final match in RegExp(r'<a\\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
+        final attrs = _attributes(match.group(0)!);
+        final href = attrs['href'] ?? '';
+        if (href.contains('/watch/')) {
+          final resolved = episodeUri.resolve(href);
+          try { _validatedUri(resolved.toString()); watchUrl = resolved.toString(); break; } catch (_) {}
+        }
+      }
+      final servers = <Map<String, dynamic>>[];
+      if (watchUrl != null) {
+        final watchUri = _validatedUri(watchUrl);
+        final watchHtml = await _fetchPublicHtml(watchUri);
+        servers.addAll(_extractStreamSources(watchHtml, watchUri));
+      }
+      episodes.add({
+        'episode_number': int.parse(entry.value['number']!),
+        'title': entry.value['title'],
+        'watch_url': watchUrl,
+        'servers': servers,
+      });
+    }
+    return episodes;
+  }
+
+  static Future<String> _fetchPublicHtml(Uri initial) async {
+    final client = http.Client();
+    try {
+      var uri = initial;
+      for (var redirect = 0; redirect <= _maxRedirects; redirect++) {
+        final request = http.Request('GET', uri)
+          ..followRedirects = false
+          ..headers.addAll({
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
+          });
+        final streamed = await client.send(request).timeout(const Duration(seconds: 18));
+        if (streamed.statusCode >= 300 && streamed.statusCode < 400) {
+          final location = streamed.headers['location'];
+          await streamed.stream.drain();
+          if (location == null || redirect == _maxRedirects) {
+            throw Exception('تعذر متابعة رابط إحدى الحلقات');
+          }
+          uri = _validatedUri(uri.resolve(location).toString());
+          continue;
+        }
+        final response = await http.Response.fromStream(streamed);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw Exception('تعذر قراءة صفحة حلقة (HTTP ${response.statusCode})');
+        }
+        if (response.bodyBytes.length > _maxHtmlBytes) {
+          throw Exception('صفحة إحدى الحلقات أكبر من الحد المسموح');
+        }
+        return utf8.decode(response.bodyBytes, allowMalformed: true);
+      }
+      throw Exception('تجاوز الموقع عدد التحويلات المسموح');
+    } finally {
+      client.close();
+    }
+  }
+
   static Uri _validatedUri(String raw) {
     final uri = Uri.tryParse(raw.trim());
     if (uri == null ||
