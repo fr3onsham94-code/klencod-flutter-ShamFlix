@@ -357,7 +357,7 @@ async function syncChannels(db: any) {
   for (const server of sourceServers || []) {
     // Never prune a source whose playlist failed to fetch or parse in this run.
     if (!successfullySyncedSourceIds.has(server.source_id)) continue;
-    const groupKey = server.channel_id + "|" + server.source_id + "|" + (String(server.server_name || "").match(/(?:SD|HD|FHD|4K|8K|غير محددة)/)?.[0] || "غير محددة");
+    const groupKey = server.channel_id + "|" + server.source_id + "|" + (String(server.server_name || "").match(/(?:SD|FHD|UHD|4K|8K|HD|غير محددة)/)?.[0] || "غير محددة");
     const group = groupedServers.get(groupKey) || [];
     group.push(server);
     groupedServers.set(groupKey,group);
