@@ -1332,89 +1332,99 @@ class _AdminPageState extends State<AdminPage> {
     var updated = 0;
     var linkedServers = 0;
     var missingServers = 0;
+    var failedEpisodes = 0;
 
     for (final item in importedEpisodes) {
       final number = int.tryParse(item['episode_number']?.toString() ?? '');
       if (number == null || number < 1) continue;
-      final servers = (item['servers'] as List? ?? [])
-          .whereType<Map>()
-          .map((server) => Map<String, dynamic>.from(server))
-          .where((server) => (server['url']?.toString() ?? '').trim().isNotEmpty)
-          .toList();
-      final firstUrl = servers.isEmpty ? '' : servers.first['url'].toString();
-      final existing = existingByNumber[number];
-      final episodeId = existing?['id']?.toString() ??
+      try {
+        final servers = (item['servers'] as List? ?? [])
+            .whereType<Map>()
+            .map((server) => Map<String, dynamic>.from(server))
+            .where((server) => (server['url']?.toString() ?? '').trim().isNotEmpty)
+            .toList();
+        final firstUrl = servers.isEmpty ? '' : servers.first['url'].toString();
+        final existing = existingByNumber[number];
+        final episodeId = existing?['id']?.toString() ??
+            await _extraSave('episodes', {
+              'season_id': seasonId,
+              'episode_number': number,
+              'title': (item['title']?.toString().trim().isNotEmpty == true)
+                  ? item['title'].toString().trim()
+                  : 'الحلقة $number',
+              'description': null,
+              'stream_url': firstUrl,
+              'is_published': true,
+            });
+        if (episodeId == null) {
+          failedEpisodes++;
+          continue;
+        }
+
+        if (existing != null) {
           await _extraSave('episodes', {
-            'season_id': seasonId,
-            'episode_number': number,
             'title': (item['title']?.toString().trim().isNotEmpty == true)
                 ? item['title'].toString().trim()
-                : 'الحلقة $number',
-            'description': null,
-            'stream_url': firstUrl,
+                : existing['title'],
+            if (firstUrl.isNotEmpty) 'stream_url': firstUrl,
             'is_published': true,
-          });
-      if (episodeId == null) continue;
-
-      if (existing != null) {
-        await _extraSave('episodes', {
-          'title': (item['title']?.toString().trim().isNotEmpty == true)
-              ? item['title'].toString().trim()
-              : existing['title'],
-          if (firstUrl.isNotEmpty) 'stream_url': firstUrl,
-          'is_published': true,
-        }, id: episodeId);
-        updated++;
-      } else {
-        added++;
-        existingByNumber[number] = {'id': episodeId, 'episode_number': number};
-      }
-
-      final currentServers = await _extraLoad(
-        'playback_servers',
-        {'episode_id': 'eq.$episodeId'},
-        order: 'sort_order.asc,created_at.asc',
-      );
-      final knownUrls = currentServers
-          .map((server) => server['stream_url']?.toString() ?? '')
-          .where((url) => url.isNotEmpty)
-          .toSet();
-      final newRows = <Map<String, dynamic>>[];
-      for (final server in servers) {
-        final url = server['url'].toString().trim();
-        if (url.isEmpty || !knownUrls.add(url)) continue;
-        newRows.add({
-          'episode_id': episodeId,
-          'server_name': (server['name']?.toString().trim().isNotEmpty == true)
-              ? server['name'].toString().trim()
-              : 'سيرفر ${newRows.length + 1}',
-          'stream_url': url,
-          'sort_order': currentServers.length + newRows.length,
-          'is_active': true,
-        });
-      }
-      if (newRows.isNotEmpty) {
-        final response = await http.post(
-          _extraTableUrl('playback_servers'),
-          headers: headers,
-          body: jsonEncode(newRows),
-        );
-        if (response.statusCode != 200 &&
-            response.statusCode != 201 &&
-            response.statusCode != 204) {
-          throw Exception(_readError(response));
+          }, id: episodeId);
+          updated++;
+        } else {
+          added++;
+          existingByNumber[number] = {'id': episodeId, 'episode_number': number};
         }
-        linkedServers += newRows.length;
+
+        final currentServers = await _extraLoad(
+          'playback_servers',
+          {'episode_id': 'eq.$episodeId'},
+          order: 'sort_order.asc,created_at.asc',
+        );
+        final knownUrls = currentServers
+            .map((server) => server['stream_url']?.toString() ?? '')
+            .where((url) => url.isNotEmpty)
+            .toSet();
+        final newRows = <Map<String, dynamic>>[];
+        for (final server in servers) {
+          final url = server['url'].toString().trim();
+          if (url.isEmpty || !knownUrls.add(url)) continue;
+          newRows.add({
+            'episode_id': episodeId,
+            'server_name': (server['name']?.toString().trim().isNotEmpty == true)
+                ? server['name'].toString().trim()
+                : 'سيرفر ${newRows.length + 1}',
+            'stream_url': url,
+            'sort_order': currentServers.length + newRows.length,
+            'is_active': true,
+          });
+        }
+        if (newRows.isNotEmpty) {
+          final response = await http.post(
+            _extraTableUrl('playback_servers'),
+            headers: headers,
+            body: jsonEncode(newRows),
+          );
+          if (response.statusCode != 200 &&
+              response.statusCode != 201 &&
+              response.statusCode != 204) {
+            throw Exception(_readError(response));
+          }
+          linkedServers += newRows.length;
+        }
+        final hasServers = currentServers.isNotEmpty || newRows.isNotEmpty ||
+            (existing?['stream_url']?.toString().trim().isNotEmpty ?? false);
+        if (!hasServers) missingServers++;
+      } catch (_) {
+        // Continue saving later episodes if this episode or its servers fail.
+        failedEpisodes++;
       }
-      final hasServers = currentServers.isNotEmpty || newRows.isNotEmpty ||
-          (existing?['stream_url']?.toString().trim().isNotEmpty ?? false);
-      if (!hasServers) missingServers++;
     }
 
     final message = 'حلقات جديدة: $added • تم تحديث: $updated • سيرفرات جديدة: $linkedServers';
-    return missingServers > 0
-        ? '$message • $missingServers حلقة بلا سيرفر مشاهدة'
-        : message;
+    final warnings = <String>[];
+    if (missingServers > 0) warnings.add('$missingServers حلقة بلا سيرفر مشاهدة');
+    if (failedEpisodes > 0) warnings.add('تعذر حفظ $failedEpisodes حلقة');
+    return warnings.isEmpty ? message : '$message • ${warnings.join(' • ')}';
   }
 
   Future<void> openCatalogForm(
