@@ -1471,7 +1471,10 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           : packageContents[selectedPackageId!] ?? [];
 
   void _openPackage(String id) {
-    setState(() => selectedPackageId = id);
+    setState(() {
+      selectedPackageId = id;
+      sidebarOpen = false;
+    });
   }
 
   Widget _poster(Map<String, dynamic> item, {double width = 66}) {
