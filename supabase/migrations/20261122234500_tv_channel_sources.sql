@@ -13,7 +13,8 @@ alter table public.playback_servers
   add column if not exists source_id text,
   add column if not exists source_checked_at timestamptz,
   add column if not exists source_failures integer not null default 0,
-  add column if not exists source_seen_at timestamptz not null default now();
+  add column if not exists source_seen_at timestamptz not null default now(),
+  add column if not exists source_position integer not null default 0;
 
 create unique index if not exists playback_servers_source_key_uidx
   on public.playback_servers(source_key)
