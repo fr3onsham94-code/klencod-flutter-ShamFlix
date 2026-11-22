@@ -1,0 +1,2 @@
+[functions.series-auto-monitor]
+verify_jwt = false
