@@ -7,7 +7,7 @@ const SOURCES = [
 ] as const;
 
 const MAX_PLAYLIST_BYTES = 24 * 1024 * 1024;
-const MAX_CHANNELS_PER_RUN = 12000;
+const MAX_CHANNELS_PER_RUN = 30000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -210,7 +210,7 @@ async function syncChannels(db: any) {
   if (grouped.size > MAX_CHANNELS_PER_RUN) throw new Error("Playlist set exceeded the safe per-run channel limit; existing catalogue was left untouched");
 
   const { data: oldChannels, error: oldError } = await db.from("channels")
-    .select("id,name,external_source_key").limit(20000);
+    .select("id,name,external_source_key").limit(100000);
   if (oldError) throw oldError;
   const byName = new Map<string, any>();
   const byExternalKey = new Map<string, any>();
@@ -275,7 +275,7 @@ async function syncChannels(db: any) {
     if (error) throw error;
   }
   const { data: syncedChannels, error: syncedError } = await db.from("channels")
-    .select("id,external_source_key").not("external_source_key","is",null).limit(20000);
+    .select("id,external_source_key").not("external_source_key","is",null).limit(50000);
   if (syncedError) throw syncedError;
   const channelIds = new Map((syncedChannels || []).map((x:any)=>[x.external_source_key,x.id]));
   const serverRows = streamRows.map((row:any) => {
