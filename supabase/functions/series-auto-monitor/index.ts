@@ -139,6 +139,53 @@ async function inspectEpisode(link: {url:string;title:string;number:number}, hos
   };
 }
 
+
+function extractSeriesCards(html: string, base: URL) {
+ const found=new Map<string,{url:string;title:string;poster:string}>();
+ for(const match of html.matchAll(/<a\\b[^>]*>[\\s\\S]*?<\\/a>/gi)){
+  const opening=/^<a\\b[^>]*>/i.exec(match[0])?.[0]; if(!opening)continue;
+  const a=attrs(opening),href=a.href;if(!href||/^javascript:|^#|^mailto:/i.test(href))continue;
+  let target:URL;try{target=validateUrl(new URL(href,base).toString());}catch{continue;}
+  if(target.hostname!==base.hostname)continue;
+  const path=target.pathname.toLowerCase();
+  if(!path||path==="/"||/(?:episode|episodes|الحلقة|season|الموسم)/i.test(path)||/\\.(jpg|jpeg|png|webp|gif|css|js|pdf|zip)$/i.test(path))continue;
+  const imageTag=/<img\\b[^>]*>/i.exec(match[0])?.[0],image=imageTag?attrs(imageTag):{};
+  const raw=image["data-src"]||image["data-lazy-src"]||image.src||image["data-original"]||"";
+  let poster="";try{if(raw)poster=new URL(raw,base).toString();}catch{}
+  const title=clean(a.title||(imageTag?match[0].replace(imageTag,""):match[0]));
+  const seriesPath=/\\/(series|tv|show|shows|anime|drama)\\//i.test(path);
+  const descriptive=path.split("/").filter(Boolean).length>=2&&!/\\/(page|category|tag|genre|author|login|register|movie|movies|film|films)\\//i.test(path);
+  if(title.length<2||(!seriesPath&&!poster&&!descriptive))continue;
+  target.search="";found.set(target.toString(),{url:target.toString(),title,poster});if(found.size>=120)break;
+ }
+ return [...found.values()];
+}
+function seriesMetadata(html:string,page:URL,fallbackTitle:string,fallbackPoster:string,fallbackCategory:string){
+ const meta:Record<string,string>={};
+ for(const m of html.matchAll(/<meta\\b[^>]*>/gi)){const a=attrs(m[0]),key=(a.property||a.name||a.itemprop||"").toLowerCase();if(key&&a.content)meta[key]=clean(a.content);}
+ let structured:Record<string,unknown>={};
+ for(const m of html.matchAll(/<script\\b[^>]*type=["']application\\/ld\\+json["'][^>]*>([\\s\\S]*?)<\\/script>/gi)){
+  try{const parsed=JSON.parse(m[1].trim());const visit=(v:unknown)=>{if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==="object"){const o=v as Record<string,unknown>;if(!Object.keys(structured).length&&o.name)structured=o;if(o["@graph"])visit(o["@graph"]);}};visit(parsed);}catch{}
+ }
+ const titleTag=/<title\\b[^>]*>([\\s\\S]*?)<\\/title>/i.exec(html)?.[1]||"";
+ const title=clean(structured.name||structured.headline||meta["og:title"]||meta["twitter:title"]||titleTag||fallbackTitle);
+ const iv=structured.image,ir=typeof iv==="string"?iv:Array.isArray(iv)?String(iv[0]||""):iv&&typeof iv==="object"?String((iv as Record<string,unknown>).url||""):"";
+ const pr=ir||meta["og:image"]||meta["twitter:image"]||fallbackPoster;
+ const description=clean(structured.description||meta["og:description"]||meta.description||"");
+ const date=String(structured.datePublished||structured.dateCreated||meta["article:published_time"]||"");
+ const year=Number(/\\b(19|20)\\d{2}\\b/.exec(date)?.[0]||/\\b(19|20)\\d{2}\\b/.exec(title)?.[0]||0)||null;
+ const genre=structured.genre||meta.genre||fallbackCategory;
+ const category=Array.isArray(genre)?genre.map(x=>clean(String(x))).filter(Boolean).join("، "):clean(String(genre||""));
+ let poster="";try{if(pr)poster=new URL(String(pr),page).toString();}catch{}
+ return {title:title||fallbackTitle,poster_url:poster||null,description:description||null,release_year:year,category:category||fallbackCategory||null};
+}
+function findSeriesNext(html:string,base:URL):string|null{
+ for(const m of html.matchAll(/<a\\b[^>]*>/gi)){const a=attrs(m[0]),rel=(a.rel||"").toLowerCase(),label=clean(a["aria-label"]||a.title||"");
+  if(!a.href||!(rel.split(/\\s+/).includes("next")||/^(next|التالي|التالية|›|»|→)$/i.test(label)))continue;
+  try{const u=validateUrl(new URL(a.href,base).toString());if(u.hostname===base.hostname)return u.toString();}catch{}
+ }return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok",{headers:corsHeaders});
   if (req.method !== "POST") return json({error:"Method not allowed"},405);
@@ -215,5 +262,70 @@ Deno.serve(async (req: Request) => {
     summary.checked++;
     summary.results.push({monitor_id:monitor.id,added,error:errorMessage});
   }
+
+  const {data:sectionMonitors,error:sectionListError}=await db.from("series_section_monitors")
+    .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at")
+    .eq("is_active",true).order("created_at",{ascending:true}).limit(100);
+  if(sectionListError)return json({error:sectionListError.message},500);
+  for(const monitor of sectionMonitors||[]){
+    const last=monitor.last_checked_at?new Date(monitor.last_checked_at).getTime():0;
+    const interval=Math.max(30,Number(monitor.check_interval_minutes)||60)*60000;
+    if(last&&now-last<interval)continue;
+    let added=0,errorMessage:string|null=null;
+    try{
+      const source=validateUrl(monitor.source_url),cards=new Map<string,{url:string;title:string;poster:string}>(),visited=new Set<string>();
+      let next:string|null=source.toString();
+      for(let pageNo=0;pageNo<8&&next&&cards.size<120;pageNo++){
+        if(visited.has(next))break;visited.add(next);
+        const listing=await fetchHtml(next,source.hostname);
+        for(const card of extractSeriesCards(listing.html,listing.url)){cards.set(card.url,card);if(cards.size>=120)break;}
+        next=findSeriesNext(listing.html,listing.url);
+      }
+      if(!cards.size)throw new Error("لم يتم العثور على روابط مسلسلات عامة واضحة في صفحة القسم");
+      let processed=0;
+      for(const card of cards.values()){
+        if(processed>=25)break;
+        try{
+          const exists=await db.from("series").select("id").eq("source_page_url",card.url).maybeSingle();
+          if(exists.error)throw exists.error;
+          const page=await fetchHtml(card.url,source.hostname),meta=seriesMetadata(page.html,page.url,card.title,card.poster,monitor.category||"");
+          if(!meta.title||meta.title.length<2){summary.skipped++;continue;}
+          let seriesId:string;
+          if(exists.data?.id)seriesId=exists.data.id;
+          else{
+            let q=db.from("series").select("id").ilike("title",meta.title);
+            q=meta.release_year==null?q.is("release_year",null):q.eq("release_year",meta.release_year);
+            const {data:old,error:dupError}=await q.limit(1).maybeSingle();if(dupError)throw dupError;
+            if(old?.id){seriesId=old.id;const {error:u}=await db.from("series").update({source_page_url:card.url}).eq("id",seriesId).is("source_page_url",null);if(u)throw u;}
+            else{
+              const {data:saved,error:ins}=await db.from("series").insert({title:meta.title,poster_url:meta.poster_url,description:meta.description,category:meta.category,release_year:meta.release_year,is_published:true,source_page_url:card.url}).select("id").single();
+              if(ins)throw ins;seriesId=saved.id;
+            }
+          }
+          const {error:pkg}=await db.from("content_package_items").upsert({package_id:monitor.package_id,content_type:"series",content_id:seriesId},{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
+          if(pkg)throw pkg;
+          const links=extractEpisodeLinks(page.html,page.url);
+          for(const link of links){
+            try{
+              const episode=await inspectEpisode(link,source.hostname,parseSeason(meta.title+" "+page.html,1));
+              if(!episode.streamUrl){summary.skipped++;continue;}
+              const {data:oldSeason,error:sr}=await db.from("seasons").select("id").eq("series_id",seriesId).eq("season_number",episode.seasonNumber).maybeSingle();if(sr)throw sr;
+              let seasonId=oldSeason?.id;
+              if(!seasonId){const {data:s,error:si}=await db.from("seasons").insert({series_id:seriesId,season_number:episode.seasonNumber,name:"الموسم "+episode.seasonNumber}).select("id").single();if(si)throw si;seasonId=s.id;}
+              const {data:oldEpisode,error:de}=await db.from("episodes").select("id").eq("season_id",seasonId).eq("episode_number",episode.number).maybeSingle();if(de)throw de;
+              if(oldEpisode){summary.skipped++;continue;}
+              const {data:savedEpisode,error:ei}=await db.from("episodes").insert({season_id:seasonId,episode_number:episode.number,title:episode.title||("الحلقة "+episode.number),stream_url:episode.streamUrl,is_published:true}).select("id").single();if(ei)throw ei;
+              if(episode.sources.length){const rows=episode.sources.map((server,index)=>({episode_id:savedEpisode.id,server_name:server.name||("السيرفر "+(index+1)),stream_url:server.url,sort_order:index,is_active:true}));const {error:se}=await db.from("playback_servers").insert(rows);if(se)throw se;}
+              added++;summary.added++;
+            }catch(e){summary.failed++;errorMessage=e instanceof Error?e.message:"تعذر استيراد حلقة";}
+          }
+          processed++;
+        }catch(e){summary.failed++;errorMessage=e instanceof Error?e.message:"تعذر استيراد مسلسل";}
+      }
+    }catch(e){errorMessage=e instanceof Error?e.message:"تعذر فحص قسم المسلسلات";summary.failed++;}
+    await db.from("series_section_monitors").update({last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString()}).eq("id",monitor.id);
+    summary.checked++;summary.results.push({monitor_id:monitor.id,added,error:errorMessage,mode:"section"});
+  }
+
   return json({success:true,...summary});
 });
