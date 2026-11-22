@@ -2103,7 +2103,19 @@ class _AccountPageState extends State<AccountPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const AdminPage(),
+                    builder: (_) => AdminPage(
+                      openImportPage: (url, title, onSourcesDetected) async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ShamFlixWebPage(
+                              url: url,
+                              title: title,
+                              onSourcesDetected: onSourcesDetected,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 );
               },
