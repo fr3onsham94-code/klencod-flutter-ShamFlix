@@ -1406,7 +1406,8 @@ class _AdminPageState extends State<AdminPage> {
         }
         linkedServers += newRows.length;
       }
-      final hasServers = currentServers.isNotEmpty || newRows.isNotEmpty;
+      final hasServers = currentServers.isNotEmpty || newRows.isNotEmpty ||
+          (existing?['stream_url']?.toString().trim().isNotEmpty ?? false);
       if (!hasServers) missingServers++;
     }
 
