@@ -885,8 +885,6 @@ class _AdminPageState extends State<AdminPage> {
     setState(() {
       selectedMovieIds.clear();
       selectedCatalogIds.clear();
-      selectedMovieIds.clear();
-      selectedCatalogIds.clear();
       currentSection = section;
       searchQuery = '';
       searchController.clear();
@@ -4320,7 +4318,7 @@ class _AdminPageState extends State<AdminPage> {
     if (ids.isEmpty || bulkDeleting) return;
     final yes = await _confirmBulkDelete(
       'حذف الأفلام المحددة',
-      'سيتم حذف \${ids.length} فيلم نهائياً مع سيرفراتها وارتباطاتها. لا يمكن التراجع.',
+      'سيتم حذف ${ids.length} فيلم نهائياً مع سيرفراتها وارتباطاتها. لا يمكن التراجع.',
     );
     if (!yes) return;
     setState(() => bulkDeleting = true);
@@ -4335,7 +4333,7 @@ class _AdminPageState extends State<AdminPage> {
       if (mounted) showMessage('تم حذف $deleted فيلم');
     } catch (e) {
       await loadMovies();
-      if (mounted) showMessage('تم حذف $deleted من أصل \${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+      if (mounted) showMessage('تم حذف $deleted من أصل ${ids.length}. تعذر إكمال الباقي: $e', isError: true);
     } finally {
       if (mounted) setState(() => bulkDeleting = false);
     }
@@ -4347,8 +4345,8 @@ class _AdminPageState extends State<AdminPage> {
     final section = currentSection;
     final isSeries = section == 'series';
     final yes = await _confirmBulkDelete(
-      'حذف \${isSeries ? 'المسلسلات' : 'القنوات'} المحددة',
-      'سيتم حذف \${ids.length} \${isSeries ? 'مسلسل' : 'قناة'} نهائياً مع الحلقات والسيرفرات والارتباطات التابعة. لا يمكن التراجع.',
+      'حذف ${isSeries ? 'المسلسلات' : 'القنوات'} المحددة',
+      'سيتم حذف ${ids.length} ${isSeries ? 'مسلسل' : 'قناة'} نهائياً مع الحلقات والسيرفرات والارتباطات التابعة. لا يمكن التراجع.',
     );
     if (!yes) return;
     setState(() => bulkDeleting = true);
@@ -4363,7 +4361,7 @@ class _AdminPageState extends State<AdminPage> {
       if (mounted) showMessage('تم حذف $deleted عنصر');
     } catch (e) {
       await loadCatalog(section);
-      if (mounted) showMessage('تم حذف $deleted من أصل \${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+      if (mounted) showMessage('تم حذف $deleted من أصل ${ids.length}. تعذر إكمال الباقي: $e', isError: true);
     } finally {
       if (mounted) setState(() => bulkDeleting = false);
     }
@@ -4391,7 +4389,7 @@ class _AdminPageState extends State<AdminPage> {
           spacing: 8,
           runSpacing: 6,
           children: [
-            Text('المحدد: \${selectedIds.length}', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+            Text('المحدد: ${selectedIds.length}', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
             TextButton.icon(
               onPressed: bulkDeleting ? null : selectAll,
               icon: const Icon(Icons.select_all, size: 18),
