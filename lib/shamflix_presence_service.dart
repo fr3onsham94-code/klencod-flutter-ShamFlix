@@ -11,6 +11,7 @@ class ShamFlixPresenceService {
   static bool _sending = false;
 
   static Future<void> start() async {
+    if (!AuthService.isInitialized) return;
     _timer ??= Timer.periodic(
       const Duration(seconds: 60),
       (_) => unawaited(sendHeartbeat()),
@@ -24,7 +25,7 @@ class ShamFlixPresenceService {
   }
 
   static Future<void> sendHeartbeat() async {
-    if (_sending) return;
+    if (!AuthService.isInitialized || _sending) return;
     _sending = true;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -36,22 +37,16 @@ class ShamFlixPresenceService {
         await prefs.setString(_sessionKey, sessionId);
       }
 
-      final user = AuthService.client.auth.currentUser;
-      await AuthService.client.from('app_presence').insert({
-        'session_id': sessionId,
-        'user_id': user?.id,
-        'display_name': user?.email?.trim().isNotEmpty == true
-            ? user!.email!
-            : user == null
-                ? 'زائر'
-                : 'مستخدم مسجل',
-      });
+      await AuthService.client.functions.invoke(
+        'presence-heartbeat',
+        body: {'session_id': sessionId},
+      );
     } catch (_) {
-      // Presence is best-effort and must never block app startup or playback.
+      // Presence is best-effort and must never block startup or playback.
     } finally {
       _sending = false;
     }
   }
 }
 
-// ShamFlix - آخر تحديث: 21-11-2026: تسجيل وجود الزوار والمستخدمين دون إظهار بياناتهم للعامة.
+// ShamFlix - آخر تحديث: تحديث سجل الجلسة عبر Edge Function وUPSERT لمنع تكرار السجلات | التاريخ والوقت: 22/11/2026، 00:55 بتوقيت تركيا.

@@ -1,0 +1,6 @@
+# انسخ هذا الملف إلى android/key.properties واملأ القيم محلياً فقط.
+# لا ترفع android/key.properties أو ملف keystore إلى Git.
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=shamflix
+storeFile=app/upload-keystore.jks

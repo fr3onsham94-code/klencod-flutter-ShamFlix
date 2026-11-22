@@ -29,7 +29,7 @@ class SupabaseService {
         'Authorization': 'Bearer $publishableKey',
         'Accept': 'application/json',
       },
-    );
+    ).timeout(const Duration(seconds: 12));
 
     if (response.statusCode != 200) {
       throw Exception(
@@ -64,7 +64,7 @@ class SupabaseService {
         'Authorization': 'Bearer $publishableKey',
         'Accept': 'application/json',
       },
-    );
+    ).timeout(const Duration(seconds: 12));
 
     if (response.statusCode != 200) {
       throw Exception(
@@ -123,7 +123,24 @@ class SupabaseService {
     return _getRows('playback_servers', {
       foreignKey: 'eq.$contentId',
       'is_active': 'eq.true',
-      'order': 'sort_order.asc',
+      'order': 'sort_order.asc,created_at.asc',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getLiveMatches() {
+    return _getRows('live_matches', {
+      'is_visible': 'eq.true',
+      'order': 'kickoff_at.asc',
+      'limit': '250',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getLiveMatchServers(String matchId) {
+    return _getRows('live_match_servers', {
+      'match_id': 'eq.$matchId',
+      'is_active': 'eq.true',
+      'order': 'sort_order.asc,created_at.asc',
+      'limit': '30',
     });
   }
 
@@ -141,3 +158,4 @@ class SupabaseService {
 }
 // ShamFlix - آخر تحديث: 21-11-2026
 // تمت إضافة جلب المواسم والحلقات وسيرفرات التشغيل من Supabase.
+// ShamFlix - آخر تعديل: تحديد مهلة 12 ثانية لطلبات واجهة المحتوى حتى لا تبقى الواجهات معلقة عند ضعف الشبكة | التاريخ والوقت: 22/11/2026، 01:00 بتوقيت تركيا.

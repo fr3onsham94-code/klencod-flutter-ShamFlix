@@ -22,27 +22,41 @@ class AuthService {
   static String? userId;
   static String? userEmail;
   static bool isAdmin = false;
+  static bool isInitialized = false;
+  static String? initializationError;
 
   static SupabaseClient get client =>
       Supabase.instance.client;
 
-  static bool get isLoggedIn => accessToken != null;
+  static bool get isLoggedIn => isInitialized && accessToken != null;
 
   // تهيئة Supabase والاستماع إلى تغييرات تسجيل الدخول.
-  static Future<void> initialize() async {
-    await Supabase.initialize(
-      url: _projectUrl,
-      publishableKey: _publishableKey,
-    );
+  static Future<bool> initialize() async {
+    if (isInitialized) return true;
+    try {
+      await Supabase.initialize(
+        url: _projectUrl,
+        publishableKey: _publishableKey,
+      );
 
-    _authSubscription?.cancel();
-
-    _authSubscription =
-        client.auth.onAuthStateChange.listen((data) {
-      _syncSession(data.session);
-    });
-
-    await restoreSession();
+      isInitialized = true;
+      initializationError = null;
+      await _authSubscription?.cancel();
+      _authSubscription = client.auth.onAuthStateChange.listen((data) {
+        _syncSession(data.session);
+      });
+      await restoreSession();
+      return true;
+    } catch (error) {
+      isInitialized = false;
+      initializationError = error.toString();
+      accessToken = null;
+      refreshToken = null;
+      userId = null;
+      userEmail = null;
+      isAdmin = false;
+      return false;
+    }
   }
 
   // مزامنة بيانات المستخدم والجلسة.
@@ -170,3 +184,5 @@ class AuthService {
   }
 }
 // ShamFlix - آخر تحديث: 21-11-2026: توحيد وصول المدير والأدمن مع إبقاء مالك التطبيق بصلاحياته العليا.
+
+// ShamFlix - آخر تعديل: تهيئة Supabase بشكل آمن دون تعطيل تشغيل التطبيق عند فشل الاتصال أو الإعداد | التاريخ والوقت: 22/11/2026، 00:55 بتوقيت تركيا.

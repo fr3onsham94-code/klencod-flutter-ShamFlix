@@ -7,3 +7,10 @@ build/
 *.swp
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Android release signing secrets - never commit these files
+android/key.properties
+android/*.jks
+android/*.keystore
+*.jks
+*.keystore

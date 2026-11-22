@@ -1,6 +1,14 @@
 name: Build Flutter APK
 
 on:
+  pull_request:
+    branches:
+      - main
+      - feature/player-external-subtitles
+  push:
+    branches:
+      - main
+      - feature/player-external-subtitles
   workflow_dispatch:
     inputs:
       flutter_version:
@@ -34,12 +42,36 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ github.event.inputs.flutter_version }}
+          flutter-version: ${{ github.event.inputs.flutter_version || '3.47.2' }}
           cache: true
           channel: stable
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Analyze Dart code
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          : "${ANDROID_KEYSTORE_BASE64:?Missing ANDROID_KEYSTORE_BASE64 secret}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Missing ANDROID_KEYSTORE_PASSWORD secret}"
+          : "${ANDROID_KEY_PASSWORD:?Missing ANDROID_KEY_PASSWORD secret}"
+          : "${ANDROID_KEY_ALIAS:?Missing ANDROID_KEY_ALIAS secret}"
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          {
+            printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'storeFile=app/upload-keystore.jks\n'
+          } > android/key.properties
 
       - name: Build APK
         run: flutter build apk --release
@@ -48,6 +80,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
           retention-days: 7
+
+# ShamFlix - آخر تعديل: تفعيل فحص Dart وبناء APK تلقائياً عند فتح Pull Request أو الدفع إلى main | التاريخ والوقت: 22/11/2026, 00:42:00 بتوقيت تركيا.
+
+# ShamFlix - آخر تعديل: دعم فحص وبناء APK غير موقع عند غياب أسرار توقيع الإصدار، مع منع استعمال Debug key | التاريخ والوقت: 22/11/2026، 00:55 بتوقيت تركيا.

@@ -4,11 +4,17 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_auth_service.dart';
 import 'app_theme.dart';
 import 'admin_packages_page.dart';
 import 'supabase_service.dart';
+import 'content_page_import_service.dart';
+import 'content_import_page.dart';
+import 'series_monitor_page.dart';
+import 'movie_monitor_page.dart';
+import 'live_match_sources_page.dart';
 
 Color get adminBg => AppTheme.background;
 Color get adminGold => AppTheme.primary;
@@ -18,7 +24,13 @@ const String ownerUserId =
     'dda16adb-3b6e-4244-a028-83df88b7801d';
 
 class AdminPage extends StatefulWidget {
-  const AdminPage({super.key});
+  final Future<void> Function(
+    String url,
+    String title,
+    ValueChanged<List<Map<String, dynamic>>> onSourcesDetected,
+  )? openImportPage;
+
+  const AdminPage({super.key, this.openImportPage});
 
   @override
   State<AdminPage> createState() => _AdminPageState();
@@ -28,6 +40,11 @@ class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> movies = [];
   List<Map<String, dynamic>> series = [];
   List<Map<String, dynamic>> channels = [];
+  final Set<String> selectedMovieIds = {};
+  final Set<String> selectedCatalogIds = {};
+  bool bulkDeleting = false;
+  bool mergingSeries = false;
+  double sidebarWidth=110, sidebarButtonSize=42, packageFontSize=11, sectionFontSize=12, packageIconSize=15, packageItemHeight=38;
   List<Map<String, dynamic>> users = [];
   List<Map<String, dynamic>> activeSessions = [];
   bool presenceLoading = false;
@@ -107,6 +124,7 @@ class _AdminPageState extends State<AdminPage> {
     loadCatalogGridColumnsSetting();
     loadAppLinksAndUpdateSettings();
     loadThemePaletteSetting();
+    _loadAdminSidebarSettings();
   }
 
   @override
@@ -490,8 +508,7 @@ class _AdminPageState extends State<AdminPage> {
                 labelStyle: TextStyle(color: AppTheme.secondaryText),
                 enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                 focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: adminGold)),
-              ),
-              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
+              ),              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
               onChanged: (value) { if (value != null) setState(() => selectedThemeSection = value); },
             ),
             const SizedBox(height: 14),
@@ -605,6 +622,7 @@ class _AdminPageState extends State<AdminPage> {
       padding: const EdgeInsets.all(14),
       children: [
         themePaletteSection(),
+        _sidebarSettingsCard(),
         Card(
           color: adminPanel,
           child: SwitchListTile(
@@ -871,6 +889,8 @@ class _AdminPageState extends State<AdminPage> {
 
   void navigateTo(String section) {
     setState(() {
+      selectedMovieIds.clear();
+      selectedCatalogIds.clear();
       currentSection = section;
       searchQuery = '';
       searchController.clear();
@@ -990,8 +1010,7 @@ class _AdminPageState extends State<AdminPage> {
       );
 
       if (response.statusCode != 200) {
-        throw Exception(_readError(response));
-      }
+        throw Exception(_readError(response));      }
 
       final data = jsonDecode(response.body) as List;
 
@@ -1052,20 +1071,80 @@ class _AdminPageState extends State<AdminPage> {
     return savedId;
   }
 
-  Future<void> deleteMovie(String id) async {
+  Future<void> _deleteMovieRecord(String id) async {
+    await AuthService.client.from('playback_servers').delete().eq('movie_id', id);
+    await AuthService.client.from('content_package_items')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+    await AuthService.client.from('user_library')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+    await AuthService.client.from('user_ratings')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+    await AuthService.client.from('user_notifications')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+    await AuthService.client.from('content_rating_stats')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+
     final response = await http.delete(
-      moviesUrl.replace(
-        queryParameters: {'id': 'eq.$id'},
-      ),
+      moviesUrl.replace(queryParameters: {'id': 'eq.$id'}),
       headers: headers,
     );
-
-    if (response.statusCode != 200 &&
-        response.statusCode != 204) {
+    if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception(_readError(response));
     }
+  }
 
+  Future<void> deleteMovie(String id) async {
+    await _deleteMovieRecord(id);
     await loadMovies();
+  }
+
+  Future<void> _deleteCatalogRecord(String section, String id) async {
+    final isSeries = section == 'series';
+    if (isSeries) {
+      await AuthService.client.from('series_source_monitors')
+          .delete().eq('series_id', id);
+      final seasons = await _extraLoad('seasons', {'series_id': 'eq.$id'});
+      final episodeIds = <String>[];
+      for (final season in seasons) {
+        final episodes = await _extraLoad('episodes', {
+          'season_id': 'eq.${season['id']}',
+        });
+        episodeIds.addAll(episodes.map((episode) => episode['id'].toString()));
+      }
+      if (episodeIds.isNotEmpty) {
+        await AuthService.client.from('playback_servers')
+            .delete().inFilter('episode_id', episodeIds);
+        await AuthService.client.from('user_library')
+            .delete().eq('content_type', 'episode').inFilter('content_id', episodeIds);
+        await AuthService.client.from('user_notifications')
+            .delete().eq('content_type', 'episode').inFilter('content_id', episodeIds);
+        await AuthService.client.from('episodes').delete().inFilter('id', episodeIds);
+      }
+      await AuthService.client.from('seasons').delete().eq('series_id', id);
+    } else {
+      await AuthService.client.from('playback_servers').delete().eq('channel_id', id);
+    }
+
+    final contentType = isSeries ? 'series' : 'channel';
+    await AuthService.client.from('content_package_items')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+    await AuthService.client.from('user_library')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+    await AuthService.client.from('user_ratings')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+    await AuthService.client.from('user_notifications')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+    await AuthService.client.from('content_rating_stats')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+
+    final table = isSeries ? 'series' : 'channels';
+    final response = await http.delete(
+      catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'}),
+      headers: headers,
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(_readError(response));
+    }
   }
 
   Future<void> togglePublish(
@@ -1166,15 +1245,8 @@ class _AdminPageState extends State<AdminPage> {
     return savedId;
   }
 
-    Future<void> deleteCatalogItem(String section, String id) async {
-    final table = section == 'series' ? 'series' : 'channels';
-    final response = await http.delete(
-      catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'}),
-      headers: headers,
-    );
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception(_readError(response));
-    }
+  Future<void> deleteCatalogItem(String section, String id) async {
+    await _deleteCatalogRecord(section, id);
     await loadCatalog(section);
   }
 
@@ -1215,6 +1287,154 @@ class _AdminPageState extends State<AdminPage> {
     }).toList();
   }
 
+  Future<Map<String, dynamic>> _inspectContentPage(String rawUrl, String expectedType) async {
+    final data = await ContentPageImportService.inspect(rawUrl);
+    final detected = data['media_type']?.toString() ?? 'unknown';
+    if (detected != 'unknown' && detected != expectedType) {
+      throw Exception(expectedType == 'movie'
+          ? 'الصفحة تبدو لمسلسل وليست فيلماً'
+          : 'الصفحة تبدو لفيلم وليست مسلسلاً');
+    }
+    return data;
+  }
+
+  // Save each imported episode independently so a single bad row or server
+  // cannot prevent the remaining episodes from being added.
+  Future<String?> _saveImportedAkwamEpisodes(
+    String seriesId,
+    List<Map<String, dynamic>> importedEpisodes,
+  ) async {
+    final seasons = await _extraLoad(
+      'seasons',
+      {'series_id': 'eq.$seriesId'},
+      order: 'season_number.asc',
+    );
+    String? seasonId;
+    for (final season in seasons) {
+      if (season['season_number']?.toString() == '1') {
+        seasonId = season['id']?.toString();
+        break;
+      }
+    }
+    seasonId ??= await _extraSave('seasons', {
+      'series_id': seriesId,
+      'season_number': 1,
+      'name': 'الموسم الأول',
+    });
+    if (seasonId == null) {
+      throw Exception('تم حفظ المسلسل لكن تعذر إنشاء الموسم الأول');
+    }
+
+    final existingEpisodes = await _extraLoad(
+      'episodes',
+      {'season_id': 'eq.$seasonId'},
+      order: 'episode_number.asc',
+    );
+    final existingByNumber = <int, Map<String, dynamic>>{};
+    for (final episode in existingEpisodes) {
+      final number = int.tryParse(episode['episode_number']?.toString() ?? '');
+      if (number != null) existingByNumber[number] = episode;
+    }
+
+    var added = 0;
+    var updated = 0;
+    var linkedServers = 0;
+    var missingServers = 0;
+    var failedEpisodes = 0;
+
+    for (final item in importedEpisodes) {
+      final number = int.tryParse(item['episode_number']?.toString() ?? '');
+      if (number == null || number < 1) continue;
+      try {
+        final servers = (item['servers'] as List? ?? [])
+            .whereType<Map>()
+            .map((server) => Map<String, dynamic>.from(server))
+            .where((server) => (server['url']?.toString() ?? '').trim().isNotEmpty)
+            .toList();
+        final firstUrl = servers.isEmpty ? '' : servers.first['url'].toString();
+        final existing = existingByNumber[number];
+        final episodeId = existing?['id']?.toString() ??
+            await _extraSave('episodes', {
+              'season_id': seasonId,
+              'episode_number': number,
+              'title': (item['title']?.toString().trim().isNotEmpty == true)
+                  ? item['title'].toString().trim()
+                  : 'الحلقة $number',
+              'description': null,
+              'stream_url': firstUrl,
+              'is_published': true,
+            });
+        if (episodeId == null) {
+          failedEpisodes++;
+          continue;
+        }
+
+        if (existing != null) {
+          await _extraSave('episodes', {
+            'title': (item['title']?.toString().trim().isNotEmpty == true)
+                ? item['title'].toString().trim()
+                : existing['title'],
+            if (firstUrl.isNotEmpty) 'stream_url': firstUrl,
+            'is_published': true,
+          }, id: episodeId);
+          updated++;
+        } else {
+          added++;
+          existingByNumber[number] = {'id': episodeId, 'episode_number': number};
+        }
+
+        final currentServers = await _extraLoad(
+          'playback_servers',
+          {'episode_id': 'eq.$episodeId'},
+          order: 'sort_order.asc,created_at.asc',
+        );
+        final knownUrls = currentServers
+            .map((server) => server['stream_url']?.toString() ?? '')
+            .where((url) => url.isNotEmpty)
+            .toSet();
+        final newRows = <Map<String, dynamic>>[];
+        for (final server in servers) {
+          final url = server['url'].toString().trim();
+          if (url.isEmpty || !knownUrls.add(url)) continue;
+          newRows.add({
+            'episode_id': episodeId,
+            'server_name': (server['name']?.toString().trim().isNotEmpty == true)
+                ? server['name'].toString().trim()
+                : 'سيرفر ${newRows.length + 1}',
+            'stream_url': url,
+            'sort_order': currentServers.length + newRows.length,
+            'is_active': true,
+          });
+        }
+        if (newRows.isNotEmpty) {
+          final response = await http.post(
+            _extraTableUrl('playback_servers'),
+            headers: headers,
+            body: jsonEncode(newRows),
+          );
+          if (response.statusCode != 200 &&
+              response.statusCode != 201 &&
+              response.statusCode != 204) {
+            throw Exception(_readError(response));
+          }
+          linkedServers += newRows.length;
+        }
+        final hasServers = currentServers.isNotEmpty || newRows.isNotEmpty ||
+            (existing?['stream_url']?.toString().trim().isNotEmpty ?? false);
+        if (!hasServers) missingServers++;
+      } catch (_) {
+        // Continue saving later episodes if this episode or its servers fail.
+        failedEpisodes++;
+      }
+    }
+
+    final message = 'حلقات جديدة: $added • تم تحديث: $updated • سيرفرات جديدة: $linkedServers';
+    final warnings = <String>[];
+    if (missingServers > 0) warnings.add('$missingServers حلقة بلا سيرفر مشاهدة');
+    if (failedEpisodes > 0) warnings.add('تعذر حفظ $failedEpisodes حلقة');
+    return warnings.isEmpty ? message : '$message • ${warnings.join(' • ')}';
+  }
+
   Future<void> openCatalogForm(
     String section, {
     Map<String, dynamic>? existing,
@@ -1253,8 +1473,12 @@ class _AdminPageState extends State<AdminPage> {
     final tmdbController = TextEditingController(
       text: existing?['tmdb_id']?.toString() ?? '',
     );
-    bool published = existing?['is_published'] == true;
+    final pageUrlController = TextEditingController(text: existing?['source_page_url']?.toString() ?? '');
+    bool pageImportLoading = false;
     bool isLive = existing?['is_live'] != false;
+    List<Map<String, dynamic>> importedAkwamEpisodes = [];
+    String? episodeImportWarning;
+    String? episodeImportSummary;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
     final packageType = isSeries ? 'series' : 'channel';
@@ -1262,7 +1486,7 @@ class _AdminPageState extends State<AdminPage> {
       'content_type': 'eq.$packageType',
     }, order: 'sort_order.asc,created_at.asc');
     final selectedPackageIds = existing == null
-        ? <String>[]
+        ? _defaultContentPackageIds(packageType, packageOptions)
         : await _loadAssignedPackageIds(packageType, existing['id'].toString());
     final serverDrafts = isSeries
         ? <Map<String, dynamic>>[]
@@ -1289,6 +1513,55 @@ class _AdminPageState extends State<AdminPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     adminField(titleController, isSeries ? 'اسم المسلسل' : 'اسم القناة', required: true),
+                    if (isSeries) ...[
+                      adminField(pageUrlController, 'رابط صفحة المسلسل من أي موقع'),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: pageImportLoading ? null : () async {
+                            if (pageUrlController.text.trim().isEmpty) {
+                              showMessage('أدخل رابط الصفحة أولاً', isError: true);
+                              return;
+                            }
+                            setDialogState(() => pageImportLoading = true);
+                            try {
+                              final data = await _inspectContentPage(pageUrlController.text, 'series');
+                              final pageHost = Uri.tryParse(pageUrlController.text.trim())?.host.toLowerCase() ?? '';
+                              if (pageHost == 'akwam.ss' || pageHost.endsWith('.akwam.ss')) {
+                                try {
+                                  importedAkwamEpisodes = await ContentPageImportService.inspectAkwamSeries(pageUrlController.text.trim());
+                                } catch (episodeError) {
+                                  importedAkwamEpisodes = [];
+                                  episodeImportWarning = episodeError.toString().replaceFirst('Exception: ', '');
+                                  showMessage('تم جلب بيانات المسلسل، لكن تعذر استيراد الحلقات: ${episodeError.toString().replaceFirst('Exception: ', '')}', isError: true);
+                                }
+                              }
+                              if (!dialogContext.mounted) return;
+                              setDialogState(() {
+                                titleController.text = data['title']?.toString() ?? titleController.text;
+                                posterController.text = data['poster_url']?.toString() ?? '';
+                                backdropController.text = data['backdrop_url']?.toString() ?? '';
+                                descriptionController.text = data['description']?.toString() ?? '';
+                                directorController.text = data['director']?.toString() ?? '';
+                                castController.text = data['cast']?.toString() ?? '';
+                                categoryController.text = data['category']?.toString() ?? '';
+                                yearController.text = data['release_year']?.toString() ?? '';
+                                ratingController.text = data['rating']?.toString() ?? '';
+                              });
+                              showMessage(importedAkwamEpisodes.isEmpty
+                                  ? 'تم تحليل الصفحة وجلب البيانات المتاحة'
+                                  : 'تم جلب بيانات المسلسل و\u200e${importedAkwamEpisodes.length}\u200e حلقة من أكوام');
+                            } catch (e) {
+                              if (dialogContext.mounted) showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
+                            } finally {
+                              if (dialogContext.mounted) setDialogState(() => pageImportLoading = false);
+                            }
+                          },
+                          icon: pageImportLoading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.travel_explore),
+                          label: Text(pageImportLoading ? 'جارٍ تحليل الصفحة...' : 'تحليل الرابط وجلب بيانات المسلسل'),
+                        ),
+                      ),
+                    ],
                     if (isSeries) ...[
                       adminField(tmdbController, 'رابط صفحة المسلسل من TMDB أو رقم المسلسل'),
                       SizedBox(
@@ -1342,8 +1615,7 @@ class _AdminPageState extends State<AdminPage> {
                               : const Icon(Icons.cloud_download_outlined),
                           label: Text(tmdbLoading ? 'جارٍ جلب بيانات المسلسل...' : 'جلب بيانات المسلسل من TMDB'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: adminGold,
-                            side: BorderSide(color: adminGold),
+                            foregroundColor: adminGold,                            side: BorderSide(color: adminGold),
                             padding: const EdgeInsets.symmetric(vertical: 13),
                           ),
                         ),
@@ -1435,12 +1707,6 @@ class _AdminPageState extends State<AdminPage> {
                               );
                             }).toList(),
                     ),
-                    SwitchListTile(
-                      value: published,
-                      activeColor: adminGold,
-                      title: Text('نشر المحتوى للمستخدمين', style: TextStyle(color: AppTheme.text)),
-                      onChanged: (value) => setDialogState(() => published = value),
-                    ),
                   ],
                 ),
               ),
@@ -1453,16 +1719,15 @@ class _AdminPageState extends State<AdminPage> {
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () {
-                  if (titleController.text.trim().isEmpty ||
-                      (!isSeries && _firstServerUrl(serverDrafts).isEmpty)) {
-                    showMessage(isSeries ? 'أدخل اسم المسلسل' : 'أدخل اسم القناة ورابط البث', isError: true);
+                  if (titleController.text.trim().isEmpty) {
+                    showMessage(isSeries ? 'أدخل اسم المسلسل' : 'أدخل اسم القناة', isError: true);
                     return;
                   }
                   final data = <String, dynamic>{
                     (isSeries ? 'title' : 'name'): titleController.text.trim(),
                     (isSeries ? 'poster_url' : 'logo_url'): posterController.text.trim().isEmpty ? null : posterController.text.trim(),
                     'category': categoryController.text.trim().isEmpty ? null : categoryController.text.trim(),
-                    'is_published': published,
+                    'is_published': true,
                   };
                   if (isSeries) {
                     data.addAll({
@@ -1473,6 +1738,7 @@ class _AdminPageState extends State<AdminPage> {
                       'cast': castController.text.trim().isEmpty ? null : castController.text.trim(),
                       'release_year': int.tryParse(yearController.text.trim()),
                       'rating': double.tryParse(ratingController.text.trim()),
+                      'source_page_url': pageUrlController.text.trim().isEmpty ? null : pageUrlController.text.trim(),
                     });
                   } else {
                     data.addAll({
@@ -1501,6 +1767,7 @@ class _AdminPageState extends State<AdminPage> {
     ratingController.dispose();
     streamController.dispose();
     tmdbController.dispose();
+    pageUrlController.dispose();
     if (result == null) {
       _disposeServerDrafts(serverDrafts);
       return;
@@ -1509,9 +1776,18 @@ class _AdminPageState extends State<AdminPage> {
       final savedId = await saveCatalogItem(section, result, id: existing?['id']?.toString());
       if (savedId != null) {
         if (!isSeries) await _saveServerDrafts('channel', savedId, serverDrafts);
+        if (isSeries && importedAkwamEpisodes.isNotEmpty) {
+          episodeImportSummary = await _saveImportedAkwamEpisodes(savedId, importedAkwamEpisodes);
+        }
         await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
       }
-      showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
+      showMessage(
+        episodeImportWarning != null
+            ? 'تم حفظ بيانات المسلسل، لكن تعذر استيراد الحلقات: $episodeImportWarning'
+            : episodeImportSummary ?? (existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح'),
+        isError: episodeImportWarning != null ||
+            (episodeImportSummary?.contains('بلا سيرفر مشاهدة') ?? false),
+      );
     } catch (e) {
       showMessage(e.toString(), isError: true);
     } finally {
@@ -1546,6 +1822,85 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+
+  Future<void> _mergeSelectedSeries() async {
+    if(selectedCatalogIds.length!=2 || mergingSeries)return;
+    final ids=selectedCatalogIds.toList();
+    final a=series.firstWhere((x)=>x['id'].toString()==ids[0]);
+    final b=series.firstWhere((x)=>x['id'].toString()==ids[1]);
+    String primary=ids[0]; int aStart=1,bStart=2;
+    final ok=await showDialog<bool>(context:context,builder:(ctx)=>StatefulBuilder(builder:(ctx,dlg)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
+      backgroundColor:adminPanel,title:Text('دمج مسلسلين',style:TextStyle(color:adminGold)),
+      content:Column(mainAxisSize:MainAxisSize.min,children:[
+        Text('اختر المسلسل الأساسي الذي سيبقى باسمه وبوستره:',style:TextStyle(color:AppTheme.text)),
+        DropdownButton<String>(isExpanded:true,value:primary,items:[DropdownMenuItem(value:ids[0],child:Text(a['title']?.toString()??'الأول')),DropdownMenuItem(value:ids[1],child:Text(b['title']?.toString()??'الثاني'))],onChanged:(v){if(v!=null)dlg(()=>primary=v);}),
+        DropdownButton<int>(isExpanded:true,value:aStart,items:List.generate(30,(i)=>i+1).map((v)=>DropdownMenuItem(value:v,child:Text('المسلسل الأول يبدأ من الموسم $v'))).toList(),onChanged:(v){if(v!=null)dlg(()=>aStart=v);}),
+        DropdownButton<int>(isExpanded:true,value:bStart,items:List.generate(30,(i)=>i+1).map((v)=>DropdownMenuItem(value:v,child:Text('المسلسل الثاني يبدأ من الموسم $v'))).toList(),onChanged:(v){if(v!=null)dlg(()=>bStart=v);}),
+        Text('سيتم نقل المواسم والحلقات وسيرفراتها مع الاحتفاظ ببيانات المسلسل الأساسي.',style:TextStyle(color:AppTheme.secondaryText,fontSize:12)),
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('إلغاء')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('تأكيد الدمج'))],
+    ))));
+    if(ok!=true)return;
+    if(aStart==bStart){showMessage('اختر رقم بداية مختلفاً لكل مسلسل',isError:true);return;}
+    final source=primary==ids[0]?ids[1]:ids[0];
+    final sourceStart=primary==ids[0]?bStart:aStart;
+    final targetStart=primary==ids[0]?aStart:bStart;
+    setState(()=>mergingSeries=true);
+    try{
+      final targetSeasons=await _extraLoad('seasons',{'series_id':'eq.$primary'});
+      final sourceSeasons=await _extraLoad('seasons',{'series_id':'eq.$source'});
+      if(sourceSeasons.isEmpty)throw Exception('المسلسل الثاني لا يحتوي مواسم.');
+      final used=<int>{};
+      for(final s in targetSeasons){final n=targetStart+(int.tryParse(s['season_number'].toString())??1)-1;if(!used.add(n))throw Exception('تداخل أرقام مواسم المسلسل الأساسي');}
+      for(final s in sourceSeasons){final n=sourceStart+(int.tryParse(s['season_number'].toString())??1)-1;if(!used.add(n))throw Exception('أرقام المواسم متداخلة، اختر بدايات مختلفة');}
+      for(final s in targetSeasons){
+        final n=targetStart+(int.tryParse(s['season_number'].toString())??1)-1;
+        final r=await http.patch(_extraTableUrl('seasons').replace(queryParameters:{'id':'eq.${s['id']}'}),headers:headers,body:jsonEncode({'season_number':n,'name':'الموسم $n'}));
+        if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
+      }
+      for(final s in sourceSeasons){
+        final n=sourceStart+(int.tryParse(s['season_number'].toString())??1)-1;
+        final r=await http.patch(_extraTableUrl('seasons').replace(queryParameters:{'id':'eq.${s['id']}'}),headers:headers,body:jsonEncode({'series_id':primary,'season_number':n,'name':'الموسم $n'}));
+        if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
+      }
+      final p1=await _loadAssignedPackageIds('series',primary),p2=await _loadAssignedPackageIds('series',source);
+      final missingPackages=p2.where((id)=>!p1.contains(id)).toList();
+      if(missingPackages.isNotEmpty){
+        await AuthService.client.from('content_package_items').insert(missingPackages.map((packageId)=>{'package_id':packageId,'content_type':'series','content_id':primary}).toList());
+      }
+      await AuthService.client.from('content_package_items').delete().eq('content_type','series').eq('content_id',source);
+      final monitorResponse=await http.patch(_extraTableUrl('series_source_monitors').replace(queryParameters:{'series_id':'eq.$source'}),headers:headers,body:jsonEncode({'series_id':primary}));
+      if(monitorResponse.statusCode!=200&&monitorResponse.statusCode!=204)throw Exception(_readError(monitorResponse));
+      final r=await http.delete(catalogUrl('series').replace(queryParameters:{'id':'eq.$source'}),headers:headers);
+      if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
+      selectedCatalogIds.clear();await loadCatalog('series');showMessage('تم دمج المسلسلين ونقل المواسم والحلقات والسيرفرات');
+    }catch(e){await loadCatalog('series');showMessage('تعذر إكمال الدمج: $e',isError:true);}
+    finally{if(mounted)setState(()=>mergingSeries=false);}
+  }
+
+  Future<void> _loadAdminSidebarSettings() async {
+    final p=await SharedPreferences.getInstance(); if(!mounted)return;
+    setState(()=>{sidebarWidth=(p.getDouble('shamflix_catalog_sidebar_width')??110).clamp(90,160).toDouble(),sidebarButtonSize=(p.getDouble('shamflix_catalog_sidebar_button')??42).clamp(34,56).toDouble(),packageFontSize=(p.getDouble('shamflix_catalog_package_font')??11).clamp(9,15).toDouble(),sectionFontSize=(p.getDouble('shamflix_catalog_section_font')??12).clamp(10,16).toDouble(),packageIconSize=(p.getDouble('shamflix_catalog_package_icon')??15).clamp(12,22).toDouble(),packageItemHeight=(p.getDouble('shamflix_catalog_package_height')??38).clamp(30,60).toDouble()});
+  }
+  Widget _sidebarSettingsCard()=>Card(color:adminPanel,child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    Text('إعدادات الزر والقائمة العائمة',style:TextStyle(color:adminGold,fontWeight:FontWeight.bold)),
+    for(final item in <List<dynamic>>[
+      ['عرض القائمة','shamflix_catalog_sidebar_width',sidebarWidth,90.0,160.0],
+      ['حجم الزر العائم','shamflix_catalog_sidebar_button',sidebarButtonSize,34.0,56.0],
+      ['حجم خط الباقات','shamflix_catalog_package_font',packageFontSize,9.0,15.0],
+      ['حجم خط العنوان','shamflix_catalog_section_font',sectionFontSize,10.0,16.0],
+      ['حجم الأيقونات','shamflix_catalog_package_icon',packageIconSize,12.0,22.0],
+      ['ارتفاع الباقة','shamflix_catalog_package_height',packageItemHeight,30.0,60.0],
+    ]) Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text('${item[0]}: ${(item[2] as double).toStringAsFixed(0)}',style:TextStyle(color:AppTheme.text)),
+      Slider(value:item[2] as double,min:item[3] as double,max:item[4] as double,activeColor:adminGold,onChanged:(v)async{
+        final p=await SharedPreferences.getInstance();await p.setDouble(item[1] as String,v);
+        await _loadAdminSidebarSettings();appSettingsRefreshNotifier.value++;
+      }),
+    ]),
+    TextButton(onPressed:()async{final p=await SharedPreferences.getInstance();for(final e in <String,double>{'shamflix_catalog_sidebar_width':110,'shamflix_catalog_sidebar_button':42,'shamflix_catalog_package_font':11,'shamflix_catalog_section_font':12,'shamflix_catalog_package_icon':15,'shamflix_catalog_package_height':38}.entries){await p.setDouble(e.key,e.value);}await _loadAdminSidebarSettings();appSettingsRefreshNotifier.value++;},child:const Text('إعادة ضبط')),
+  ])));
+
   Widget catalogCard(String section, Map<String, dynamic> item) {
     final isSeries = section == 'series';
     final title = item[isSeries ? 'title' : 'name']?.toString() ?? 'بدون اسم';
@@ -1558,6 +1913,20 @@ class _AdminPageState extends State<AdminPage> {
         padding: const EdgeInsets.all(10),
         child: Row(
           children: [
+            Checkbox(
+              value: selectedCatalogIds.contains(item['id']?.toString() ?? ''),
+              activeColor: adminGold,
+              onChanged: bulkDeleting ? null : (checked) {
+                final id = item['id']?.toString() ?? '';
+                setState(() {
+                  if (checked == true) {
+                    selectedCatalogIds.add(id);
+                  } else {
+                    selectedCatalogIds.remove(id);
+                  }
+                });
+              },
+            ),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
@@ -1627,6 +1996,17 @@ class _AdminPageState extends State<AdminPage> {
             style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: BorderSide(color: adminGold)),
           )),
         ),
+        _bulkSelectionToolbar(
+          items: list,
+          selectedIds: selectedCatalogIds,
+          selectAll: () => setState(() => selectedCatalogIds.addAll(
+            list.map((item) => item['id'].toString()),
+          )),
+          clearSelection: () => setState(() => selectedCatalogIds.clear()),
+          deleteSelected: _deleteSelectedCatalog,
+          mergeSelected: isSeries ? _mergeSelectedSeries : null,
+          merging: mergingSeries,
+        ),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
           child: list.isEmpty
@@ -1658,6 +2038,27 @@ class _AdminPageState extends State<AdminPage> {
 
   Uri _extraTableUrl(String table) =>
       Uri.parse(SupabaseService.projectUrl + '/rest/v1/' + table);
+
+  List<String> _defaultContentPackageIds(
+    String contentType,
+    List<Map<String, dynamic>> packageOptions,
+  ) {
+    String normalize(String value) => value
+        .trim()
+        .toLowerCase()
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ى', 'ي');
+
+    final requiredNames = contentType == 'series'
+        ? {'all', 'يعرض الان'}
+        : {'all'};
+    return packageOptions.where((package) {
+      final name = normalize(package['name']?.toString() ?? '');
+      return requiredNames.contains(name);
+    }).map((package) => package['id'].toString()).toSet().toList();
+  }
 
   Future<List<String>> _loadAssignedPackageIds(String contentType, String contentId) async {
     final rows = await _extraLoad('content_package_items', {
@@ -1824,8 +2225,7 @@ class _AdminPageState extends State<AdminPage> {
                       IconButton(
                         tooltip: 'حذف السيرفر',
                         onPressed: () => setDialogState(() {
-                          final removed = drafts.removeAt(index);
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                          final removed = drafts.removeAt(index);                          WidgetsBinding.instance.addPostFrameCallback((_) {
                             (removed['name'] as TextEditingController).dispose();
                             (removed['url'] as TextEditingController).dispose();
                           });
@@ -2324,8 +2724,7 @@ class _AdminPageState extends State<AdminPage> {
                                       icon: Icon(Icons.dns_outlined, color: adminGold),
                                     ),
                                     IconButton(
-                                      tooltip: 'تعديل',
-                                      onPressed: () => _editEpisode(seasonId, existing: episode, onSaved: () => setDialogState(() {})),
+                                      tooltip: 'تعديل',                                      onPressed: () => _editEpisode(seasonId, existing: episode, onSaved: () => setDialogState(() {})),
                                       icon: const Icon(Icons.edit, color: Colors.lightBlueAccent),
                                     ),
                                     IconButton(
@@ -2397,12 +2796,6 @@ class _AdminPageState extends State<AdminPage> {
                     adminField(description, 'وصف الحلقة', maxLines: 3),
                     adminField(poster, 'رابط صورة الحلقة'),
                     _serverDraftsEditor(drafts: serverDrafts, setDialogState: setFormState),
-                    SwitchListTile(
-                      value: published,
-                      activeColor: adminGold,
-                      title: Text('نشر الحلقة', style: TextStyle(color: AppTheme.text)),
-                      onChanged: (v) => setFormState(() => published = v),
-                    ),
                   ],
                 ),
               ),
@@ -2417,10 +2810,6 @@ class _AdminPageState extends State<AdminPage> {
                     showMessage('أدخل رقم الحلقة وعنوانها', isError: true);
                     return;
                   }
-                  if (_firstServerUrl(serverDrafts).isEmpty) {
-                    showMessage('أضف رابط سيرفر واحد على الأقل للحلقة', isError: true);
-                    return;
-                  }
                   Navigator.pop(ctx, {
                     'season_id': seasonId,
                     'episode_number': n,
@@ -2428,7 +2817,7 @@ class _AdminPageState extends State<AdminPage> {
                     'description': description.text.trim().isEmpty ? null : description.text.trim(),
                     'poster_url': poster.text.trim().isEmpty ? null : poster.text.trim(),
                     'stream_url': _firstServerUrl(serverDrafts),
-                    'is_published': published,
+                    'is_published': true,
                   });
                 },
                 child: const Text('حفظ الحلقة'),
@@ -2729,6 +3118,67 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> deleteUser(Map<String, dynamic> user) async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) return;
+
+    final id = user['id']?.toString();
+    if (id == null || id.isEmpty) return;
+
+    if (id == ownerUserId) {
+      showMessage(
+        'لا يمكن حذف حساب مالك التطبيق الأساسي',
+        isError: true,
+      );
+      return;
+    }
+
+    final email = user['email']?.toString() ?? 'هذا الحساب';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: adminPanel,
+        title: const Text(
+          'حذف الحساب نهائياً',
+          style: TextStyle(color: Colors.redAccent),
+        ),
+        content: Text(
+          'هل أنت متأكد من حذف الحساب نهائياً؟\\n$email\\n\\nلا يمكن التراجع عن هذا الإجراء.',
+          style: TextStyle(color: AppTheme.text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(
+              'إلغاء',
+              style: TextStyle(color: AppTheme.secondaryText),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف نهائي'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await callUsersFunction({
+        'action': 'delete',
+        'user_id': id,
+      });
+      showMessage('تم حذف الحساب نهائياً');
+      await loadUsers();
+    } catch (e) {
+      showMessage(e.toString(), isError: true);
+    }
+  }
+
   // =========================
   // تصفية المستخدمين والبحث
   // =========================
@@ -2773,12 +3223,10 @@ class _AdminPageState extends State<AdminPage> {
       final tmdb =
           movie['tmdb_id']?.toString().toLowerCase() ?? '';
 
-      final category =
-          movie['category']?.toString().toLowerCase() ?? '';
+      final category =          movie['category']?.toString().toLowerCase() ?? '';
 
       final year =
           movie['release_year']?.toString().toLowerCase() ?? '';
-
       return title.contains(query) ||
           tmdb.contains(query) ||
           category.contains(query) ||
@@ -2912,7 +3360,7 @@ class _AdminPageState extends State<AdminPage> {
                       ),
                     ),
                   ),
-                if (!isOwner)
+                if (AuthService.isOwner && !isOwner)
                   TextButton.icon(
                     onPressed: () => changeAdminRole(
                       user,
@@ -2931,8 +3379,21 @@ class _AdminPageState extends State<AdminPage> {
                         color: adminGold,
                       ),
                     ),
-                  )
-                else
+                  ),
+                if (!isOwner)
+                  TextButton.icon(
+                    onPressed: () => deleteUser(user),
+                    icon: const Icon(
+                      Icons.delete_forever,
+                      color: Colors.redAccent,
+                      size: 19,
+                    ),
+                    label: const Text(
+                      'حذف نهائي',
+                      style: TextStyle(color: Colors.redAccent),
+                    ),
+                  ),
+                if (isOwner)
                   const Padding(
                     padding: EdgeInsets.all(8),
                     child: Text(
@@ -3260,8 +3721,7 @@ class _AdminPageState extends State<AdminPage> {
                     itemCount: list.length,
                     itemBuilder: (context, index) {
                       return userCard(list[index]);
-                    },
-                  ),
+                    },                  ),
                 ),
         ),
       ],
@@ -3365,6 +3825,8 @@ class _AdminPageState extends State<AdminPage> {
     final tmdbController = TextEditingController(
       text: existing?['tmdb_id']?.toString() ?? '',
     );
+    final pageUrlController = TextEditingController();
+    bool pageImportLoading = false;
 
     final posterController = TextEditingController(
       text: existing?['poster_url']?.toString() ?? '',
@@ -3399,8 +3861,6 @@ class _AdminPageState extends State<AdminPage> {
       text: existing?['stream_url']?.toString() ?? '',
     );
 
-    bool published =
-        existing?['is_published'] == true;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
     const packageType = 'movie';
@@ -3408,7 +3868,7 @@ class _AdminPageState extends State<AdminPage> {
       'content_type': 'eq.movie',
     }, order: 'sort_order.asc,created_at.asc');
     final selectedPackageIds = existing == null
-        ? <String>[]
+        ? _defaultContentPackageIds(packageType, packageOptions)
         : await _loadAssignedPackageIds(packageType, existing['id'].toString());
     final serverDrafts = await _loadServerDrafts(
       'movie',
@@ -3446,6 +3906,100 @@ class _AdminPageState extends State<AdminPage> {
                           titleController,
                           'اسم الفيلم',
                           required: true,
+                        ),
+                        adminField(pageUrlController, 'رابط صفحة الفيلم من أي موقع'),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: pageImportLoading ? null : () async {
+                              if (pageUrlController.text.trim().isEmpty) {
+                                showMessage('أدخل رابط الصفحة أولاً', isError: true);
+                                return;
+                              }
+                              setDialogState(() => pageImportLoading = true);
+                              try {
+                                final data = await _inspectContentPage(pageUrlController.text, 'movie');
+                                if (!dialogContext.mounted) return;
+                                final rawSources = data['stream_sources'];
+                                final candidates = rawSources is List
+                                    ? rawSources.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+                                    : <Map<String, dynamic>>[];
+                                var addedSources = 0;
+                                setDialogState(() {
+                                  titleController.text = data['title']?.toString() ?? titleController.text;
+                                  posterController.text = data['poster_url']?.toString() ?? '';
+                                  backdropController.text = data['backdrop_url']?.toString() ?? '';
+                                  descriptionController.text = data['description']?.toString() ?? '';
+                                  directorController.text = data['director']?.toString() ?? '';
+                                  castController.text = data['cast']?.toString() ?? '';
+                                  categoryController.text = data['category']?.toString() ?? '';
+                                  yearController.text = data['release_year']?.toString() ?? '';
+                                  ratingController.text = data['rating']?.toString() ?? '';
+                                  for (final source in candidates) {
+                                    final url = source['url']?.toString().trim() ?? '';
+                                    if (url.isEmpty || serverDrafts.any((draft) =>
+                                        (draft['url'] as TextEditingController).text.trim() == url)) {
+                                      continue;
+                                    }
+                                    final emptyIndex = serverDrafts.indexWhere((draft) =>
+                                        (draft['url'] as TextEditingController).text.trim().isEmpty);
+                                    final sourceName = source['name']?.toString() ?? 'Embed';
+                                    if (emptyIndex >= 0) {
+                                      (serverDrafts[emptyIndex]['name'] as TextEditingController).text = sourceName;
+                                      (serverDrafts[emptyIndex]['url'] as TextEditingController).text = url;
+                                    } else {
+                                      serverDrafts.add(_newServerDraft(name: sourceName, url: url));
+                                    }
+                                    addedSources++;
+                                  }
+                                });
+                                showMessage(addedSources > 0
+                                    ? 'تم جلب البيانات وإضافة $addedSources رابط تشغيل إلى السيرفرات'
+                                    : 'تم تحليل الصفحة، لكن لم يظهر رابط بث مباشر في HTML');
+                              } catch (e) {
+                                final errorText = e.toString().replaceFirst('Exception: ', '');
+                                if (dialogContext.mounted &&
+                                    (errorText.contains('403') || errorText.contains('رفض قراءة الصفحة'))) {
+                                  showMessage('الموقع منع الاستيراد المباشر. افتح الصفحة داخل شامفليكس ثم اضغط «فحص روابط البث».', isError: true);
+                                  await widget.openImportPage?.call(
+                                    pageUrlController.text.trim(),
+                                    titleController.text.trim().isEmpty ? 'استيراد من الموقع' : titleController.text.trim(),
+                                    (entries) {
+                                          if (!dialogContext.mounted) return;
+                                          var addedSources = 0;
+                                          setDialogState(() {
+                                            for (final source in entries) {
+                                              final url = source['url']?.toString().trim() ?? '';
+                                              if (url.isEmpty || serverDrafts.any((draft) =>
+                                                  (draft['url'] as TextEditingController).text.trim() == url)) continue;
+                                              final emptyIndex = serverDrafts.indexWhere((draft) =>
+                                                  (draft['url'] as TextEditingController).text.trim().isEmpty);
+                                              final sourceName = source['name']?.toString() ?? 'Embed';
+                                              if (emptyIndex >= 0) {
+                                                (serverDrafts[emptyIndex]['name'] as TextEditingController).text = sourceName;
+                                                (serverDrafts[emptyIndex]['url'] as TextEditingController).text = url;
+                                              } else {
+                                                serverDrafts.add(_newServerDraft(name: sourceName, url: url));
+                                              }
+                                              addedSources++;
+                                            }
+                                          });
+                                          showMessage(addedSources > 0
+                                              ? 'تمت إضافة $addedSources رابط تشغيل من الصفحة'
+                                              : 'لم نعثر على روابط جديدة. جرّب تشغيل الفيديو ثم الفحص مرة أخرى.',
+                                              isError: addedSources == 0);
+                                    },
+                                  );
+                                } else if (dialogContext.mounted) {
+                                  showMessage(errorText, isError: true);
+                                }
+                              } finally {
+                                if (dialogContext.mounted) setDialogState(() => pageImportLoading = false);
+                              }
+                            },
+                            icon: pageImportLoading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.travel_explore),
+                            label: Text(pageImportLoading ? 'جارٍ تحليل الصفحة...' : 'تحليل الرابط وجلب بيانات الفيلم'),
+                          ),
                         ),
                         adminField(
                           tmdbController,
@@ -3624,22 +4178,6 @@ class _AdminPageState extends State<AdminPage> {
                                   );
                                 }).toList(),
                         ),
-                        CheckboxListTile(
-                          value: published,
-                          activeColor: adminGold,
-                          checkColor: Colors.black,
-                          title: Text(
-                            'نشر الفيلم للمستخدمين',
-                            style: TextStyle(
-                              color: AppTheme.text,
-                            ),
-                          ),
-                          onChanged: (value) {
-                            setDialogState(() {
-                              published = value ?? false;
-                            });
-                          },
-                        ),
                       ],
                     ),
                   ),
@@ -3676,19 +4214,13 @@ class _AdminPageState extends State<AdminPage> {
                         );
                         return;
                       }
-                      if (_firstServerUrl(serverDrafts).isEmpty) {
-                        showMessage('أضف رابط سيرفر واحد على الأقل', isError: true);
-                        return;
-                      }
-
                       final tmdbId = _extractTmdbId(
                         tmdbController.text,
                       );
 
                       Navigator.pop(dialogContext, {
                         'title': title,
-                        'tmdb_id': tmdbId,
-                        'poster_url':
+                        'tmdb_id': tmdbId,                        'poster_url':
                             posterController.text.trim(),
                         'backdrop_url': backdropController.text.trim().isEmpty ? null : backdropController.text.trim(),
                         'description':
@@ -3705,7 +4237,7 @@ class _AdminPageState extends State<AdminPage> {
                         ),
                         'stream_url':
                             _firstServerUrl(serverDrafts),
-                        'is_published': published,
+                        'is_published': true,
                       });
                     },
                     child: const Text('حفظ الفيلم'),
@@ -3720,6 +4252,7 @@ class _AdminPageState extends State<AdminPage> {
 
     titleController.dispose();
     tmdbController.dispose();
+    pageUrlController.dispose();
     posterController.dispose();
     backdropController.dispose();
     descriptionController.dispose();
@@ -3858,6 +4391,134 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<bool> _confirmBulkDelete(String title, String message) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: adminPanel,
+            title: Text(title, style: TextStyle(color: adminGold)),
+            content: Text(message, style: TextStyle(color: AppTheme.text)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('حذف المحدد', style: TextStyle(color: Colors.redAccent)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _deleteSelectedMovies() async {
+    final ids = selectedMovieIds.toList();
+    if (ids.isEmpty || bulkDeleting) return;
+    final yes = await _confirmBulkDelete(
+      'حذف الأفلام المحددة',
+      'سيتم حذف ${ids.length} فيلم نهائياً مع سيرفراتها وارتباطاتها. لا يمكن التراجع.',
+    );
+    if (!yes) return;
+    setState(() => bulkDeleting = true);
+    var deleted = 0;
+    try {
+      for (final id in ids) {
+        await _deleteMovieRecord(id);
+        deleted++;
+      }
+      selectedMovieIds.clear();
+      await loadMovies();
+      if (mounted) showMessage('تم حذف $deleted فيلم');
+    } catch (e) {
+      await loadMovies();
+      if (mounted) showMessage('تم حذف $deleted من أصل ${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => bulkDeleting = false);
+    }
+  }
+
+  Future<void> _deleteSelectedCatalog() async {
+    final ids = selectedCatalogIds.toList();
+    if (ids.isEmpty || bulkDeleting) return;
+    final section = currentSection;
+    final isSeries = section == 'series';
+    final contentLabel = isSeries ? 'المسلسلات' : 'القنوات';
+    final singularLabel = isSeries ? 'مسلسل' : 'قناة';
+    final yes = await _confirmBulkDelete(
+      'حذف $contentLabel المحددة',
+      'سيتم حذف ${ids.length} $singularLabel نهائياً مع الحلقات والسيرفرات والارتباطات التابعة. لا يمكن التراجع.',
+    );
+    if (!yes) return;
+    setState(() => bulkDeleting = true);
+    var deleted = 0;
+    try {
+      for (final id in ids) {
+        await _deleteCatalogRecord(section, id);
+        deleted++;
+      }
+      selectedCatalogIds.clear();
+      await loadCatalog(section);
+      if (mounted) showMessage('تم حذف $deleted عنصر');
+    } catch (e) {
+      await loadCatalog(section);
+      if (mounted) showMessage('تم حذف $deleted من أصل ${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => bulkDeleting = false);
+    }
+  }
+
+  Widget _bulkSelectionToolbar({
+    required List<Map<String, dynamic>> items,
+    required Set<String> selectedIds,
+    required VoidCallback selectAll,
+    required VoidCallback clearSelection,
+    required VoidCallback deleteSelected,
+    VoidCallback? mergeSelected,
+    bool merging = false,
+  }) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: adminPanel,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: adminGold.withOpacity(0.25)),
+        ),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            Text('المحدد: ${selectedIds.length}', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+            TextButton.icon(
+              onPressed: bulkDeleting ? null : selectAll,
+              icon: const Icon(Icons.select_all, size: 18),
+              label: const Text('تحديد الكل'),
+            ),
+            TextButton.icon(
+              onPressed: bulkDeleting || selectedIds.isEmpty ? null : clearSelection,
+              icon: const Icon(Icons.deselect, size: 18),
+              label: const Text('إلغاء التحديد'),
+            ),
+            if (mergeSelected != null) FilledButton.tonalIcon(onPressed: bulkDeleting || merging || selectedIds.length != 2 ? null : mergeSelected,icon: merging ? const SizedBox(width:15,height:15,child:CircularProgressIndicator(strokeWidth:2)) : const Icon(Icons.merge_type),label:const Text('دمج المسلسلين')),
+            FilledButton.tonalIcon(
+              onPressed: bulkDeleting || selectedIds.isEmpty ? null : deleteSelected,
+              icon: bulkDeleting
+                  ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.delete_sweep_outlined, size: 18),
+              label: const Text('حذف المحدد'),
+              style: FilledButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget movieCard(Map<String, dynamic> movie) {
     final published =
         movie['is_published'] == true;
@@ -3875,6 +4536,20 @@ class _AdminPageState extends State<AdminPage> {
         padding: const EdgeInsets.all(10),
         child: Row(
           children: [
+            Checkbox(
+              value: selectedMovieIds.contains(movie['id']?.toString() ?? ''),
+              activeColor: adminGold,
+              onChanged: bulkDeleting ? null : (checked) {
+                final id = movie['id']?.toString() ?? '';
+                setState(() {
+                  if (checked == true) {
+                    selectedMovieIds.add(id);
+                  } else {
+                    selectedMovieIds.remove(id);
+                  }
+                });
+              },
+            ),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
@@ -4021,10 +4696,42 @@ class _AdminPageState extends State<AdminPage> {
           onTap: () => navigateTo('series'),
         ),
         _homeCard(
+          title: 'استيراد المحتوى من المواقع',
+          subtitle: 'اكتشاف الأفلام والمسلسلات من رابط قسم وإضافتها إلى الباقة تلقائياً',
+          icon: Icons.travel_explore,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const ContentImportPage(),
+          )),
+        ),
+        _homeCard(
+          title: 'مراقبة أقسام المسلسلات تلقائياً',
+          subtitle: 'اكتشاف المسلسلات الجديدة وإنشاء صفحاتها وإضافة الحلقات تلقائياً إلى الباقات',
+          icon: Icons.radar,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const SeriesMonitorPage(),
+          )),
+        ),
+        _homeCard(
+          title: 'مراقبة الأفلام تلقائياً',
+          subtitle: 'إضافة الأفلام الجديدة من أقسام المواقع إلى الباقات تلقائياً',
+          icon: Icons.movie_filter_outlined,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const MovieMonitorPage(),
+          )),
+        ),
+        _homeCard(
           title: 'القنوات',
           subtitle: 'إضافة وتعديل وحذف وإدارة البث المباشر',
           icon: Icons.tv,
           onTap: () => navigateTo('channels'),
+        ),
+        _homeCard(
+          title: 'مصادر المباريات',
+          subtitle: 'إضافة وتعديل وتعطيل وحذف مصادر جدول المباريات',
+          icon: Icons.sports_soccer,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const LiveMatchSourcesPage(),
+          )),
         ),
         _homeCard(
           title: 'المتصلون الآن',
@@ -4186,8 +4893,7 @@ class _AdminPageState extends State<AdminPage> {
                 onPressed: loadMovies,
                 icon: Icon(
                   Icons.refresh,
-                  color: adminGold,
-                ),
+                  color: adminGold,                ),
               ),
             if (isCatalog)
               IconButton(
@@ -4341,6 +5047,15 @@ class _AdminPageState extends State<AdminPage> {
             label: const Text('إدارة باقات الأفلام'),
             style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: BorderSide(color: adminGold)),
           )),
+        ),
+        _bulkSelectionToolbar(
+          items: list,
+          selectedIds: selectedMovieIds,
+          selectAll: () => setState(() => selectedMovieIds.addAll(
+            list.map((item) => item['id'].toString()),
+          )),
+          clearSelection: () => setState(() => selectedMovieIds.clear()),
+          deleteSelected: _deleteSelectedMovies,
         ),
         searchBox(
           hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
