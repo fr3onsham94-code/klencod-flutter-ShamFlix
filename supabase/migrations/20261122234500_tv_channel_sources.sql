@@ -6,7 +6,7 @@ alter table public.channels
 
 create unique index if not exists channels_external_source_key_uidx
   on public.channels(external_source_key)
-  where external_source_key is not null;
+  ;
 
 alter table public.playback_servers
   add column if not exists source_key text,
@@ -16,7 +16,7 @@ alter table public.playback_servers
 
 create unique index if not exists playback_servers_source_key_uidx
   on public.playback_servers(source_key)
-  where source_key is not null;
+  ;
 
 create index if not exists playback_servers_source_health_idx
   on public.playback_servers(source_id, source_checked_at)
