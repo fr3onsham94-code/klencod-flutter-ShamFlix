@@ -3625,7 +3625,46 @@ class _AdminPageState extends State<AdminPage> {
                                     ? 'تم جلب البيانات وإضافة $addedSources رابط تشغيل إلى السيرفرات'
                                     : 'تم تحليل الصفحة، لكن لم يظهر رابط بث مباشر في HTML');
                               } catch (e) {
-                                if (dialogContext.mounted) showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
+                                final errorText = e.toString().replaceFirst('Exception: ', '');
+                                if (dialogContext.mounted &&
+                                    (errorText.contains('403') || errorText.contains('رفض قراءة الصفحة'))) {
+                                  showMessage('الموقع منع الاستيراد المباشر. افتح الصفحة داخل شامفليكس ثم اضغط «فحص روابط البث».', isError: true);
+                                  await Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ShamFlixWebPage(
+                                        url: pageUrlController.text.trim(),
+                                        title: titleController.text.trim().isEmpty ? 'استيراد من الموقع' : titleController.text.trim(),
+                                        onSourcesDetected: (entries) {
+                                          if (!dialogContext.mounted) return;
+                                          var addedSources = 0;
+                                          setDialogState(() {
+                                            for (final source in entries) {
+                                              final url = source['url']?.toString().trim() ?? '';
+                                              if (url.isEmpty || serverDrafts.any((draft) =>
+                                                  (draft['url'] as TextEditingController).text.trim() == url)) continue;
+                                              final emptyIndex = serverDrafts.indexWhere((draft) =>
+                                                  (draft['url'] as TextEditingController).text.trim().isEmpty);
+                                              final sourceName = source['name']?.toString() ?? 'Embed';
+                                              if (emptyIndex >= 0) {
+                                                (serverDrafts[emptyIndex]['name'] as TextEditingController).text = sourceName;
+                                                (serverDrafts[emptyIndex]['url'] as TextEditingController).text = url;
+                                              } else {
+                                                serverDrafts.add(_newServerDraft(name: sourceName, url: url));
+                                              }
+                                              addedSources++;
+                                            }
+                                          });
+                                          showMessage(addedSources > 0
+                                              ? 'تمت إضافة $addedSources رابط تشغيل من الصفحة'
+                                              : 'لم نعثر على روابط جديدة. جرّب تشغيل الفيديو ثم الفحص مرة أخرى.',
+                                              isError: addedSources == 0);
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                } else if (dialogContext.mounted) {
+                                  showMessage(errorText, isError: true);
+                                }
                               } finally {
                                 if (dialogContext.mounted) setDialogState(() => pageImportLoading = false);
                               }
