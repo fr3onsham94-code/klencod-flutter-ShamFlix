@@ -329,7 +329,7 @@ async function syncChannels(db: any) {
     .upsert(packageRows, { onConflict:"content_type,name" });
   if (packageError) throw packageError;
   const { data: packages, error: packagesError } = await db.from("content_packages")
-    .select("id,name").in("name",packageRows.map(x=>x.name)).eq("content_type","channel");
+    .select("id,name").like("name","قنوات تلقائية — %").eq("content_type","channel");
   if (packagesError) throw packagesError;
   const packageIds = new Map((packages || []).map((x:any)=>[x.name,x.id]));
   const itemRows: Record<string,unknown>[] = [];
