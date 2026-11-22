@@ -82,15 +82,16 @@ class ContentPageImportService {
   /// authentication, anti-bot challenges, DRM, or protected player controls.
   static Future<List<Map<String, dynamic>>> inspectAkwamSeries(String rawUrl) async {
     final seriesUri = _validatedUri(rawUrl);
-    if (!seriesUri.host.toLowerCase().endsWith('akwam.ss')) {
+    if (seriesUri.host.toLowerCase() != 'akwam.ss' &&
+        !seriesUri.host.toLowerCase().endsWith('.akwam.ss')) {
       throw Exception('استيراد الحلقات التلقائي متاح حالياً لصفحات أكوام');
     }
     final html = await _fetchPublicHtml(seriesUri);
     final episodeLinks = <String, Map<String, String>>{};
-    final anchorPattern = RegExp(r'<a\\b[^>]*>[\\s\\S]*?</a>', caseSensitive: false);
+    final anchorPattern = RegExp(r'<a\b[^>]*>[\s\\S]*?</a>', caseSensitive: false);
     for (final match in anchorPattern.allMatches(html)) {
       final tag = match.group(0)!;
-      final opening = RegExp(r'<a\\b[^>]*>', caseSensitive: false).firstMatch(tag)?.group(0);
+      final opening = RegExp(r'<a\b[^>]*>', caseSensitive: false).firstMatch(tag)?.group(0);
       if (opening == null) continue;
       final attrs = _attributes(opening);
       final href = attrs['href'] ?? '';
@@ -98,8 +99,8 @@ class ContentPageImportService {
       final uri = seriesUri.resolve(href);
       try { _validatedUri(uri.toString()); } catch (_) { continue; }
       final title = _clean(tag.replaceAll(RegExp(r'<[^>]*>'), ' '));
-      final numberMatch = RegExp(r'(?:episode|الحلقة)[^0-9]{0,12}(\\d+)', caseSensitive: false)
-          .firstMatch('$title $href') ?? RegExp(r'-(\\d+)(?:[/?#]|$)').firstMatch(href);
+      final numberMatch = RegExp(r'(?:episode|الحلقة)[^0-9]{0,12}(\d+)', caseSensitive: false)
+          .firstMatch('$title $href') ?? RegExp(r'-(\d+)(?:[/?#]|$)').firstMatch(href);
       final number = int.tryParse(numberMatch?.group(1) ?? '');
       if (number == null || number < 1) continue;
       episodeLinks[uri.toString()] = {'title': title.isEmpty ? 'الحلقة $number' : title, 'number': '$number'};
@@ -116,7 +117,7 @@ class ContentPageImportService {
       final episodeUri = _validatedUri(entry.key);
       final episodeHtml = await _fetchPublicHtml(episodeUri);
       String? watchUrl;
-      for (final match in RegExp(r'<a\\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
+      for (final match in RegExp(r'<a\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
         final attrs = _attributes(match.group(0)!);
         final href = attrs['href'] ?? '';
         if (href.contains('/watch/')) {
@@ -129,6 +130,11 @@ class ContentPageImportService {
         final watchUri = _validatedUri(watchUrl);
         final watchHtml = await _fetchPublicHtml(watchUri);
         servers.addAll(_extractStreamSources(watchHtml, watchUri));
+        servers.add({
+          'url': watchUri.toString(),
+          'name': 'مشاهدة الحلقة على أكوام',
+          'kind': 'iframe',
+        });
       }
       episodes.add({
         'episode_number': int.parse(entry.value['number']!),
