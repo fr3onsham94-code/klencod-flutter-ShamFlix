@@ -185,13 +185,13 @@ async function inspectMovie(card: {url:string;title:string;poster:string}, host:
   const page = await fetchHtml(card.url,host);
   let sources=extractSources(page.html,page.url);
   let watchUrl:string|null=null;
-  for(const match of page.html.matchAll(/<a\\b[^>]*>/gi)){
+  for(const match of page.html.matchAll(/<a\b[^>]*>/gi)){
     const a=attrs(match[0]),href=a.href;
     if(!href)continue;
     const label=clean(a.title||a["aria-label"]||match[0].replace(/<[^>]+>/g,""));
     try{
       const candidate=validateUrl(new URL(href,page.url).toString());
-      if(candidate.hostname===host && (/\\/(?:watch|view)(?:\\/|$)/i.test(candidate.pathname)||/مشاهدة|watch/i.test(label))){
+      if(candidate.hostname===host && (/\/(?:watch|view)(?:\/|$)/i.test(candidate.pathname)||/مشاهدة|watch/i.test(label))){
         watchUrl=candidate.toString();break;
       }
     }catch{}
