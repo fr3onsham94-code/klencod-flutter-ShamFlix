@@ -201,7 +201,8 @@ async function syncChannels(db: any) {
   const streamRows: Record<string,unknown>[] = [];
   const categoryByKey = new Map<string,string>();
   for (const [key, entries] of grouped) {
-    const uniqueStreams = [...new Map(entries.map(e => [e.url,e])).values()];
+    // The same URL may legitimately belong to multiple sources; dedupe only within a source.
+    const uniqueStreams = [...new Map(entries.map(e => [e.sourceId + "|" + e.url,e])).values()];
     const preferred = uniqueStreams.find(x => x.sourceId === "nexus") ||
       uniqueStreams.find(x => x.sourceId === "iptv-org") || uniqueStreams[0];
     const categoryCounts = new Map<string,number>();
