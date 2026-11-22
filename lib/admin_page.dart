@@ -885,6 +885,8 @@ class _AdminPageState extends State<AdminPage> {
     setState(() {
       selectedMovieIds.clear();
       selectedCatalogIds.clear();
+      selectedMovieIds.clear();
+      selectedCatalogIds.clear();
       currentSection = section;
       searchQuery = '';
       searchController.clear();
@@ -1092,7 +1094,7 @@ class _AdminPageState extends State<AdminPage> {
     await loadMovies();
   }
 
-  Future<void> deleteCatalogItem(String section, String id) async {
+  Future<void> _deleteCatalogRecord(String section, String id) async {
     final isSeries = section == 'series';
     if (isSeries) {
       await AuthService.client.from('series_source_monitors')
@@ -1237,6 +1239,11 @@ class _AdminPageState extends State<AdminPage> {
     final savedId = id ?? _returnedRowId(response.body);
     await loadCatalog(section);
     return savedId;
+  }
+
+  Future<void> deleteCatalogItem(String section, String id) async {
+    await _deleteCatalogRecord(section, id);
+    await loadCatalog(section);
   }
 
   Future<void> toggleCatalogPublish(
@@ -1806,6 +1813,20 @@ class _AdminPageState extends State<AdminPage> {
         padding: const EdgeInsets.all(10),
         child: Row(
           children: [
+            Checkbox(
+              value: selectedCatalogIds.contains(item['id']?.toString() ?? ''),
+              activeColor: adminGold,
+              onChanged: bulkDeleting ? null : (checked) {
+                final id = item['id']?.toString() ?? '';
+                setState(() {
+                  if (checked == true) {
+                    selectedCatalogIds.add(id);
+                  } else {
+                    selectedCatalogIds.remove(id);
+                  }
+                });
+              },
+            ),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
@@ -1874,6 +1895,15 @@ class _AdminPageState extends State<AdminPage> {
             label: Text(isSeries ? 'إدارة باقات المسلسلات' : 'إدارة باقات القنوات'),
             style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: BorderSide(color: adminGold)),
           )),
+        ),
+        _bulkSelectionToolbar(
+          items: list,
+          selectedIds: selectedCatalogIds,
+          selectAll: () => setState(() => selectedCatalogIds.addAll(
+            list.map((item) => item['id'].toString()),
+          )),
+          clearSelection: () => setState(() => selectedCatalogIds.clear()),
+          deleteSelected: _deleteSelectedCatalog,
         ),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
@@ -4259,6 +4289,129 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<bool> _confirmBulkDelete(String title, String message) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: adminPanel,
+            title: Text(title, style: TextStyle(color: adminGold)),
+            content: Text(message, style: TextStyle(color: AppTheme.text)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('حذف المحدد', style: TextStyle(color: Colors.redAccent)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _deleteSelectedMovies() async {
+    final ids = selectedMovieIds.toList();
+    if (ids.isEmpty || bulkDeleting) return;
+    final yes = await _confirmBulkDelete(
+      'حذف الأفلام المحددة',
+      'سيتم حذف \${ids.length} فيلم نهائياً مع سيرفراتها وارتباطاتها. لا يمكن التراجع.',
+    );
+    if (!yes) return;
+    setState(() => bulkDeleting = true);
+    var deleted = 0;
+    try {
+      for (final id in ids) {
+        await _deleteMovieRecord(id);
+        deleted++;
+      }
+      selectedMovieIds.clear();
+      await loadMovies();
+      if (mounted) showMessage('تم حذف $deleted فيلم');
+    } catch (e) {
+      await loadMovies();
+      if (mounted) showMessage('تم حذف $deleted من أصل \${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => bulkDeleting = false);
+    }
+  }
+
+  Future<void> _deleteSelectedCatalog() async {
+    final ids = selectedCatalogIds.toList();
+    if (ids.isEmpty || bulkDeleting) return;
+    final section = currentSection;
+    final isSeries = section == 'series';
+    final yes = await _confirmBulkDelete(
+      'حذف \${isSeries ? 'المسلسلات' : 'القنوات'} المحددة',
+      'سيتم حذف \${ids.length} \${isSeries ? 'مسلسل' : 'قناة'} نهائياً مع الحلقات والسيرفرات والارتباطات التابعة. لا يمكن التراجع.',
+    );
+    if (!yes) return;
+    setState(() => bulkDeleting = true);
+    var deleted = 0;
+    try {
+      for (final id in ids) {
+        await _deleteCatalogRecord(section, id);
+        deleted++;
+      }
+      selectedCatalogIds.clear();
+      await loadCatalog(section);
+      if (mounted) showMessage('تم حذف $deleted عنصر');
+    } catch (e) {
+      await loadCatalog(section);
+      if (mounted) showMessage('تم حذف $deleted من أصل \${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => bulkDeleting = false);
+    }
+  }
+
+  Widget _bulkSelectionToolbar({
+    required List<Map<String, dynamic>> items,
+    required Set<String> selectedIds,
+    required VoidCallback selectAll,
+    required VoidCallback clearSelection,
+    required VoidCallback deleteSelected,
+  }) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: adminPanel,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: adminGold.withOpacity(0.25)),
+        ),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            Text('المحدد: \${selectedIds.length}', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
+            TextButton.icon(
+              onPressed: bulkDeleting ? null : selectAll,
+              icon: const Icon(Icons.select_all, size: 18),
+              label: const Text('تحديد الكل'),
+            ),
+            TextButton.icon(
+              onPressed: bulkDeleting || selectedIds.isEmpty ? null : clearSelection,
+              icon: const Icon(Icons.deselect, size: 18),
+              label: const Text('إلغاء التحديد'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: bulkDeleting || selectedIds.isEmpty ? null : deleteSelected,
+              icon: bulkDeleting
+                  ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.delete_sweep_outlined, size: 18),
+              label: const Text('حذف المحدد'),
+              style: FilledButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget movieCard(Map<String, dynamic> movie) {
     final published =
         movie['is_published'] == true;
@@ -4276,6 +4429,20 @@ class _AdminPageState extends State<AdminPage> {
         padding: const EdgeInsets.all(10),
         child: Row(
           children: [
+            Checkbox(
+              value: selectedMovieIds.contains(movie['id']?.toString() ?? ''),
+              activeColor: adminGold,
+              onChanged: bulkDeleting ? null : (checked) {
+                final id = movie['id']?.toString() ?? '';
+                setState(() {
+                  if (checked == true) {
+                    selectedMovieIds.add(id);
+                  } else {
+                    selectedMovieIds.remove(id);
+                  }
+                });
+              },
+            ),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
@@ -4765,6 +4932,15 @@ class _AdminPageState extends State<AdminPage> {
             label: const Text('إدارة باقات الأفلام'),
             style: OutlinedButton.styleFrom(foregroundColor: adminGold, side: BorderSide(color: adminGold)),
           )),
+        ),
+        _bulkSelectionToolbar(
+          items: list,
+          selectedIds: selectedMovieIds,
+          selectAll: () => setState(() => selectedMovieIds.addAll(
+            list.map((item) => item['id'].toString()),
+          )),
+          clearSelection: () => setState(() => selectedMovieIds.clear()),
+          deleteSelected: _deleteSelectedMovies,
         ),
         searchBox(
           hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
