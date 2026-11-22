@@ -127,11 +127,11 @@ class ContentPageImportService {
 
     for (final match in RegExp(r'<(?:iframe|frame)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
-      add(attrs['src'], kind: 'iframe');
+      add(attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ?? attrs['data-url'], kind: 'iframe');
     }
     for (final match in RegExp(r'<(?:video|source|embed)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
-      add(attrs['src'] ?? attrs['data'], kind: 'media');
+      add(attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ?? attrs['data'], kind: 'media');
     }
 
     final directPattern = RegExp(
