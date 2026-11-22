@@ -9,7 +9,7 @@ const SOURCES = [
 const MAX_PLAYLIST_BYTES = 24 * 1024 * 1024;
 const MAX_CHANNELS_PER_RUN = 12000;
 const MAX_HEALTH_CHECKS = 600;
-const CONCURRENCY = 12;
+const CONCURRENCY = 32;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -174,6 +174,7 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     }
   }
   if (!grouped.size) throw new Error("No channels were aggregated; existing catalogue was left untouched");
+  if (grouped.size > MAX_CHANNELS_PER_RUN) throw new Error("Playlist set exceeded the safe per-run channel limit; existing catalogue was left untouched");
 
   const { data: oldChannels, error: oldError } = await db.from("channels")
     .select("id,name,external_source_key").limit(20000);
@@ -231,8 +232,8 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
   }
 
   // Upsert channel rows in batches; stable source keys prevent duplicate channels on each run.
-  for (let i=0; i<channelRows.length; i+=250) {
-    const { error } = await db.from("channels").upsert(channelRows.slice(i,i+250), { onConflict:"external_source_key" });
+  for (let i=0; i<channelRows.length; i+=500) {
+    const { error } = await db.from("channels").upsert(channelRows.slice(i,i+500), { onConflict:"external_source_key" });
     if (error) throw error;
   }
   const { data: syncedChannels, error: syncedError } = await db.from("channels")
@@ -286,7 +287,7 @@ async function probeServer(url: string): Promise<"ok"|"blocked"|"bad"> {
     const response = await fetch(url, {
       method: "GET",
       redirect: "follow",
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(7000),
       headers: { "Range": "bytes=0-1023", "User-Agent": "ShamFlix-TV-Health/1.0", "Accept": "*/*" },
     });
     if (response.body) await response.body.cancel().catch(() => {});
