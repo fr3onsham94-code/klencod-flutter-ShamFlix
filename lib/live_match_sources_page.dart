@@ -379,7 +379,7 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
           style: TextStyle(color: _sourceGold),
         ),
         content: Text(
-          'سيتم حذف مصدر $sourceName وروابطه المرتبطة حسب قيود قاعدة البيانات.',
+          'سيتم حذف مصدر $sourceName وروابط سيرفراته وأحداثه المرتبطة به.',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
