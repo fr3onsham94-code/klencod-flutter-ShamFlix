@@ -31,6 +31,100 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
     if (mounted) setState(() => loading = false);
   }
 
+  Future<void> _addMonitor() async {
+    final seriesRows = await AuthService.client.from('series').select('id,title').order('title');
+    if (seriesRows.isEmpty) {
+      _message('أضف مسلسل إلى المكتبة أولاً', true);
+      return;
+    }
+    final urlController = TextEditingController();
+    String? selectedSeries = seriesRows.first['id'].toString();
+    int seasonNumber = 1;
+    int interval = 60;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: panel,
+          title: Text('إضافة مصدر مراقبة', style: TextStyle(color: accent)),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<String>(
+                value: selectedSeries,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'المسلسل'),
+                items: seriesRows.map((row) => DropdownMenuItem<String>(
+                  value: row['id'].toString(),
+                  child: Text(row['title']?.toString() ?? 'مسلسل'),
+                )).toList(),
+                onChanged: (value) => setDialogState(() => selectedSeries = value),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: urlController,
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(labelText: 'رابط صفحة المسلسل'),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<int>(
+                value: seasonNumber,
+                decoration: const InputDecoration(labelText: 'رقم الموسم'),
+                items: List.generate(20, (i) => i + 1).map((n) =>
+                  DropdownMenuItem(value: n, child: Text('الموسم $n'))).toList(),
+                onChanged: (value) => setDialogState(() => seasonNumber = value ?? 1),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<int>(
+                value: interval,
+                decoration: const InputDecoration(labelText: 'فترة الفحص'),
+                items: const [
+                  DropdownMenuItem(value: 30, child: Text('كل 30 دقيقة')),
+                  DropdownMenuItem(value: 60, child: Text('كل ساعة')),
+                  DropdownMenuItem(value: 180, child: Text('كل 3 ساعات')),
+                  DropdownMenuItem(value: 360, child: Text('كل 6 ساعات')),
+                  DropdownMenuItem(value: 720, child: Text('كل 12 ساعة')),
+                  DropdownMenuItem(value: 1440, child: Text('كل 24 ساعة')),
+                ],
+                onChanged: (value) => setDialogState(() => interval = value ?? 60),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: accent),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حفظ المصدر'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != true) { urlController.dispose(); return; }
+    try {
+      final uri = Uri.tryParse(urlController.text.trim());
+      if (selectedSeries == null || uri == null ||
+          (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
+        throw Exception('أدخل رابط صفحة مسلسل صحيح');
+      }
+      await AuthService.client.from('series_source_monitors').upsert({
+        'series_id': selectedSeries,
+        'source_url': uri.toString(),
+        'source_host': uri.host,
+        'season_number': seasonNumber,
+        'check_interval_minutes': interval,
+        'is_active': true,
+      }, onConflict: 'series_id,source_url');
+      if (!mounted) return;
+      _message('تمت إضافة مصدر المراقبة');
+      await _load();
+    } catch (e) {
+      _message('تعذر إضافة المصدر: $e', true);
+    } finally {
+      urlController.dispose();
+    }
+  }
+
   Future<void> _toggle(Map<String, dynamic> item, bool enabled) async {
     try {
       await AuthService.client.from('series_source_monitors')
@@ -107,7 +201,10 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
         appBar: AppBar(
           backgroundColor: bg,
           title: Text('المراقبة والتحديث التلقائي', style: TextStyle(color: accent)),
-          actions: [IconButton(onPressed: loading ? null : _load, icon: const Icon(Icons.refresh))],
+          actions: [
+            IconButton(onPressed: _addMonitor, icon: const Icon(Icons.add_link)),
+            IconButton(onPressed: loading ? null : _load, icon: const Icon(Icons.refresh)),
+          ],
         ),
         body: loading
             ? Center(child: CircularProgressIndicator(color: accent))
