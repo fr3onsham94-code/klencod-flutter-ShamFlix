@@ -12,6 +12,7 @@ import 'supabase_service.dart';
 import 'content_page_import_service.dart';
 import 'content_import_page.dart';
 import 'series_monitor_page.dart';
+import 'movie_monitor_page.dart';
 
 Color get adminBg => AppTheme.background;
 Color get adminGold => AppTheme.primary;
@@ -4338,6 +4339,14 @@ class _AdminPageState extends State<AdminPage> {
           icon: Icons.radar,
           onTap: () => Navigator.push(context, MaterialPageRoute(
             builder: (_) => const SeriesMonitorPage(),
+          )),
+        ),
+        _homeCard(
+          title: 'مراقبة الأفلام تلقائياً',
+          subtitle: 'إضافة الأفلام الجديدة من أقسام المواقع إلى الباقات تلقائياً',
+          icon: Icons.movie_filter_outlined,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const MovieMonitorPage(),
           )),
         ),
         _homeCard(
