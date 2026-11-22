@@ -1284,7 +1284,7 @@ class _AdminPageState extends State<AdminPage> {
         'title': (item['title']?.toString().trim().isNotEmpty == true)
             ? item['title'].toString().trim()
             : 'الحلقة $number',
-        'description': item['watch_url']?.toString(),
+        'description': null,
         'stream_url': firstUrl,
         'is_published': servers.isNotEmpty,
       });
@@ -1411,7 +1411,12 @@ class _AdminPageState extends State<AdminPage> {
                               final data = await _inspectContentPage(pageUrlController.text, 'series');
                               final pageHost = Uri.tryParse(pageUrlController.text.trim())?.host.toLowerCase() ?? '';
                               if (pageHost == 'akwam.ss' || pageHost.endsWith('.akwam.ss')) {
-                                importedAkwamEpisodes = await ContentPageImportService.inspectAkwamSeries(pageUrlController.text.trim());
+                                try {
+                                  importedAkwamEpisodes = await ContentPageImportService.inspectAkwamSeries(pageUrlController.text.trim());
+                                } catch (episodeError) {
+                                  importedAkwamEpisodes = [];
+                                  showMessage('تم جلب بيانات المسلسل، لكن تعذر استيراد الحلقات: ${episodeError.toString().replaceFirst('Exception: ', '')}', isError: true);
+                                }
                               }
                               if (!dialogContext.mounted) return;
                               setDialogState(() {
