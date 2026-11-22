@@ -20,7 +20,11 @@ class _ContentImportPageState extends State<ContentImportPage> {
   final Set<String> selected = {};
   bool loadingPackages = true, scanning = false, importing = false, publish = true;
   bool monitorSeries = true;
+  bool monitorMovies = true;
   int monitorInterval = 60;
+  int movieMonitorInterval = 60;
+  int movieMonitorCreated = 0;
+  int movieMonitorFailures = 0;
   int monitorsCreated = 0;
   int monitorFailures = 0;
   int imported = 0, duplicates = 0, failed = 0;
@@ -77,7 +81,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
   Future<void> importSelected() async {
     final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
     if (chosen.isEmpty || packageId == null) return;
-    setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; });
+    setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; movieMonitorCreated = 0; movieMonitorFailures = 0; });
     try {
       final table = type == 'movie' ? 'movies' : 'series';
       final rows = await AuthService.client.from(table).select('id,title,release_year');
@@ -104,6 +108,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
             'director': emptyNull(item['director']),
             'cast': emptyNull(item['cast']),
             'is_published': publish,
+            'source_page_url': type == 'movie' ? emptyNull(item['page_url']) : null,
           };
           final saved = await AuthService.client.from(table).insert(data).select('id').single();
           final id = saved['id'].toString();
@@ -154,10 +159,36 @@ class _ContentImportPageState extends State<ContentImportPage> {
           setState(() => imported++);
         } catch (_) { setState(() => failed++); }
       }
+      if (type == 'movie' && monitorMovies) {
+        final sourceUri = Uri.tryParse(url.text.trim());
+        if (sourceUri != null &&
+            (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
+            sourceUri.host.isNotEmpty && sourceUri.userInfo.isEmpty) {
+          try {
+            await AuthService.client.from('movie_source_monitors').upsert({
+              'package_id': packageId,
+              'source_url': sourceUri.toString(),
+              'source_host': sourceUri.host,
+              'category': category.text.trim().isEmpty ? null : category.text.trim(),
+              'check_interval_minutes': movieMonitorInterval,
+              'is_active': true,
+            }, onConflict: 'package_id,source_url');
+            movieMonitorCreated = 1;
+          } catch (_) {
+            movieMonitorFailures = 1;
+          }
+        } else {
+          movieMonitorFailures = 1;
+        }
+      }
       message('اكتمل الاستيراد: $imported جديد • $duplicates مكرر • $failed تعذر استيراده' +
           (type == 'series' && monitorSeries
               ? ' • تمت جدولة $monitorsCreated للمراقبة • تعذر تفعيل المراقبة لـ $monitorFailures'
-              : ''));
+              : type == 'movie' && monitorMovies
+                  ? (movieMonitorCreated > 0
+                      ? ' • تم حفظ قسم الأفلام للمراقبة التلقائية'
+                      : ' • تعذر حفظ رابط المراقبة')
+                  : ''));
     } catch (e) { message('تعذر الاستيراد: $e', true); }
     finally { if (mounted) setState(() => importing = false); }
   }
@@ -237,6 +268,33 @@ class _ContentImportPageState extends State<ContentImportPage> {
                 subtitle: const Text('عند إيقافه تُحفظ العناصر كمسودات'),
                 onChanged: scanning || importing ? null : (v) => setState(() => publish = v),
               ),
+              if (type == 'movie') ...[
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: monitorMovies,
+                  activeColor: accent,
+                  title: const Text('مراقبة قسم الأفلام وإضافة الجديد تلقائياً'),
+                  subtitle: const Text('يحفظ رابط القسم والباقة المحددة، ويضيف أي فيلم جديد يظهر لاحقاً تلقائياً'),
+                  onChanged: scanning || importing ? null : (v) => setState(() => monitorMovies = v),
+                ),
+                if (monitorMovies)
+                  DropdownButtonFormField<int>(
+                    value: movieMonitorInterval,
+                    dropdownColor: panel,
+                    decoration: const InputDecoration(labelText: 'فترة فحص قسم الأفلام'),
+                    items: const [
+                      DropdownMenuItem(value: 30, child: Text('كل 30 دقيقة')),
+                      DropdownMenuItem(value: 60, child: Text('كل ساعة')),
+                      DropdownMenuItem(value: 180, child: Text('كل 3 ساعات')),
+                      DropdownMenuItem(value: 360, child: Text('كل 6 ساعات')),
+                      DropdownMenuItem(value: 720, child: Text('كل 12 ساعة')),
+                      DropdownMenuItem(value: 1440, child: Text('كل 24 ساعة')),
+                    ],
+                    onChanged: scanning || importing ? null : (v) {
+                      if (v != null) setState(() => movieMonitorInterval = v);
+                    },
+                  ),
+              ],
               if (type == 'series') ...[
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
