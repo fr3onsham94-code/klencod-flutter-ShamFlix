@@ -1570,99 +1570,67 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   }
 
   Widget _sidebar() {
-    const packageNameStyle = TextStyle(
-      fontSize: 10,
-      height: 1.3,
-      fontWeight: FontWeight.w600,
-    );
-
-    var sidebarWidth = 76.0;
-    final textPainter = TextPainter(
-      textDirection: Directionality.of(context),
-      maxLines: 3,
-    );
-    for (final package in packages) {
-      textPainter.text = TextSpan(
-        text: package['name']?.toString() ?? 'باقة',
-        style: packageNameStyle,
-      );
-      textPainter.layout(maxWidth: 104);
-      sidebarWidth = sidebarWidth > textPainter.width + 48
-          ? sidebarWidth
-          : textPainter.width + 48;
-    }
-    sidebarWidth = sidebarWidth.clamp(76.0, 152.0).toDouble();
-
-    return SizedBox(
-      width: sidebarWidth,
+    return Container(
+      width: 126,
+      decoration: BoxDecoration(
+        color: sectionBackground,
+        border: Border(right: BorderSide(color: sectionBorder)),
+      ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(4, 10, 4, 14),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(2, 5, 2, 14),
+            padding: const EdgeInsets.fromLTRB(7, 4, 7, 10),
             child: Text(
               appText('الباقات', 'PACKAGES', 'PAKETLER'),
-              textAlign: TextAlign.center,
               style: TextStyle(
-                color: sectionPrimary,
-                fontSize: 10,
+                color: sectionText,
+                fontSize: 11,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
           ...packages.map((package) {
             final id = package['id'].toString();
-            final active = selectedPackageId == id;
-            final count = (packageContents[id] ?? []).length;
-
+            final active = id == selectedPackageId;
             return Padding(
-              padding: const EdgeInsets.only(bottom: 9),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(5),
-                onTap: () => _openPackage(id),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 5,
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Material(
+                color: active ? const Color(0xFFE50914) : sectionPanel,
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _openPackage(id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.live_tv,
+                          color: active ? Colors.white : Colors.white70,
+                          size: 17,
                         ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: active ? sectionPrimary : sectionPackageBorder,
-                            width: active ? 1.2 : 0.7,
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            package['name']?.toString() ?? 'باقة',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: active
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
                           ),
                         ),
-                        child: Text(
-                          package['name']?.toString() ?? 'باقة',
-                          textAlign: TextAlign.center,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: active ? sectionPrimary : sectionSecondaryText,
-                            fontSize: 10,
-                            height: 1.3,
-                            fontWeight: active
-                                ? FontWeight.bold
-                                : FontWeight.w500,
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '($count)',
-                      style: TextStyle(
-                        color: active ? sectionPrimary : sectionSecondaryText,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             );
