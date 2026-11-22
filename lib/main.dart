@@ -3955,7 +3955,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final url = _embedFallbackUrl;
     if (url == null || url.isEmpty || !mounted) return;
     await Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ShamFlixWebPage(url: url, title: widget.title, playerOnly: true),
+      builder: (_) => ShamFlixWebPage(url: url, title: widget.title, playerOnly: true, returnToPlayer: true),
     ));
   }
 
@@ -4843,7 +4843,8 @@ class ShamFlixWebPage extends StatefulWidget {
   final String url;
   final String title;
   final bool playerOnly;
-  const ShamFlixWebPage({super.key, required this.url, required this.title, this.playerOnly = false});
+  final bool returnToPlayer;
+  const ShamFlixWebPage({super.key, required this.url, required this.title, this.playerOnly = false, this.returnToPlayer = false});
   @override
   State<ShamFlixWebPage> createState() => _ShamFlixWebPageState();
 }
@@ -5093,7 +5094,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
 
   @override
   void dispose() {
-    if (widget.playerOnly) {
+    if (widget.playerOnly && !widget.returnToPlayer) {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
       unawaited(applyAppOrientationPolicy());
     }
