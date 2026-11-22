@@ -262,6 +262,15 @@ Deno.serve(async (req: Request) => {
               package_id:monitor.package_id,content_type:"movie",content_id:movieId
             },{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
             if (linkError) throw linkError;
+            if(movie.sources.length){
+              const {data:oldServers,error:readServersError}=await db.from("playback_servers").select("stream_url").eq("movie_id",movieId);
+              if(readServersError)throw readServersError;
+              const oldUrls=new Set((oldServers||[]).map((x:any)=>x.stream_url));
+              const rows=movie.sources.filter(x=>!oldUrls.has(x.url)).map((x,index)=>({movie_id:movieId,server_name:x.name||("السيرفر "+(index+1)),stream_url:x.url,sort_order:(oldServers||[]).length+index,is_active:true}));
+              if(rows.length){const {error:saveServersError}=await db.from("playback_servers").insert(rows);if(saveServersError)throw saveServersError;}
+              const {error:updateMovie}=await db.from("movies").update({stream_url:movie.sources[0].url}).eq("id",movieId);
+              if(updateMovie)throw updateMovie;
+            }
             linked++; summary.linked++;
           } else {
             const {data:saved,error:insertError} = await db.from("movies").insert({
