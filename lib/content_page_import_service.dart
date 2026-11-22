@@ -118,6 +118,25 @@ class ContentPageImportService {
     ) async {
       final episodeUri = _validatedUri(entry.key);
       final episodeHtml = await _fetchPublicHtml(episodeUri);
+      final episodePageTitle = _clean(_parseHtml(episodeHtml)['title']);
+      final linkTitle = _clean(entry.value['title']);
+      final episodeNumberPattern = RegExp(
+        r'(?:الحلقة|حلقة|episode)\s*[:#-]?\s*(\d+)',
+        caseSensitive: false,
+      );
+      final pageNumberMatch = episodeNumberPattern.firstMatch(episodePageTitle) ??
+          episodeNumberPattern.firstMatch(linkTitle);
+      final resolvedEpisodeNumber = int.tryParse(pageNumberMatch?.group(1) ?? '') ??
+          int.parse(entry.value['number']!);
+      final descriptivePageTitle = episodePageTitle.isNotEmpty &&
+              !RegExp(r'^\d+$').hasMatch(episodePageTitle)
+          ? episodePageTitle
+          : '';
+      final resolvedEpisodeTitle = descriptivePageTitle.isNotEmpty
+          ? descriptivePageTitle
+          : (linkTitle.isNotEmpty && !RegExp(r'^\d+$').hasMatch(linkTitle)
+              ? linkTitle
+              : 'الحلقة $resolvedEpisodeNumber');
       String? watchUrl;
       for (final match in RegExp(r'<a\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
         final attrs = _attributes(match.group(0)!);
@@ -139,8 +158,8 @@ class ContentPageImportService {
         });
       }
       return {
-        'episode_number': int.parse(entry.value['number']!),
-        'title': entry.value['title'],
+        'episode_number': resolvedEpisodeNumber,
+        'title': resolvedEpisodeTitle,
         'watch_url': watchUrl,
         'servers': servers,
       };
