@@ -7,7 +7,8 @@ const SOURCES = [
 ] as const;
 
 const MAX_PLAYLIST_BYTES = 24 * 1024 * 1024;
-const MAX_CHANNELS_PER_RUN = 30000;
+const MAX_CHANNELS_PER_RUN = 6000;
+const MAX_ENTRIES_PER_SOURCE = 2000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -123,7 +124,7 @@ function parseM3u(text: string, sourceId: string) {
     }
     pending = null;
     displayName = "";
-    if (result.length >= MAX_CHANNELS_PER_RUN * 4) break;
+    if (result.length >= MAX_ENTRIES_PER_SOURCE) break;
   }
   return result;
 }
