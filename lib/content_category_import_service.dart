@@ -22,7 +22,14 @@ class ContentCategoryImportService {
 
     for (var page = 0; page < pageLimit && candidates.length < itemLimit; page++) {
       if (!visitedPages.add(current.toString())) break;
-      final html = await _fetchWithRetry(current);
+      String html;
+      try {
+        html = await _fetchWithRetry(current);
+      } catch (_) {
+        // Keep results already found if a later pagination page is temporarily unavailable.
+        if (candidates.isEmpty) rethrow;
+        break;
+      }
       for (final candidate in _extractCards(html, current, itemLimit)) {
         candidates.putIfAbsent(candidate['page_url'] as String, () => candidate);
         if (candidates.length >= itemLimit) break;
@@ -79,7 +86,8 @@ class ContentCategoryImportService {
     return uri;
   }
 
-  static Future<String> _fetch(Uri uri) async {
+  static Future<String> _fetch(Uri uri, {int redirectCount = 0}) async {
+    if (redirectCount > 4) throw Exception('تجاوز الموقع عدد التحويلات المسموح');
     final client = http.Client();
     try {
       final request = http.Request('GET', uri)
@@ -97,7 +105,7 @@ class ContentCategoryImportService {
         if (location == null || location.isEmpty) throw Exception('الموقع أعاد تحويل غير صالح للرابط');
         final redirected = _validatedUri(uri.resolve(location).toString());
         if (redirected.host != uri.host) throw Exception('تم إيقاف تحويل الرابط إلى نطاق خارجي مختلف');
-        return _fetch(redirected);
+        return _fetch(redirected, redirectCount: redirectCount + 1);
       }
       if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
         await streamed.stream.drain();
