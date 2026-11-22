@@ -44,6 +44,9 @@ async function fetchHtml(raw: string, originalHost?: string): Promise<{html:stri
       headers: {
         "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+        "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
+        "Referer": `${url.protocol}//${url.host}/`,
+        "Cache-Control": "no-cache",
       },
     });
     if ([301,302,303,307,308].includes(response.status)) {
