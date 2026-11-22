@@ -24,5 +24,9 @@ create index if not exists playback_servers_source_health_idx
   on public.playback_servers(source_id, source_checked_at)
   where source_id is not null;
 
+create index if not exists playback_servers_source_retention_idx
+  on public.playback_servers(channel_id, source_id, source_seen_at desc, source_position desc)
+  where source_id is not null;
+
 -- Public clients already read active playback_servers and published channels.
 -- Source-managed rows are written only by the Edge Function using service_role.
