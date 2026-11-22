@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_service.dart';
+import 'live_matches_panel.dart';
 import 'admin_auth_service.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
@@ -2824,6 +2825,10 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   String selectedUrl = '';
   bool starting = false;
 
+  bool get _isMatchesPackage => packages.any((p) =>
+      p['id']?.toString() == selectedPackageId &&
+      p['name']?.toString().trim() == 'مباريات اليوم');
+
   @override
   void initState() {
     super.initState();
@@ -2857,6 +2862,13 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   }
 
   Future<void> _loadChannels() async {
+    if (_isMatchesPackage) {
+      channels = [];
+      selectedChannel = null;
+      selectedServers = [];
+      selectedUrl = '';
+      return;
+    }
     if (selectedPackageId == null) {
       channels = await SupabaseService.getChannels();
       return;
@@ -3041,17 +3053,34 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                 ? const Center(child: CircularProgressIndicator(color: gold))
                 : error != null
                     ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
-                    : channels.isEmpty
-                        ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'), style: TextStyle(color: Colors.white54)))
-                        : RefreshIndicator(
-                            color: gold,
-                            onRefresh: _load,
-                            child: ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
-                              itemCount: channels.length,
-                              itemBuilder: (context, index) => _channelTile(channels[index]),
-                            ),
-                          ),
+                    : _isMatchesPackage
+                        ? LiveMatchesPanel(
+                            key: ValueKey('matches-$selectedPackageId'),
+                            onServerSelected: (match, servers, serverIndex) {
+                              final server = servers[serverIndex];
+                              final url = valueOf(server['stream_url']).trim();
+                              if (url.isEmpty) return;
+                              setState(() {
+                                selectedChannel = {
+                                  'id': match['id'],
+                                  'name': '${match['home_team']} × ${match['away_team']}',
+                                };
+                                selectedServers = servers;
+                                selectedUrl = url;
+                              });
+                            },
+                          )
+                        : channels.isEmpty
+                            ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'), style: TextStyle(color: Colors.white54)))
+                            : RefreshIndicator(
+                                color: gold,
+                                onRefresh: _load,
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                                  itemCount: channels.length,
+                                  itemBuilder: (context, index) => _channelTile(channels[index]),
+                                ),
+                              ),
           ),
         ],
       ),
@@ -3140,9 +3169,37 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     );
   }
 
+  Map<String, String> _headersForServer(int index) {
+    if (index < 0 || index >= widget.servers.length) return {};
+    final server = widget.servers[index];
+    final headers = <String, String>{};
+    final raw = server['request_headers'];
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        final key = entry.key.toString();
+        final value = entry.value?.toString() ?? '';
+        if (value.isNotEmpty &&
+            !RegExp(r'^(host|content-length|connection|cookie|authorization|proxy-|origin|forwarded|x-forwarded-)', caseSensitive: false).hasMatch(key)) {
+          headers[key] = value;
+        }
+      }
+    }
+    final ua = valueOf(server['user_agent']).trim();
+    final referer = valueOf(server['referer']).trim();
+    if (ua.isNotEmpty) headers['User-Agent'] = ua;
+    if (referer.isNotEmpty) headers['Referer'] = referer;
+    return headers;
+  }
+
+  Media _mediaForServer(String url, int index) {
+    final headers = _headersForServer(index);
+    return Media(url, httpHeaders: headers.isEmpty ? null : headers);
+  }
+
   Future<void> _open([String? url]) async {
     try {
-      await player.open(Media(url ?? widget.url)).timeout(const Duration(seconds: 20));
+      final target = url ?? widget.url;
+      await player.open(_mediaForServer(target, currentServerIndex)).timeout(const Duration(seconds: 20));
       if (!mounted) return;
       await _savePreferredServer();
       final prefs = await SharedPreferences.getInstance();
@@ -3252,7 +3309,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
         }
         try {
-          await player.open(Media(nextUrl)).timeout(const Duration(seconds: 20));
+          await player.open(_mediaForServer(nextUrl, next)).timeout(const Duration(seconds: 20));
           if (!mounted) return;
           await _savePreferredServer();
           _failedServers.clear();
