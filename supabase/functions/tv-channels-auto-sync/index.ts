@@ -8,8 +8,6 @@ const SOURCES = [
 
 const MAX_PLAYLIST_BYTES = 24 * 1024 * 1024;
 const MAX_CHANNELS_PER_RUN = 12000;
-const MAX_HEALTH_CHECKS = 600;
-const CONCURRENCY = 32;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
