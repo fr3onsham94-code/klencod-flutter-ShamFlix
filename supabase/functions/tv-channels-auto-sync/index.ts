@@ -6,6 +6,10 @@ const BUILTIN_SOURCES: PlaylistSource[] = [
   { id: "iptv-org", name: "IPTV-ORG", url: "https://iptv-org.github.io/iptv/index.category.m3u" },
   { id: "free-tv", name: "FREE-TV", url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" },
   { id: "nexus", name: "IPTV-NEXUS", url: "https://dearbulut.github.io/iptv/playlists/index.m3u" },
+  { id: "tdtchannels", name: "TDTCHANNELS", url: "https://www.tdtchannels.com/lists/tv.m3u8" },
+  { id: "m3ucl-total", name: "M3U.CL TOTAL", url: "https://www.m3u.cl/lista/total.m3u" },
+  { id: "m3ucl-music", name: "M3U.CL MUSIC", url: "https://www.m3u.cl/lista/musica.m3u" },
+  { id: "m3ucl-religious", name: "M3U.CL RELIGIOUS", url: "https://www.m3u.cl/lista/religiosos.m3u" },
 ];
 const MAX_CUSTOM_SOURCES = 20;
 
