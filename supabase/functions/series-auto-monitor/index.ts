@@ -88,12 +88,12 @@ function extractEpisodeLinks(html: string, base: URL) {
     try { target = validateUrl(new URL(href, base).toString()); } catch { continue; }
     const title = clean(m[0]);
     if (target.hostname !== base.hostname ||
-        (!/(?:episode|episodes|الحلقة)/i.test(target.pathname) && !/(?:episode|الحلقة|حلقة)\\s*[-:#_]?\\s*\\d+/i.test(title))) continue;
+        (!/(?:episode|episodes|الحلقة)/i.test(target.pathname) && !/(?:episode|الحلقة|حلقة)\s*[-:#_]?\s*\d+/i.test(title))) continue;
     const number = parseEpisodeNumber(title + " " + target.pathname);
     if (!number) continue;
     target.search = "";
     found.set(target.toString(), { url: target.toString(), title, number });
-    if (found.size >= 100) break;
+    if (found.size >= 500) break;
   }
   return [...found.values()].sort((a,b) => a.number-b.number);
 }
@@ -102,14 +102,14 @@ function extractSources(html: string, base: URL) {
   const add = (raw: string | undefined, name: string) => {
     if (!raw) return;
     try {
-      const url = validateUrl(new URL(raw.replace(/&amp;/g,"&").replace(/\\\//g,"/"), base).toString());
+      const url = validateUrl(new URL(raw.replace(/&amp;/g,"&").replace(/\\//g,"/"), base).toString());
       found.set(url.toString(), {url:url.toString(),name});
     } catch { /* ignore malformed URLs */ }
   };
   for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)) {
     const a = attrs(m[0]); add(a.src || a["data-src"] || a["data-lazy-src"] || a["data-url"] || a["data"], "مشغل الحلقة");
   }
-  for (const m of html.matchAll(/https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|webm|mpd)(?:\?[^\s"'<>]*)?/gi)) {
+  for (const m of html.matchAll(/https?:\/\/[^\s"'<>\]+?\.(?:m3u8|mp4|webm|mpd)(?:\?[^\s"'<>]*)?/gi)) {
     add(m[0], "رابط مباشر"); if (found.size >= 15) break;
   }
   return [...found.values()].slice(0,15);
@@ -157,7 +157,7 @@ function extractSeriesCards(html: string, base: URL) {
   const seriesPath=/\/(series|tv|show|shows|anime|drama)\//i.test(path);
   const descriptive=path.split("/").filter(Boolean).length>=2&&!/\/(page|category|tag|genre|author|login|register|movie|movies|film|films)\//i.test(path);
   if(title.length<2||(!seriesPath&&!poster&&!descriptive))continue;
-  target.search="";found.set(target.toString(),{url:target.toString(),title,poster});if(found.size>=120)break;
+  target.search="";found.set(target.toString(),{url:target.toString(),title,poster});if(found.size>=500)break;
  }
  return [...found.values()];
 }
@@ -211,10 +211,21 @@ Deno.serve(async (req: Request) => {
     let added = 0; let errorMessage: string | null = null;
     try {
       const source = validateUrl(monitor.source_url);
-      const listing = await fetchHtml(source.toString(),source.hostname);
-      const links = extractEpisodeLinks(listing.html,listing.url);
-      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة في صفحة المسلسل");
-      const defaultSeason = parseSeason(titleFromHtml(listing.html)+" "+listing.html,Number(monitor.season_number)||1);
+      const allLinks=new Map<string,{url:string;title:string;number:number}>();
+      const visitedPages=new Set<string>();
+      let nextPage:string|null=source.toString(),listingTitle="";
+      let listingHtml="";
+      for(let pageNo=0;pageNo<100&&nextPage;pageNo++){
+        if(visitedPages.has(nextPage))break;
+        visitedPages.add(nextPage);
+        const listing=await fetchHtml(nextPage,source.hostname);
+        if(!listingTitle){listingTitle=titleFromHtml(listing.html);listingHtml=listing.html;}
+        for(const link of extractEpisodeLinks(listing.html,listing.url))allLinks.set(link.url,link);
+        nextPage=findSeriesNext(listing.html,listing.url);
+      }
+      const links=[...allLinks.values()].sort((a,b)=>a.number-b.number);
+      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة خلال أول 100 صفحة");
+      const defaultSeason = parseSeason(listingTitle+" "+listingHtml,Number(monitor.season_number)||1);
       for (const link of links) {
         try {
           const episode = await inspectEpisode(link,source.hostname,defaultSeason);
