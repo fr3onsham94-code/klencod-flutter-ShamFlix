@@ -4482,15 +4482,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                             ? Center(child: CircularProgressIndicator(color: gold))
                             : const SizedBox.shrink(),
                       ),
-                    AnimatedOpacity(
-                      opacity: controlsVisible ? 1 : 0,
-                      duration: const Duration(milliseconds: 250),
-                      child: IgnorePointer(
-                        ignoring: !controlsVisible,
-                        child: Positioned(
-                          top: 12,
-                          right: 14,
-                          child: SafeArea(
+                    Positioned(
+                      top: 12,
+                      right: 14,
+                      child: SafeArea(
+                        child: AnimatedOpacity(
+                          opacity: controlsVisible ? 1 : 0,
+                          duration: const Duration(milliseconds: 250),
+                          child: IgnorePointer(
+                            ignoring: !controlsVisible,
                             child: StreamBuilder<bool>(
                               stream: player.stream.buffering,
                               builder: (context, snapshot) {
@@ -4518,8 +4518,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                           ),
                         ),
                       ),
-                    ),
-                    if (controlsLocked)
+                    ),                    if (controlsLocked)
                       Positioned(
                         bottom: 20,
                         left: 0,
