@@ -71,7 +71,7 @@ class ContentPageImportService {
           uri.host.toLowerCase().endsWith('.akwam.ss');
       if (isAkwam && uri.path.toLowerCase().contains('/movie/')) {
         String? watchUrl;
-        for (final match in RegExp(r'<a\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+        for (final match in RegExp(r'<a\b[^>]*>', caseSensitive: false).allMatches(html)) {
           final attrs = _attributes(match.group(0)!);
           final href = (attrs['href'] ?? '').trim();
           if (href.isEmpty) continue;
