@@ -236,9 +236,7 @@ async function syncChannels(db: any) {
     const aliases = [...new Set(uniqueStreams.map(x=>x.name).filter(x=>x !== preferred.name))];
     const arabic = uniqueStreams.map(x=>x.name).find(x=>/[\u0600-\u06FF]/.test(x)) || arabicAlias(preferred.name);
     const channelName = arabic || preferred.name;
-    const nameMatch = byName.get(normalizeName(channelName)) || byName.get(normalizeName(preferred.name));
-    const existing = byExternalKey.get(key) || (nameMatch && !nameMatch.external_source_key && !claimedManualIds.has(nameMatch.id) ? nameMatch : null);
-    if (existing?.id && !existing.external_source_key) claimedManualIds.add(existing.id);
+    const existing = byExternalKey.get(key) || null;
     const assignedId = existing?.id && !assignedChannelIds.has(existing.id) ? existing.id : crypto.randomUUID();
     assignedChannelIds.add(assignedId);
     const channelRow: Record<string,unknown> = {
