@@ -127,6 +127,23 @@ class SupabaseService {
     });
   }
 
+  static Future<List<Map<String, dynamic>>> getLiveMatches() {
+    return _getRows('live_matches', {
+      'is_visible': 'eq.true',
+      'order': 'kickoff_at.asc',
+      'limit': '250',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getLiveMatchServers(String matchId) {
+    return _getRows('live_match_servers', {
+      'match_id': 'eq.$matchId',
+      'is_active': 'eq.true',
+      'order': 'sort_order.asc',
+      'limit': '30',
+    });
+  }
+
   static Future<List<Map<String, dynamic>>> getMovies() {
     return _getData('movies');
   }
