@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - feature/player-external-subtitles
   workflow_dispatch:
     inputs:
       flutter_version:
