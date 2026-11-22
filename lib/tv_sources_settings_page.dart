@@ -75,6 +75,10 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
 
   Future<void> _addSource() async {
     if (_saving) return;
+    if (_sources.length >= 20) {
+      _message('وصلت للحد الأقصى: 20 مصدراً إضافياً', error: true);
+      return;
+    }
     final name = _nameController.text.trim();
     final url = _urlController.text.trim();
     final urlError = _validateUrl(url);
@@ -218,7 +222,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                               children: [
                                 Text('إضافة قائمة جديدة', style: TextStyle(color: AppTheme.primary, fontSize: 17, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 6),
-                                Text('أضف رابط قائمة M3U أو M3U8 عامة. سيتم دمج قنواتها مع المصادر الحالية وإزالة تكرار القنوات مع الاحتفاظ بروابط البث والجودات المختلفة.', style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
+                                Text('أضف رابط قائمة M3U أو M3U8 عامة (حتى 20 مصدراً إضافياً). سيتم دمج قنواتها مع المصادر الحالية وإزالة تكرار القنوات مع الاحتفاظ بروابط البث والجودات المختلفة.', style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
                                 const SizedBox(height: 14),
                                 TextField(
                                   controller: _nameController,
