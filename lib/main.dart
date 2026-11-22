@@ -2615,99 +2615,6 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
               onChanged: _setForceLandscape,
             ),
           ),
-          Card(
-            color: panel,
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Icon(Icons.view_sidebar_outlined, color: gold),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text('تخصيص القائمة الجانبية للأفلام والمسلسلات',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                    TextButton(
-                      onPressed: () async {
-                        const defaults = <String, double>{
-                          'shamflix_catalog_sidebar_width': 110,
-                          'shamflix_catalog_sidebar_button': 42,
-                          'shamflix_catalog_package_font': 11,
-                          'shamflix_catalog_section_font': 12,
-                          'shamflix_catalog_package_icon': 15,
-                          'shamflix_catalog_package_height': 38,
-                        };
-                        final prefs = await SharedPreferences.getInstance();
-                        for (final entry in defaults.entries) {
-                          await prefs.setDouble(entry.key, entry.value);
-                        }
-                        if (!mounted) return;
-                        setState(() {
-                          sidebarWidth = 110;
-                          sidebarButtonSize = 42;
-                          packageFontSize = 11;
-                          sectionFontSize = 12;
-                          packageIconSize = 15;
-                          packageItemHeight = 38;
-                        });
-                        appSettingsRefreshNotifier.value++;
-                      },
-                      child: Text('إعادة ضبط', style: TextStyle(color: gold)),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-                  _sidebarSlider(
-                    title: 'عرض القائمة',
-                    value: sidebarWidth, min: 90, max: 160, unit: ' dp',
-                    onChanged: (value) {
-                      setState(() => sidebarWidth = value);
-                      _saveSidebarSetting('shamflix_catalog_sidebar_width', value);
-                    },
-                  ),
-                  _sidebarSlider(
-                    title: 'حجم الزر العائم',
-                    value: sidebarButtonSize, min: 34, max: 56, unit: ' dp',
-                    onChanged: (value) {
-                      setState(() => sidebarButtonSize = value);
-                      _saveSidebarSetting('shamflix_catalog_sidebar_button', value);
-                    },
-                  ),
-                  _sidebarSlider(
-                    title: 'حجم خط أسماء الباقات',
-                    value: packageFontSize, min: 9, max: 15, unit: '',
-                    onChanged: (value) {
-                      setState(() => packageFontSize = value);
-                      _saveSidebarSetting('shamflix_catalog_package_font', value);
-                    },
-                  ),
-                  _sidebarSlider(
-                    title: 'حجم خط عنوان القائمة',
-                    value: sectionFontSize, min: 10, max: 16, unit: '',
-                    onChanged: (value) {
-                      setState(() => sectionFontSize = value);
-                      _saveSidebarSetting('shamflix_catalog_section_font', value);
-                    },
-                  ),
-                  _sidebarSlider(
-                    title: 'حجم أيقونات الباقات',
-                    value: packageIconSize, min: 12, max: 22, unit: '',
-                    onChanged: (value) {
-                      setState(() => packageIconSize = value);
-                      _saveSidebarSetting('shamflix_catalog_package_icon', value);
-                    },
-                  ),
-                  _sidebarSlider(
-                    title: 'ارتفاع عنصر الباقة',
-                    value: packageItemHeight, min: 30, max: 60, unit: ' dp',
-                    onChanged: (value) {
-                      setState(() => packageItemHeight = value);
-                      _saveSidebarSetting('shamflix_catalog_package_height', value);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
           _tile(Icons.cleaning_services_outlined, appText('مسح التخزين المؤقت', 'Clear Cache', 'Önbelleği Temizle'), appText('مسح الملفات المؤقتة وذاكرة الصور فقط', 'Clear temporary files and image cache only', 'Yalnızca geçici dosyaları ve görsel önbelleğini temizle'), _clearStorage),
           _tile(Icons.history, appText('مسح السجل بالكامل', 'Clear Watch History', 'İzleme Geçmişini Temizle'), appText('حذف سجل المشاهدة من الجهاز والحساب', 'Delete watch history from this device and account', 'İzleme geçmişini cihazdan ve hesaptan sil'), _clearHistory),
           _tile(Icons.refresh, appText('تحديث قائمة القنوات', 'Refresh Channel List', 'Kanal Listesini Yenile'), appText('جلب أحدث القنوات المنشورة', 'Fetch the latest published channels', 'En yeni yayınlanan kanalları getir'), _refreshChannels),
@@ -3669,12 +3576,16 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   String? selectedPackageId;
   int gridColumns = 5;
   bool starting = false;
+  bool sidebarOpen=false;
+  double sidebarWidth=110,sidebarButtonSize=42,packageFontSize=11,sectionFontSize=12,packageIconSize=15,packageItemHeight=38;
+
 
   @override
   void initState() {
     super.initState();
     AppTheme.revision.addListener(_onThemeChanged);
     _load();
+    _loadLiveSidebarSettings();
     channelRefreshNotifier.addListener(_onExternalRefresh);
   }
 
@@ -3688,6 +3599,15 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     super.dispose();
   }
 
+
+  Future<void> _loadLiveSidebarSettings() async {
+    final p=await SharedPreferences.getInstance();if(!mounted)return;
+    setState(()=>{sidebarWidth=(p.getDouble('shamflix_catalog_sidebar_width')??110).clamp(90,160).toDouble(),sidebarButtonSize=(p.getDouble('shamflix_catalog_sidebar_button')??42).clamp(34,56).toDouble(),packageFontSize=(p.getDouble('shamflix_catalog_package_font')??11).clamp(9,15).toDouble(),sectionFontSize=(p.getDouble('shamflix_catalog_section_font')??12).clamp(10,16).toDouble(),packageIconSize=(p.getDouble('shamflix_catalog_package_icon')??15).clamp(12,22).toDouble(),packageItemHeight=(p.getDouble('shamflix_catalog_package_height')??38).clamp(30,60).toDouble()});
+  }
+  Widget _liveFloatingMenu()=>AnimatedPositioned(duration:const Duration(milliseconds:260),curve:Curves.easeInOutCubic,left:sidebarOpen?0:-sidebarWidth-4,top:0,bottom:0,width:sidebarWidth,child:Material(elevation:12,color:liveBackground,child:ListView(padding:const EdgeInsets.all(8),children:[
+    Text('الباقات',style:TextStyle(color:liveText,fontSize:sectionFontSize,fontWeight:FontWeight.bold)),
+    ...packages.map((p){final id=p['id'].toString(),active=id==selectedPackageId;return Padding(padding:const EdgeInsets.only(top:7),child:Material(color:active?const Color(0xFFE50914):livePanel,borderRadius:BorderRadius.circular(8),child:InkWell(onTap:(){_selectPackage(id);setState(()=>sidebarOpen=false);},child:SizedBox(height:packageItemHeight,child:Padding(padding:const EdgeInsets.symmetric(horizontal:7),child:Row(children:[Icon(Icons.live_tv,color:Colors.white,size:packageIconSize),const SizedBox(width:6),Expanded(child:Text(p['name']?.toString()??'باقة',maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(color:Colors.white,fontSize:packageFontSize))) ])))));}),
+  ])));
   Future<void> _load() async {
     setState(() { loading = true; error = null; });
     try {
@@ -3935,8 +3855,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: LinearProgressIndicator(color: livePrimary, backgroundColor: livePanel),
             ),
-          Expanded(
-            child: Row(
+          Expanded(child:Stack(clipBehavior:Clip.hardEdge,children:[
+            Positioned.fill(child:Row(
               textDirection: TextDirection.ltr,
               children: [
                 if (packages.isNotEmpty) _packageSidebar(),
@@ -3985,7 +3905,12 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                 ),
               ],
             ),
-          ),
+          )),
+            if(sidebarOpen)Positioned.fill(child:GestureDetector(onTap:()=>setState(()=>sidebarOpen=false),child:Container(color:Colors.black54))),
+            _liveFloatingMenu(),
+            Positioned(left:sidebarOpen?sidebarWidth+8:8,top:12,child:SizedBox(width:sidebarButtonSize,height:sidebarButtonSize,child:Material(color:livePrimary,elevation:7,shape:const CircleBorder(),child:InkWell(customBorder:const CircleBorder(),onTap:()=>setState(()=>sidebarOpen=!sidebarOpen),child:Icon(sidebarOpen?Icons.close:Icons.menu,color:Colors.white,size:(sidebarButtonSize*.48).clamp(16,26).toDouble()))))),
+          ]))
+,
         ],
       ),
       ),
