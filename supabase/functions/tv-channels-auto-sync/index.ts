@@ -50,7 +50,8 @@ function normalizeName(value: string): string {
 
 function canonicalKey(tvgId: string, name: string): string {
   const id = normalizeName(tvgId);
-  return id ? "id:" + id : "name:" + normalizeName(name);
+  const alias = arabicAlias(name) || name;
+  return id ? "id:" + id : "name:" + normalizeName(alias);
 }
 
 function safeStreamUrl(raw: string): string | null {
@@ -178,7 +179,11 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     .select("id,name,external_source_key").limit(20000);
   if (oldError) throw oldError;
   const byName = new Map<string, any>();
-  for (const row of oldChannels || []) byName.set(normalizeName(row.name || ""), row);
+  const byExternalKey = new Map<string, any>();
+  for (const row of oldChannels || []) {
+    byName.set(normalizeName(row.name || ""), row);
+    if (row.external_source_key) byExternalKey.set(row.external_source_key, row);
+  }
 
   const channelRows: Record<string,unknown>[] = [];
   const streamRows: Record<string,unknown>[] = [];
@@ -193,7 +198,7 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     const aliases = [...new Set(uniqueStreams.map(x=>x.name).filter(x=>x !== preferred.name))];
     const arabic = uniqueStreams.map(x=>x.name).find(x=>/[\u0600-\u06FF]/.test(x)) || arabicAlias(preferred.name);
     const channelName = arabic || preferred.name;
-    const existing = (oldChannels || []).find((x:any) => x.external_source_key === key) ||
+    const existing = byExternalKey.get(key) ||
       byName.get(normalizeName(channelName)) || byName.get(normalizeName(preferred.name));
     const channelRow: Record<string,unknown> = {
       name: channelName,
