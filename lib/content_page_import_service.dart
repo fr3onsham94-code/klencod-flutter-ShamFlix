@@ -392,20 +392,20 @@ class ContentPageImportService {
 
     for (final match in RegExp(r'<(?:iframe|frame|embed)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
-      add(
-        attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ??
-            attrs['data-url'] ?? attrs['data-embed'] ?? attrs['data-video'] ??
-            attrs['data-href'],
-        kind: 'iframe',
-      );
+      for (final key in [
+        'src', 'data-src', 'data-lazy-src', 'data-url', 'data-embed',
+        'data-video', 'data-href',
+      ]) {
+        add(attrs[key], kind: 'iframe');
+      }
     }
     for (final match in RegExp(r'<(?:video|source)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
-      add(
-        attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ??
-            attrs['data-url'] ?? attrs['data-file'] ?? attrs['data'],
-        kind: 'media',
-      );
+      for (final key in [
+        'src', 'data-src', 'data-lazy-src', 'data-url', 'data-file', 'data',
+      ]) {
+        add(attrs[key], kind: 'media');
+      }
     }
 
     final directPattern = RegExp(
