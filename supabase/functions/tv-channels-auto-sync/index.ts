@@ -349,12 +349,14 @@ async function syncChannels(db: any) {
   if (syncedChannelIdList.length) {
     const automaticPackageIds = (packages || []).map((x:any) => x.id);
     if (automaticPackageIds.length) {
-      const { error: removeOldAutomaticMemberships } = await db.from("content_package_items")
-        .delete()
-        .eq("content_type","channel")
-        .in("content_id",syncedChannelIdList)
-        .in("package_id",automaticPackageIds);
-      if (removeOldAutomaticMemberships) throw removeOldAutomaticMemberships;
+      for (let i=0; i<syncedChannelIdList.length; i+=100) {
+        const { error: removeOldAutomaticMemberships } = await db.from("content_package_items")
+          .delete()
+          .eq("content_type","channel")
+          .in("content_id",syncedChannelIdList.slice(i,i+100))
+          .in("package_id",automaticPackageIds);
+        if (removeOldAutomaticMemberships) throw new Error("old package membership cleanup: " + JSON.stringify(removeOldAutomaticMemberships));
+      }
     }
   }
   for (let i=0; i<itemRows.length; i+=500) {
