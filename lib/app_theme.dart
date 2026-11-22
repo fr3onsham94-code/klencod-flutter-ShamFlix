@@ -14,6 +14,7 @@ class AppTheme {
     'button': '#E50914',
     'border': '#333333',
     'badge': '#E50914',
+    'packageBorder': '#555555',
 
     // ألوان مستقلة لكل قسم: خلفية، أساسي، بطاقات، نص، نص ثانوي، أزرار.
     'home_background': '#090909',
@@ -24,6 +25,7 @@ class AppTheme {
     'home_button': '#E50914',
     'home_border': '#333333',
     'home_badge': '#E50914',
+    'home_packageBorder': '#555555',
 
     'movies_background': '#090909',
     'movies_primary': '#E50914',
@@ -33,6 +35,7 @@ class AppTheme {
     'movies_button': '#E50914',
     'movies_border': '#333333',
     'movies_badge': '#E50914',
+    'movies_packageBorder': '#555555',
 
     'series_background': '#090909',
     'series_primary': '#E50914',
@@ -42,6 +45,7 @@ class AppTheme {
     'series_button': '#E50914',
     'series_border': '#333333',
     'series_badge': '#E50914',
+    'series_packageBorder': '#555555',
 
     'live_background': '#090909',
     'live_primary': '#E50914',
@@ -51,6 +55,7 @@ class AppTheme {
     'live_button': '#E50914',
     'live_border': '#333333',
     'live_badge': '#E50914',
+    'live_packageBorder': '#555555',
 
     'settings_background': '#090909',
     'settings_primary': '#E50914',
@@ -60,6 +65,7 @@ class AppTheme {
     'settings_button': '#E50914',
     'settings_border': '#333333',
     'settings_badge': '#E50914',
+    'settings_packageBorder': '#555555',
   };
 
   static const Map<String, String> sectionLabels = {
@@ -79,6 +85,7 @@ class AppTheme {
     'button': 'الأزرار',
     'border': 'الحدود والفواصل',
     'badge': 'الشارات والليبل',
+    'packageBorder': 'حواف أزرار الباقات',
   };
 
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
