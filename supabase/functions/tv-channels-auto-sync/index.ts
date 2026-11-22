@@ -89,8 +89,26 @@ function categoryOf(raw: string, name: string): string {
   return "عامة";
 }
 
+function isArabicOrTurkishChannel(entry: {name:string; tvgLanguage:string; tvgCountry:string; groupTitle:string}): boolean {
+  const language = normalizeName(entry.tvgLanguage);
+  const country = normalizeName(entry.tvgCountry);
+  const group = normalizeName(entry.groupTitle);
+  const name = normalizeName(entry.name);
+  const arabicCountries = new Set(["dz","alg","algeria","bh","bhr","bahrain","km","comoros","dj","djibouti","eg","egy","egypt","iq","irq","iraq","jo","jor","jordan","kw","kwt","kuwait","lb","lbn","lebanon","ly","lby","libya","mr","mauritania","ma","mar","morocco","om","omn","oman","ps","pse","palestine","qa","qat","qatar","sa","sau","saudiarabia","so","somalia","sd","sdn","sudan","sy","syr","syria","tn","tun","tunisia","ye","yem","yemen"]);
+  const turkishCountries = new Set(["tr","tur","turkey","turkiye","تركيا"]);
+  if (/(^|[^a-z])(?:ar|ara|arabic)([^a-z]|$)/i.test(entry.tvgLanguage) ||
+      /عربي|العربية|arabic/.test(entry.tvgLanguage + " " + entry.groupTitle) ||
+      /[\u0600-\u06FF]/.test(entry.name) || arabicCountries.has(country)) return true;
+  if (/(^|[^a-z])(?:tr|tur|turkish)([^a-z]|$)/i.test(entry.tvgLanguage) ||
+      /turkce|turkish|turkiye|تركي|تركية/.test(language + " " + group) ||
+      turkishCountries.has(country)) return true;
+  if (/\b(?:trt ?[1-9]|trt ?haber|atv|kanal ?d|show ?tv|star ?tv|tv8|now ?tv|beyaz ?tv|a ?haber|a ?spor|teve ?2|kanal ?7|fox ?turkey)\b/i.test(entry.name) ||
+      /[ğüşöçıİ]/.test(entry.name)) return true;
+  return false;
+}
+
 function parseM3u(text: string, sourceId: string) {
-  const result: Array<{sourceId:string;sourceName:string;key:string;name:string;nameEn:string;tvgId:string;logo:string;category:string;url:string;position:number}> = [];
+  const result: Array<{sourceId:string;sourceName:string;key:string;name:string;nameEn:string;tvgId:string;logo:string;category:string;url:string;position:number;tvgLanguage:string;tvgCountry:string;groupTitle:string}> = [];
   let pending: Record<string,string> | null = null;
   let displayName = "";
   let position = 0;
@@ -120,6 +138,9 @@ function parseM3u(text: string, sourceId: string) {
         category: categoryOf(pending["group-title"] || "", name),
         url,
         position: position++,
+        tvgLanguage: pending["tvg-language"] || pending["tvg-language-code"] || "",
+        tvgCountry: pending["tvg-country"] || pending["country"] || "",
+        groupTitle: pending["group-title"] || "",
       });
     }
     pending = null;
@@ -196,7 +217,8 @@ async function syncChannels(db: any) {
     entries: await fetchPlaylist(source),
   })).map(p => p.then(value => ({ status: "fulfilled" as const, value }))
     .catch(reason => ({ status: "rejected" as const, reason }))));
-  const sourceResults = settledSources.filter((x): x is {status:"fulfilled";value:{source:typeof SOURCES[number];entries:ReturnType<typeof parseM3u>}} => x.status === "fulfilled").map(x => x.value);
+  const sourceResults = settledSources.filter((x): x is {status:"fulfilled";value:{source:typeof SOURCES[number];entries:ReturnType<typeof parseM3u>}} => x.status === "fulfilled")
+    .map(x => ({ ...x.value, entries: x.value.entries.filter(isArabicOrTurkishChannel) }));
   const sourceErrors = settledSources.filter(x => x.status === "rejected");
   if (!sourceResults.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
   const grouped = new Map<string, typeof sourceResults[number]["entries"]>();
@@ -352,17 +374,12 @@ async function syncChannels(db: any) {
     if (channelId && packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
   }
   const syncedChannelIdList = [...new Set(itemRows.map(row => String(row.content_id)))];
-  if (syncedChannelIdList.length) {
+  if (sourceErrors.length === 0) {
     const automaticPackageIds = (packages || []).map((x:any) => x.id);
-    if (automaticPackageIds.length) {
-      for (let i=0; i<syncedChannelIdList.length; i+=100) {
-        const { error: removeOldAutomaticMemberships } = await db.from("content_package_items")
-          .delete()
-          .eq("content_type","channel")
-          .in("content_id",syncedChannelIdList.slice(i,i+100))
-          .in("package_id",automaticPackageIds);
-        if (removeOldAutomaticMemberships) throw new Error("old package membership cleanup: " + JSON.stringify(removeOldAutomaticMemberships));
-      }
+    for (let i=0; i<automaticPackageIds.length; i+=100) {
+      const { error: clearAutomaticMemberships } = await db.from("content_package_items")
+        .delete().eq("content_type","channel").in("package_id",automaticPackageIds.slice(i,i+100));
+      if (clearAutomaticMemberships) throw new Error("automatic package rebuild cleanup: " + JSON.stringify(clearAutomaticMemberships));
     }
   }
   for (let i=0; i<itemRows.length; i+=500) {
@@ -381,6 +398,8 @@ async function syncChannels(db: any) {
     ],
     retainedServerLimit: 2,
     retentionScope: "per channel and per source",
+    languageFilter: ["Arabic", "Turkish"],
+    filteredEntries: sourceResults.reduce((n,x)=>n+x.entries.length,0),
   };
 }
 
