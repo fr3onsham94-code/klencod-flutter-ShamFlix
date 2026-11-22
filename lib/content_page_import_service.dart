@@ -159,7 +159,7 @@ class ContentPageImportService {
     return {
       'title': _clean(title),
       'description': _clean(description),
-      'poster_url': _absoluteImage(image),
+      'poster_url': image,
       'backdrop_url': _absoluteImage(_firstNonEmpty([
         meta['og:image:secure_url'],
         meta['twitter:image'],
