@@ -70,7 +70,166 @@ class ContentPageImportService {
       final isAkwam = uri.host.toLowerCase() == 'akwam.ss' ||
           uri.host.toLowerCase().endsWith('.akwam.ss');
       if (isAkwam && uri.path.toLowerCase().contains('/movie/')) {
-        final watchUrl = _findPublicWatchUrl(episodeHtml, episodeUri);
+        String? watchUrl;
+        for (final match in RegExp(r'<a\b[^>]*>', caseSensitive: false).allMatches(html)) {
+          final attrs = _attributes(match.group(0)!);
+          final href = (attrs['href'] ?? '').trim();
+          if (href.isEmpty) continue;
+          final candidate = uri.resolve(href);
+          if (candidate.host.toLowerCase() == uri.host.toLowerCase() &&
+              candidate.path.toLowerCase().contains('/watch/')) {
+            try {
+              _validatedUri(candidate.toString());
+              watchUrl = candidate.toString();
+              break;
+            } catch (_) {}
+          }
+        }
+        if (watchUrl != null) {
+          final watchUri = _validatedUri(watchUrl);
+          final watchHtml = await _fetchPublicHtml(watchUri);
+          sources.addAll(_extractStreamSources(watchHtml, watchUri));
+          sources.add({
+            'url': watchUri.toString(),
+            'name': 'مشاهدة الفيلم على أكوام',
+            'kind': 'iframe',
+          });
+        }
+      }
+
+      final uniqueSources = <String, Map<String, dynamic>>{};
+      for (final source in sources) {
+        final sourceUrl = source['url']?.toString() ?? '';
+        if (sourceUrl.isNotEmpty) uniqueSources[sourceUrl] = source;
+      }
+      metadata['stream_sources'] = uniqueSources.values.toList();
+      metadata['poster_url'] = _resolveImage(uri, metadata['poster_url']?.toString() ?? '');
+      metadata['backdrop_url'] = _resolveImage(uri, metadata['backdrop_url']?.toString() ?? '');
+      metadata['page_url'] = uri.toString();
+      metadata['source_host'] = uri.host;
+      if ((metadata['title']?.toString() ?? '').trim().isEmpty) {
+        throw Exception('وصلنا إلى الصفحة، لكن لم نجد عنواناً واضحاً للعمل');
+      }
+      return metadata;
+    } on http.ClientException {
+      throw Exception('تعذر الاتصال بالموقع');
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Imports publicly visible episode links from an Akwam series page.
+  /// Only follows ordinary public episode/watch pages; it does not bypass
+  /// authentication, anti-bot challenges, DRM, or protected player controls.
+  static Future<List<Map<String, dynamic>>> inspectAkwamSeries(String rawUrl) async {
+    final seriesUri = _validatedUri(rawUrl);
+    if (seriesUri.host.toLowerCase() != 'akwam.ss' &&
+        !seriesUri.host.toLowerCase().endsWith('.akwam.ss')) {
+      throw Exception('استيراد الحلقات التلقائي متاح حالياً لصفحات أكوام');
+    }
+    final html = await _fetchPublicHtml(seriesUri);
+    final episodeLinks = <String, Map<String, String>>{};
+
+    void addEpisodeLink(String rawValue, String title) {
+      final normalized = rawValue.trim().replaceAll(r'\/', '/').replaceAll('&amp;', '&');
+      final routeMatch = RegExp(
+        r'''(?:https?://[^\s"'<>]+)?(/episode/[^\s"'<>\\]+)''',
+        caseSensitive: false,
+      ).firstMatch(normalized);
+      if (routeMatch == null) return;
+      final rawRoute = routeMatch.group(0)!;
+      final uri = Uri.tryParse(rawRoute.startsWith('/episode/')
+          ? seriesUri.resolve(rawRoute).toString()
+          : rawRoute);
+      if (uri == null || uri.host.toLowerCase() != seriesUri.host.toLowerCase()) return;
+      try { _validatedUri(uri.toString()); } catch (_) { return; }
+      final numberMatch = RegExp(r'(?:episode|الحلقة)[^0-9]{0,12}(\d+)', caseSensitive: false)
+              .firstMatch('$title $normalized') ??
+          RegExp(r'-(\d+)(?:[/?#]|$)').firstMatch(normalized);
+      final number = int.tryParse(numberMatch?.group(1) ?? '');
+      if (number == null || number < 1) return;
+      episodeLinks[uri.toString()] = {
+        'title': title.trim().isEmpty ? 'الحلقة $number' : title.trim(),
+        'number': '$number',
+      };
+    }
+
+    final anchorPattern = RegExp(r'<a\b[^>]*>[\s\S]*?</a>', caseSensitive: false);
+    for (final match in anchorPattern.allMatches(html)) {
+      final tag = match.group(0)!;
+      final opening = RegExp(r'<a\b[^>]*>', caseSensitive: false).firstMatch(tag)?.group(0);
+      if (opening == null) continue;
+      final attrs = _attributes(opening);
+      final title = _clean(attrs['title'] ?? attrs['aria-label'] ??
+          tag.replaceAll(RegExp(r'<[^>]*>'), ' '));
+      for (final key in ['href', 'data-href', 'data-url', 'data-link', 'data-src', 'onclick']) {
+        final value = attrs[key];
+        if (value != null && value.toLowerCase().contains('/episode/')) {
+          addEpisodeLink(value, title);
+        }
+      }
+      if (episodeLinks.length >= 80) break;
+    }
+
+    // Some layouts use buttons/cards with data attributes instead of anchors.
+    if (episodeLinks.length < 80) {
+      final tagPattern = RegExp(r'<(?:button|div|li)[^>]*>', caseSensitive: false);
+      for (final match in tagPattern.allMatches(html)) {
+        final attrs = _attributes(match.group(0)!);
+        final title = _clean(attrs['title'] ?? attrs['aria-label'] ?? attrs['data-title'] ?? '');
+        for (final key in ['href', 'data-href', 'data-url', 'data-link', 'data-src', 'onclick']) {
+          final value = attrs[key];
+          if (value != null && value.toLowerCase().contains('/episode/')) {
+            addEpisodeLink(value, title);
+          }
+        }
+        if (episodeLinks.length >= 80) break;
+      }
+    }
+
+    // Also collect public episode routes exposed in inline scripts/JSON.
+    if (episodeLinks.length < 80) {
+      final rawPattern = RegExp(
+        r'''(?:https?://[^\s"'<>]+)?/episode/[^\s"'<>\\]+''',
+        caseSensitive: false,
+      );
+      for (final match in rawPattern.allMatches(html.replaceAll(r'\/', '/'))) {
+        addEpisodeLink(match.group(0)!, '');
+        if (episodeLinks.length >= 80) break;
+      }
+    }
+    if (episodeLinks.isEmpty) {
+      throw Exception('لم أجد روابط حلقات ظاهرة في صفحة أكوام');
+    }
+
+    final episodes = <Map<String, dynamic>>[];
+    final ordered = episodeLinks.entries.toList()
+      ..sort((a, b) => int.parse(a.value['number']!).compareTo(int.parse(b.value['number']!)));
+    Future<Map<String, dynamic>> inspectEpisode(
+      MapEntry<String, Map<String, String>> entry,
+    ) async {
+      final episodeUri = _validatedUri(entry.key);
+      final episodeHtml = await _fetchPublicHtml(episodeUri);
+      final episodePageTitle = _clean(_parseHtml(episodeHtml)['title']);
+      final linkTitle = _clean(entry.value['title']);
+      final episodeNumberPattern = RegExp(
+        r'(?:الحلقة|حلقة|episode)\s*[:#-]?\s*(\d+)',
+        caseSensitive: false,
+      );
+      final pageNumberMatch = episodeNumberPattern.firstMatch(episodePageTitle) ??
+          episodeNumberPattern.firstMatch(linkTitle);
+      final resolvedEpisodeNumber = int.tryParse(pageNumberMatch?.group(1) ?? '') ??
+          int.parse(entry.value['number']!);
+      final descriptivePageTitle = episodePageTitle.isNotEmpty &&
+              !RegExp(r'^\d+$').hasMatch(episodePageTitle)
+          ? episodePageTitle
+          : '';
+      final resolvedEpisodeTitle = descriptivePageTitle.isNotEmpty
+          ? descriptivePageTitle
+          : (linkTitle.isNotEmpty && !RegExp(r'^\d+$').hasMatch(linkTitle)
+              ? linkTitle
+              : 'الحلقة $resolvedEpisodeNumber');
+      final watchUrl = _findPublicWatchUrl(episodeHtml, episodeUri);
       final servers = <Map<String, dynamic>>[];
       if (watchUrl != null) {
         final watchUri = _validatedUri(watchUrl);
@@ -177,8 +336,6 @@ class ContentPageImportService {
         if (value != null && value.trim().isNotEmpty) candidateValues.add(value.trim());
       }
     }
-
-    // Public watch routes may also appear in inline JSON or script text.
     final routePattern = RegExp(
       r'''(?:https?://[^\s"'<>]+)?/watch/[^\s"'<>\\]+''',
       caseSensitive: false,
@@ -186,7 +343,6 @@ class ContentPageImportService {
     for (final match in routePattern.allMatches(normalizedHtml)) {
       candidateValues.add(match.group(0)!);
     }
-
     for (final value in candidateValues) {
       final cleaned = value.replaceAll(r'\/', '/')
           .replaceAll('&amp;', '&').replaceAll(r'\u0026', '&');
@@ -234,7 +390,7 @@ class ContentPageImportService {
       };
     }
 
-    for (final match in RegExp(r'<(?:iframe|frame|embed)\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+    for (final match in RegExp(r'<(?:iframe|frame|embed)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
       add(
         attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ??
@@ -243,7 +399,7 @@ class ContentPageImportService {
         kind: 'iframe',
       );
     }
-    for (final match in RegExp(r'<(?:video|source)\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+    for (final match in RegExp(r'<(?:video|source)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
       add(
         attrs['src'] ?? attrs['data-src'] ?? attrs['data-lazy-src'] ??
