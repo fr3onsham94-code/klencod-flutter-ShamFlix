@@ -59,6 +59,8 @@ class ContentPageImportService {
 
       final html = utf8.decode(response.bodyBytes, allowMalformed: true);
       final metadata = _parseHtml(html);
+      metadata['poster_url'] = _resolveImage(uri, metadata['poster_url']?.toString() ?? '');
+      metadata['backdrop_url'] = _resolveImage(uri, metadata['backdrop_url']?.toString() ?? '');
       metadata['page_url'] = uri.toString();
       metadata['source_host'] = uri.host;
       if ((metadata['title']?.toString() ?? '').trim().isEmpty) {
@@ -89,7 +91,7 @@ class ContentPageImportService {
         host.startsWith('127.') ||
         host.startsWith('10.') ||
         host.startsWith('192.168.') ||
-        RegExp(r'^172\\.(1[6-9]|2[0-9]|3[0-1])\\.').hasMatch(host)) {
+        RegExp(r'^172\.(1[6-9]|2[0-9]|3[0-1])\.').hasMatch(host)) {
       throw Exception('لا يمكن تحليل روابط الشبكات المحلية');
     }
     return uri;
@@ -97,7 +99,7 @@ class ContentPageImportService {
 
   static Map<String, dynamic> _parseHtml(String html) {
     final meta = <String, String>{};
-    for (final match in RegExp(r'<meta\\b[^>]*>', caseSensitive: false).allMatches(html)) {
+    for (final match in RegExp(r'<meta\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final tag = match.group(0)!;
       final attrs = _attributes(tag);
       final key = (attrs['property'] ?? attrs['name'] ?? attrs['itemprop'] ?? '').toLowerCase();
@@ -105,11 +107,11 @@ class ContentPageImportService {
       if (key.isNotEmpty && value.isNotEmpty) meta[key] = _clean(value);
     }
 
-    final titleTag = RegExp(r'<title\\b[^>]*>([\\s\\S]*?)</title>', caseSensitive: false)
+    final titleTag = RegExp(r'<title\b[^>]*>([\s\S]*?)</title>', caseSensitive: false)
         .firstMatch(html)?.group(1);
     final jsonLd = <Map<String, dynamic>>[];
     for (final match in RegExp(
-      r'<script\\b[^>]*type=["\\']application/ld\\+json["\\'][^>]*>([\\s\\S]*?)</script>',
+      r'<script\b[^>]*type=["\']application/ld\+json["\'][^>]*>([\s\S]*?)</script>',
       caseSensitive: false,
     ).allMatches(html)) {
       try {
@@ -138,8 +140,10 @@ class ContentPageImportService {
       meta['twitter:description'],
       meta['description'],
     ]);
-    final image = _firstImage(structured['image']) ??
-        _firstNonEmpty([meta['og:image'], meta['twitter:image'], meta['image']]);
+    final structuredImage = _firstImage(structured['image']);
+    final image = structuredImage.isNotEmpty
+        ? structuredImage
+        : _firstNonEmpty([meta['og:image'], meta['twitter:image'], meta['image']]);
     final date = _firstNonEmpty([
       structured['datePublished'],
       structured['dateCreated'],
@@ -171,7 +175,7 @@ class ContentPageImportService {
 
   static Map<String, String> _attributes(String tag) {
     final result = <String, String>{};
-    final pattern = RegExp(r'''([a-zA-Z_:][-a-zA-Z0-9_:.]*)\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))''');
+    final pattern = RegExp(r'''([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))''');
     for (final match in pattern.allMatches(tag)) {
       result[match.group(1)!.toLowerCase()] =
           match.group(2) ?? match.group(3) ?? match.group(4) ?? '';
@@ -237,10 +241,15 @@ class ContentPageImportService {
     return '';
   }
 
-  static String _absoluteImage(String value) => value;
+  static String _resolveImage(Uri pageUri, String value) {
+    if (value.trim().isEmpty) return '';
+    final imageUri = Uri.tryParse(value.trim());
+    if (imageUri == null) return '';
+    return pageUri.resolveUri(imageUri).toString();
+  }
 
   static String _year(String value) {
-    final match = RegExp(r'\\b(19|20)\\d{2}\\b').firstMatch(value);
+    final match = RegExp(r'\b(19|20)\d{2}\b').firstMatch(value);
     return match?.group(0) ?? '';
   }
 
@@ -259,6 +268,6 @@ class ContentPageImportService {
     entities.forEach((key, replacement) {
       text = text.replaceAll(key, replacement);
     });
-    return text.replaceAll(RegExp(r'\\s+'), ' ').trim();
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 }
