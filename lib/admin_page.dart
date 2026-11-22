@@ -19,7 +19,13 @@ const String ownerUserId =
     'dda16adb-3b6e-4244-a028-83df88b7801d';
 
 class AdminPage extends StatefulWidget {
-  const AdminPage({super.key});
+  final Future<void> Function(
+    String url,
+    String title,
+    ValueChanged<List<Map<String, dynamic>>> onSourcesDetected,
+  )? openImportPage;
+
+  const AdminPage({super.key, this.openImportPage});
 
   @override
   State<AdminPage> createState() => _AdminPageState();
@@ -3629,12 +3635,10 @@ class _AdminPageState extends State<AdminPage> {
                                 if (dialogContext.mounted &&
                                     (errorText.contains('403') || errorText.contains('رفض قراءة الصفحة'))) {
                                   showMessage('الموقع منع الاستيراد المباشر. افتح الصفحة داخل شامفليكس ثم اضغط «فحص روابط البث».', isError: true);
-                                  await Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => ShamFlixWebPage(
-                                        url: pageUrlController.text.trim(),
-                                        title: titleController.text.trim().isEmpty ? 'استيراد من الموقع' : titleController.text.trim(),
-                                        onSourcesDetected: (entries) {
+                                  await widget.openImportPage?.call(
+                                    pageUrlController.text.trim(),
+                                    titleController.text.trim().isEmpty ? 'استيراد من الموقع' : titleController.text.trim(),
+                                    (entries) {
                                           if (!dialogContext.mounted) return;
                                           var addedSources = 0;
                                           setDialogState(() {
@@ -3658,9 +3662,7 @@ class _AdminPageState extends State<AdminPage> {
                                               ? 'تمت إضافة $addedSources رابط تشغيل من الصفحة'
                                               : 'لم نعثر على روابط جديدة. جرّب تشغيل الفيديو ثم الفحص مرة أخرى.',
                                               isError: addedSources == 0);
-                                        },
-                                      ),
-                                    ),
+                                    },
                                   );
                                 } else if (dialogContext.mounted) {
                                   showMessage(errorText, isError: true);
