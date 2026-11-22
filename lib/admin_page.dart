@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'admin_auth_service.dart';
 import 'admin_packages_page.dart';
 import 'supabase_service.dart';
+import 'live_match_sources_page.dart';
 
 const Color adminBg = Color(0xFF090909);
 const Color adminGold = Color(0xFFD6AC55);
@@ -3641,6 +3642,15 @@ class _AdminPageState extends State<AdminPage> {
           subtitle: 'إضافة وتعديل وحذف وإدارة البث المباشر',
           icon: Icons.tv,
           onTap: () => navigateTo('channels'),
+        ),
+        _homeCard(
+          title: 'مصادر المباريات',
+          subtitle: 'إضافة وتعديل وتعطيل وحذف مصادر جدول المباريات',
+          icon: Icons.sports_soccer,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LiveMatchSourcesPage()),
+          ),
         ),
         _homeCard(
           title: 'المتصلون الآن',
