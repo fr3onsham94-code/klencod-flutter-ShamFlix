@@ -498,160 +498,63 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: appLocaleNotifier.value.languageCode == 'ar'
-          ? TextDirection.rtl
-          : TextDirection.ltr,
-      child: Container(
-        color: liveBackground,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-              child: Row(
-                children: [
-                  Container(width: 4, height: 22, color: livePrimary),
-                  const SizedBox(width: 9),
-                  Text(
-                    appText('البث المباشر', 'Live TV', 'Canlı TV'),
-                    style: TextStyle(
-                      color: liveText,
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _load,
-                    icon: Icon(Icons.refresh, color: livePrimary),
-                  ),
-                ],
-              ),
-            ),
-            if (starting)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: LinearProgressIndicator(
-                  color: livePrimary,
-                  backgroundColor: livePanel,
-                ),
-              ),
-            Expanded(
-              child: Stack(
-                clipBehavior: Clip.hardEdge,
-                children: [
-                  Positioned.fill(
-                    child: Row(
-                      textDirection: TextDirection.ltr,
-                      children: [
-                        Expanded(
-                          child: Directionality(
-                            textDirection: appLocaleNotifier.value.languageCode == 'ar'
-                                ? TextDirection.rtl
-                                : TextDirection.ltr,
-                            child: Column(
-                              children: [
-                                if (selectedPackageId != null)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(
-                                        packages.firstWhere(
-                                          (package) => package['id'].toString() == selectedPackageId,
-                                          orElse: () => <String, dynamic>{'name': ''},
-                                        )['name']?.toString() ?? '',
-                                        style: TextStyle(
-                                          color: liveText,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                Expanded(
-                                  child: loading
-                                      ? Center(child: CircularProgressIndicator(color: livePrimary))
-                                      : error != null
-                                          ? Center(
-                                              child: Text(
-                                                error!,
-                                                style: const TextStyle(color: Colors.redAccent),
-                                              ),
-                                            )
-                                          : channels.isEmpty
-                                              ? Center(
-                                                  child: Text(
-                                                    appText(
-                                                      'لا توجد قنوات في هذه الباقة',
-                                                      'No channels in this package',
-                                                      'Bu pakette kanal yok',
-                                                    ),
-                                                    style: TextStyle(color: liveSecondaryText),
-                                                  ),
-                                                )
-                                              : RefreshIndicator(
-                                                  color: livePrimary,
-                                                  onRefresh: _load,
-                                                  child: GridView.builder(
-                                                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
-                                                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                                      crossAxisCount: gridColumns,
-                                                      crossAxisSpacing: 9,
-                                                      mainAxisSpacing: 9,
-                                                      childAspectRatio: 1.0,
-                                                    ),
-                                                    itemCount: channels.length,
-                                                    itemBuilder: (context, index) =>
-                                                        _channelTile(channels[index]),
-                                                  ),
-                                                ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (sidebarOpen)
-                    Positioned.fill(
-                      child: GestureDetector(
-                        onTap: () => setState(() => sidebarOpen = false),
-                        child: Container(color: Colors.black54),
-                      ),
-                    ),
-                  _liveFloatingMenu(),
-                  Positioned(
-                    left: sidebarOpen ? sidebarWidth + 8 : 8,
-                    top: 12,
-                    child: SizedBox(
-                      width: sidebarButtonSize,
-                      height: sidebarButtonSize,
-                      child: Material(
-                        color: livePrimary,
-                        elevation: 7,
-                        shape: const CircleBorder(),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: () => setState(() => sidebarOpen = !sidebarOpen),
-                          child: Icon(
-                            sidebarOpen ? Icons.close : Icons.menu,
-                            color: Colors.white,
-                            size: (sidebarButtonSize * .48).clamp(16, 26).toDouble(),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    return AnimatedBuilder(
+      animation: AppTheme.revision,
+      builder: (context, _) => ValueListenableBuilder<Locale>(
+      valueListenable: appLocaleNotifier,
+      builder: (context, locale, _) => MaterialApp(
+      locale: locale,
+      supportedLocales: const [Locale('ar'), Locale('en'), Locale('tr')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      scaffoldMessengerKey: messengerKey,
+      debugShowCheckedModeBanner: false,
+      title: 'ShamFlix',
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: AppTheme.background,
+        canvasColor: AppTheme.background,
+        dividerColor: Colors.white12,
+        colorScheme: ColorScheme.dark(
+          primary: AppTheme.primary,
+          secondary: AppTheme.primary,
+          surface: AppTheme.panel,
+          onPrimary: AppTheme.text,
+          onSecondary: AppTheme.text,
+          onSurface: AppTheme.text,
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: AppTheme.background,
+          foregroundColor: AppTheme.primary,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
+        iconTheme: IconThemeData(color: AppTheme.primary),
+        progressIndicatorTheme: ProgressIndicatorThemeData(
+          color: AppTheme.primary,
+          linearTrackColor: AppTheme.panel,
+        ),
+        textSelectionTheme: TextSelectionThemeData(
+          cursorColor: AppTheme.primary,
+          selectionColor: AppTheme.primary.withOpacity(0.25),
+          selectionHandleColor: AppTheme.primary,
+        ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: AppTheme.panel,
+          contentTextStyle: TextStyle(color: AppTheme.text),
+          behavior: SnackBarBehavior.floating,
+        ),
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
+          backgroundColor: AppTheme.button,
+          foregroundColor: AppTheme.text,
         ),
       ),
+      home: const HomePage(),
+    ),
+    ),
     );
   }
 }
@@ -3696,22 +3599,17 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     super.dispose();
   }
 
+
   Future<void> _loadLiveSidebarSettings() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      sidebarWidth = (prefs.getDouble('shamflix_catalog_sidebar_width') ?? 110)
-          .clamp(90, 160).toDouble();
-      sidebarButtonSize = (prefs.getDouble('shamflix_catalog_sidebar_button') ?? 42)
-          .clamp(34, 56).toDouble();
-      packageFontSize = (prefs.getDouble('shamflix_catalog_package_font') ?? 11)
-          .clamp(9, 15).toDouble();
-      sectionFontSize = (prefs.getDouble('shamflix_catalog_section_font') ?? 12)
-          .clamp(10, 16).toDouble();
-      packageIconSize = (prefs.getDouble('shamflix_catalog_package_icon') ?? 15)
-          .clamp(12, 22).toDouble();
-      packageItemHeight = (prefs.getDouble('shamflix_catalog_package_height') ?? 38)
-          .clamp(30, 60).toDouble();
+      sidebarWidth = (prefs.getDouble('shamflix_catalog_sidebar_width') ?? 110).clamp(90, 160).toDouble();
+      sidebarButtonSize = (prefs.getDouble('shamflix_catalog_sidebar_button') ?? 42).clamp(34, 56).toDouble();
+      packageFontSize = (prefs.getDouble('shamflix_catalog_package_font') ?? 11).clamp(9, 15).toDouble();
+      sectionFontSize = (prefs.getDouble('shamflix_catalog_section_font') ?? 12).clamp(10, 16).toDouble();
+      packageIconSize = (prefs.getDouble('shamflix_catalog_package_icon') ?? 15).clamp(12, 22).toDouble();
+      packageItemHeight = (prefs.getDouble('shamflix_catalog_package_height') ?? 38).clamp(30, 60).toDouble();
     });
   }
 
@@ -3729,14 +3627,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         child: ListView(
           padding: const EdgeInsets.all(8),
           children: [
-            Text(
-              'الباقات',
-              style: TextStyle(
-                color: liveText,
-                fontSize: sectionFontSize,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text('الباقات', style: TextStyle(color: liveText, fontSize: sectionFontSize, fontWeight: FontWeight.bold)),
             ...packages.map((package) {
               final id = package['id'].toString();
               final active = id == selectedPackageId;
@@ -3754,23 +3645,16 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                       height: packageItemHeight,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 7),
-                        child: Row(
-                          children: [
-                            Icon(Icons.live_tv, color: Colors.white, size: packageIconSize),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                package['name']?.toString() ?? 'باقة',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: packageFontSize,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                        child: Row(children: [
+                          Icon(Icons.live_tv, color: Colors.white, size: packageIconSize),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(
+                            package['name']?.toString() ?? 'باقة',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: Colors.white, fontSize: packageFontSize),
+                          )),
+                        ]),
                       ),
                     ),
                   ),
@@ -3782,6 +3666,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       ),
     );
   }
+
+  
   Future<void> _load() async {
     setState(() { loading = true; error = null; });
     try {
@@ -4006,87 +3892,120 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Container(
         color: liveBackground,
         child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-            child: Row(children: [
-              Container(width: 4, height: 22, color: livePrimary),
-              const SizedBox(width: 9),
-              Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
-                style: TextStyle(color: liveText, fontSize: 19, fontWeight: FontWeight.bold)),
-              const Spacer(),
-              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: livePrimary)),
-            ]),
-          ),
-          if (starting)
+          children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: LinearProgressIndicator(color: livePrimary, backgroundColor: livePanel),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+              child: Row(children: [
+                Container(width: 4, height: 22, color: livePrimary),
+                const SizedBox(width: 9),
+                Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
+                  style: TextStyle(color: liveText, fontSize: 19, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: livePrimary)),
+              ]),
             ),
-          Expanded(child:Stack(clipBehavior:Clip.hardEdge,children:[
-            Positioned.fill(child:Row(
-              textDirection: TextDirection.ltr,
-              children: [
-
-                Expanded(
-                  child: Directionality(
-                    textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
-                    child: Column(children: [
-                      if (selectedPackageId != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
-                                orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
-                              style: TextStyle(color: liveText, fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
+            if (starting)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: LinearProgressIndicator(color: livePrimary, backgroundColor: livePanel),
+              ),
+            Expanded(
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Positioned.fill(
+                    child: Row(
+                      textDirection: TextDirection.ltr,
+                      children: [
+                        Expanded(
+                          child: Directionality(
+                            textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+                            child: Column(children: [
+                              if (selectedPackageId != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
+                                        orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
+                                      style: TextStyle(color: liveText, fontSize: 14, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ),
+                              Expanded(
+                                child: loading
+                                    ? Center(child: CircularProgressIndicator(color: livePrimary))
+                                    : error != null
+                                        ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
+                                        : channels.isEmpty
+                                            ? Center(child: Text(
+                                                appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
+                                                style: TextStyle(color: liveSecondaryText)))
+                                            : RefreshIndicator(
+                                                color: livePrimary,
+                                                onRefresh: _load,
+                                                child: GridView.builder(
+                                                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
+                                                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                                    crossAxisCount: gridColumns,
+                                                    crossAxisSpacing: 9,
+                                                    mainAxisSpacing: 9,
+                                                    childAspectRatio: 1.0,
+                                                  ),
+                                                  itemCount: channels.length,
+                                                  itemBuilder: (context, index) => _channelTile(channels[index]),
+                                                ),
+                                              ),
+                              ),
+                            ]),
                           ),
                         ),
-                      Expanded(
-                        child: loading
-                            ? Center(child: CircularProgressIndicator(color: livePrimary))
-                            : error != null
-                                ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
-                                : channels.isEmpty
-                                    ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
-                                        style: TextStyle(color: liveSecondaryText)))
-                                    : RefreshIndicator(
-                                        color: livePrimary,
-                                        onRefresh: _load,
-                                        child: GridView.builder(
-                                          padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
-                                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                            crossAxisCount: gridColumns,
-                                            crossAxisSpacing: 9,
-                                            mainAxisSpacing: 9,
-                                            childAspectRatio: 1.0,
-                                          ),
-                                          itemCount: channels.length,
-                                          itemBuilder: (context, index) => _channelTile(channels[index]),
-                                        ),
-                                      ),
-                      ),
-                    ]),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  if (sidebarOpen)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: () => setState(() => sidebarOpen = false),
+                        child: Container(color: Colors.black54),
+                      ),
+                    ),
+                  _liveFloatingMenu(),
+                  Positioned(
+                    left: sidebarOpen ? sidebarWidth + 8 : 8,
+                    top: 12,
+                    child: SizedBox(
+                      width: sidebarButtonSize,
+                      height: sidebarButtonSize,
+                      child: Material(
+                        color: livePrimary,
+                        elevation: 7,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => setState(() => sidebarOpen = !sidebarOpen),
+                          child: Icon(
+                            sidebarOpen ? Icons.close : Icons.menu,
+                            color: Colors.white,
+                            size: (sidebarButtonSize * .48).clamp(16, 26).toDouble(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          )),
-            if(sidebarOpen)Positioned.fill(child:GestureDetector(onTap:()=>setState(()=>sidebarOpen=false),child:Container(color:Colors.black54))),
-            _liveFloatingMenu(),
-            Positioned(left:sidebarOpen?sidebarWidth+8:8,top:12,child:SizedBox(width:sidebarButtonSize,height:sidebarButtonSize,child:Material(color:livePrimary,elevation:7,shape:const CircleBorder(),child:InkWell(customBorder:const CircleBorder(),onTap:()=>setState(()=>sidebarOpen=!sidebarOpen),child:Icon(sidebarOpen?Icons.close:Icons.menu,color:Colors.white,size:(sidebarButtonSize*.48).clamp(16,26).toDouble()))))),
-          ]))
-,
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
