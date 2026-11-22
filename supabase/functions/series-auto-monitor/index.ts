@@ -98,21 +98,30 @@ function extractEpisodeLinks(html: string, base: URL) {
   return [...found.values()].sort((a,b) => a.number-b.number);
 }
 function extractSources(html: string, base: URL) {
-  const found = new Map<string, {url:string; name:string}>();
+  const found = new Map<string,{url:string;name:string}>();
   const add = (raw: string | undefined, name: string) => {
-    if (!raw) return;
-    try {
-      const url = validateUrl(new URL(raw.replace(/&amp;/g,"&").replace(/\\//g,"/"), base).toString());
-      found.set(url.toString(), {url:url.toString(),name});
-    } catch { /* ignore malformed URLs */ }
+    if(!raw)return;
+    try{
+      let value=raw.replace(/&amp;/g,"&").replace(/\\\//g,"/").replace(/\\u0026/g,"&").trim();
+      if(value.startsWith("//"))value=base.protocol+value;
+      const url=validateUrl(new URL(value,base).toString());
+      found.set(url.toString(),{url:url.toString(),name});
+    }catch{}
   };
-  for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)) {
-    const a = attrs(m[0]); add(a.src || a["data-src"] || a["data-lazy-src"] || a["data-url"] || a["data"], "مشغل الحلقة");
+  for(const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)){
+    const a=attrs(m[0]);
+    add(a.src||a["data-src"]||a["data-lazy-src"]||a["data-url"]||a["data-embed"]||a["data-video"]||a["data-href"]||a["data-file"]||a.data,"مشغل الحلقة");
   }
-  for (const m of html.matchAll(/https?:\/\/[^\s"'<>\]+?\.(?:m3u8|mp4|webm|mpd)(?:\?[^\s"'<>]*)?/gi)) {
-    add(m[0], "رابط مباشر"); if (found.size >= 15) break;
+  for(const m of html.matchAll(/(?:src|href|data-src|data-url|data-embed|data-file|file|source|url)\s*[:=]\s*["']([^"']{8,2000})["']/gi)){
+    const raw=m[1];
+    if(/^(https?:)?\/\//i.test(raw)||/\.(?:m3u8|mp4|mpd|webm)(?:[?#]|$)/i.test(raw)||/(?:embed|player|watch)/i.test(raw))add(raw,"مصدر تشغيل الحلقة");
   }
-  return [...found.values()].slice(0,15);
+  for(const m of html.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)){
+    const raw=m[0].replace(/&amp;/g,"&");
+    if(/\.(?:m3u8|mp4|mpd|m4v|mov|webm|avi)(?:[?#]|$)/i.test(raw)||/(?:\/embed\/|\/player\/|\/watch\/)/i.test(raw))add(raw,"رابط تشغيل الحلقة");
+    if(found.size>=60)break;
+  }
+  return [...found.values()].slice(0,60);
 }
 async function inspectEpisode(link: {url:string;title:string;number:number}, host: string, fallbackSeason: number) {
   const page = await fetchHtml(link.url, host);
