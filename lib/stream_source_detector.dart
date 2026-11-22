@@ -1,7 +1,5 @@
-import 'dart:core';
-
 /// أسماء مصادر المحتوى التي يتعرّف عليها ShamFlix.
-/// التعرّف على اسم المصدر لا يعني أن كل خوادمه أو كل محتواه متاح دائماً.
+/// التعرّف على المصدر لا يعني أن كل خوادمه أو محتواه متاح دائماً.
 class StreamSourceDetector {
   static const List<String> supportedSourceNames = [
     'm3u8', 'mp4', 'mkv',
@@ -9,7 +7,7 @@ class StreamSourceDetector {
     'Fembed', 'Facebook', 'GoogleDrive', 'GogoAnime', 'MixDrop',
     'MediaShore', 'Onedrive', 'OKru', 'StreamTape', 'StreamSB',
     'Twitter', 'VK', 'Voesx', 'Voot', 'Vudeo', 'Vimeo', 'Yandex',
-    'Youtube', 'YoutubeLive',
+    'YoutubeLive', 'Youtube',
   ];
 
   static const Map<String, List<String>> _hostAliases = {
@@ -34,14 +32,14 @@ class StreamSourceDetector {
     'Vudeo': ['vudeo'],
     'Vimeo': ['vimeo.com', 'vimeocdn.com'],
     'Yandex': ['yandex.', 'disk.yandex'],
-    'Youtube': ['youtube.com', 'youtu.be', 'googlevideo.com'],
     'YoutubeLive': ['youtube.com/live'],
+    'Youtube': ['youtube.com', 'youtu.be', 'googlevideo.com'],
   };
 
   static bool isDirectMediaUrl(String rawUrl) {
     final uri = Uri.tryParse(rawUrl.trim());
     if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) return false;
-    return RegExp(r'\\.(m3u8|mp4|mkv|m4v|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mpd|mp3|aac|m4a|ogg|wav)$',
+    return RegExp(r'\.(m3u8|mp4|mkv|m4v|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mpd|mp3|aac|m4a|ogg|wav)$',
       caseSensitive: false).hasMatch(uri.path);
   }
 
@@ -56,8 +54,7 @@ class StreamSourceDetector {
       }
     }
     if (isDirectMediaUrl(rawUrl)) {
-      final extension = uri.path.split('.').last.toLowerCase();
-      return extension;
+      return uri.path.split('.').last.toLowerCase();
     }
     return 'Embed';
   }
