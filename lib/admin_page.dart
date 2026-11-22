@@ -11,6 +11,7 @@ import 'admin_packages_page.dart';
 import 'supabase_service.dart';
 import 'content_page_import_service.dart';
 import 'content_import_page.dart';
+import 'series_monitor_page.dart';
 
 Color get adminBg => AppTheme.background;
 Color get adminGold => AppTheme.primary;
@@ -4329,6 +4330,14 @@ class _AdminPageState extends State<AdminPage> {
           icon: Icons.travel_explore,
           onTap: () => Navigator.push(context, MaterialPageRoute(
             builder: (_) => const ContentImportPage(),
+          )),
+        ),
+        _homeCard(
+          title: 'المراقبة والتحديث التلقائي',
+          subtitle: 'إدارة مصادر المسلسلات ومتابعة الحلقات الجديدة تلقائياً',
+          icon: Icons.radar,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const SeriesMonitorPage(),
           )),
         ),
         _homeCard(
