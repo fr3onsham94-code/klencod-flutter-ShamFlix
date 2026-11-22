@@ -4344,9 +4344,11 @@ class _AdminPageState extends State<AdminPage> {
     if (ids.isEmpty || bulkDeleting) return;
     final section = currentSection;
     final isSeries = section == 'series';
+    final contentLabel = isSeries ? 'المسلسلات' : 'القنوات';
+    final singularLabel = isSeries ? 'مسلسل' : 'قناة';
     final yes = await _confirmBulkDelete(
-      'حذف ${isSeries ? 'المسلسلات' : 'القنوات'} المحددة',
-      'سيتم حذف ${ids.length} ${isSeries ? 'مسلسل' : 'قناة'} نهائياً مع الحلقات والسيرفرات والارتباطات التابعة. لا يمكن التراجع.',
+      'حذف $contentLabel المحددة',
+      'سيتم حذف ${ids.length} $singularLabel نهائياً مع الحلقات والسيرفرات والارتباطات التابعة. لا يمكن التراجع.',
     );
     if (!yes) return;
     setState(() => bulkDeleting = true);
