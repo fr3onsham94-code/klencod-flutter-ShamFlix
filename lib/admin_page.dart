@@ -4334,8 +4334,8 @@ class _AdminPageState extends State<AdminPage> {
           )),
         ),
         _homeCard(
-          title: 'المراقبة والتحديث التلقائي',
-          subtitle: 'إدارة مصادر المسلسلات ومتابعة الحلقات الجديدة تلقائياً',
+          title: 'مراقبة أقسام المسلسلات تلقائياً',
+          subtitle: 'اكتشاف المسلسلات الجديدة وإنشاء صفحاتها وإضافة الحلقات تلقائياً إلى الباقات',
           icon: Icons.radar,
           onTap: () => Navigator.push(context, MaterialPageRoute(
             builder: (_) => const SeriesMonitorPage(),
