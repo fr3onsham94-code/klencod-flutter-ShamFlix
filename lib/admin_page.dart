@@ -38,6 +38,9 @@ class _AdminPageState extends State<AdminPage> {
   List<Map<String, dynamic>> movies = [];
   List<Map<String, dynamic>> series = [];
   List<Map<String, dynamic>> channels = [];
+  final Set<String> selectedMovieIds = {};
+  final Set<String> selectedCatalogIds = {};
+  bool bulkDeleting = false;
   List<Map<String, dynamic>> users = [];
   List<Map<String, dynamic>> activeSessions = [];
   bool presenceLoading = false;
@@ -880,6 +883,8 @@ class _AdminPageState extends State<AdminPage> {
 
   void navigateTo(String section) {
     setState(() {
+      selectedMovieIds.clear();
+      selectedCatalogIds.clear();
       currentSection = section;
       searchQuery = '';
       searchController.clear();
@@ -1060,20 +1065,80 @@ class _AdminPageState extends State<AdminPage> {
     return savedId;
   }
 
-  Future<void> deleteMovie(String id) async {
+  Future<void> _deleteMovieRecord(String id) async {
+    await AuthService.client.from('playback_servers').delete().eq('movie_id', id);
+    await AuthService.client.from('content_package_items')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+    await AuthService.client.from('user_library')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+    await AuthService.client.from('user_ratings')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+    await AuthService.client.from('user_notifications')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+    await AuthService.client.from('content_rating_stats')
+        .delete().eq('content_type', 'movie').eq('content_id', id);
+
     final response = await http.delete(
-      moviesUrl.replace(
-        queryParameters: {'id': 'eq.$id'},
-      ),
+      moviesUrl.replace(queryParameters: {'id': 'eq.$id'}),
       headers: headers,
     );
-
-    if (response.statusCode != 200 &&
-        response.statusCode != 204) {
+    if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception(_readError(response));
     }
+  }
 
+  Future<void> deleteMovie(String id) async {
+    await _deleteMovieRecord(id);
     await loadMovies();
+  }
+
+  Future<void> deleteCatalogItem(String section, String id) async {
+    final isSeries = section == 'series';
+    if (isSeries) {
+      await AuthService.client.from('series_source_monitors')
+          .delete().eq('series_id', id);
+      final seasons = await _extraLoad('seasons', {'series_id': 'eq.$id'});
+      final episodeIds = <String>[];
+      for (final season in seasons) {
+        final episodes = await _extraLoad('episodes', {
+          'season_id': 'eq.${season['id']}',
+        });
+        episodeIds.addAll(episodes.map((episode) => episode['id'].toString()));
+      }
+      if (episodeIds.isNotEmpty) {
+        await AuthService.client.from('playback_servers')
+            .delete().inFilter('episode_id', episodeIds);
+        await AuthService.client.from('user_library')
+            .delete().eq('content_type', 'episode').inFilter('content_id', episodeIds);
+        await AuthService.client.from('user_notifications')
+            .delete().eq('content_type', 'episode').inFilter('content_id', episodeIds);
+        await AuthService.client.from('episodes').delete().inFilter('id', episodeIds);
+      }
+      await AuthService.client.from('seasons').delete().eq('series_id', id);
+    } else {
+      await AuthService.client.from('playback_servers').delete().eq('channel_id', id);
+    }
+
+    final contentType = isSeries ? 'series' : 'channel';
+    await AuthService.client.from('content_package_items')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+    await AuthService.client.from('user_library')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+    await AuthService.client.from('user_ratings')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+    await AuthService.client.from('user_notifications')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+    await AuthService.client.from('content_rating_stats')
+        .delete().eq('content_type', contentType).eq('content_id', id);
+
+    final table = isSeries ? 'series' : 'channels';
+    final response = await http.delete(
+      catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'}),
+      headers: headers,
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(_readError(response));
+    }
   }
 
   Future<void> togglePublish(
@@ -1174,18 +1239,6 @@ class _AdminPageState extends State<AdminPage> {
     return savedId;
   }
 
-    Future<void> deleteCatalogItem(String section, String id) async {
-    final table = section == 'series' ? 'series' : 'channels';
-    final response = await http.delete(
-      catalogUrl(table).replace(queryParameters: {'id': 'eq.$id'}),
-      headers: headers,
-    );
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception(_readError(response));
-    }
-    await loadCatalog(section);
-  }
-
   Future<void> toggleCatalogPublish(
     String section,
     Map<String, dynamic> item,
@@ -1264,61 +1317,98 @@ class _AdminPageState extends State<AdminPage> {
       {'season_id': 'eq.$seasonId'},
       order: 'episode_number.asc',
     );
-    final existingNumbers = existingEpisodes
-        .map((episode) => int.tryParse(episode['episode_number']?.toString() ?? ''))
-        .whereType<int>()
-        .toSet();
+    final existingByNumber = <int, Map<String, dynamic>>{};
+    for (final episode in existingEpisodes) {
+      final number = int.tryParse(episode['episode_number']?.toString() ?? '');
+      if (number != null) existingByNumber[number] = episode;
+    }
 
     var added = 0;
+    var updated = 0;
+    var linkedServers = 0;
+    var missingServers = 0;
+
     for (final item in importedEpisodes) {
       final number = int.tryParse(item['episode_number']?.toString() ?? '');
-      if (number == null || number < 1 || existingNumbers.contains(number)) continue;
+      if (number == null || number < 1) continue;
       final servers = (item['servers'] as List? ?? [])
           .whereType<Map>()
           .map((server) => Map<String, dynamic>.from(server))
           .where((server) => (server['url']?.toString() ?? '').trim().isNotEmpty)
           .toList();
       final firstUrl = servers.isEmpty ? '' : servers.first['url'].toString();
-      final episodeId = await _extraSave('episodes', {
-        'season_id': seasonId,
-        'episode_number': number,
-        'title': (item['title']?.toString().trim().isNotEmpty == true)
-            ? item['title'].toString().trim()
-            : 'الحلقة $number',
-        'description': null,
-        'stream_url': firstUrl,
-        'is_published': true,
-      });
-      if (episodeId == null) continue;
-      if (servers.isNotEmpty) {
-        final rows = <Map<String, dynamic>>[];
-        for (var index = 0; index < servers.length; index++) {
-          final server = servers[index];
-          rows.add({
-            'episode_id': episodeId,
-            'server_name': (server['name']?.toString().trim().isNotEmpty == true)
-                ? server['name'].toString().trim()
-                : 'سيرفر ${index + 1}',
-            'stream_url': server['url'].toString(),
-            'sort_order': index,
-            'is_active': true,
+      final existing = existingByNumber[number];
+      final episodeId = existing?['id']?.toString() ??
+          await _extraSave('episodes', {
+            'season_id': seasonId,
+            'episode_number': number,
+            'title': (item['title']?.toString().trim().isNotEmpty == true)
+                ? item['title'].toString().trim()
+                : 'الحلقة $number',
+            'description': null,
+            'stream_url': firstUrl,
+            'is_published': true,
           });
-        }
+      if (episodeId == null) continue;
+
+      if (existing != null) {
+        await _extraSave('episodes', {
+          'title': (item['title']?.toString().trim().isNotEmpty == true)
+              ? item['title'].toString().trim()
+              : existing['title'],
+          if (firstUrl.isNotEmpty) 'stream_url': firstUrl,
+          'is_published': true,
+        }, id: episodeId);
+        updated++;
+      } else {
+        added++;
+        existingByNumber[number] = {'id': episodeId, 'episode_number': number};
+      }
+
+      final currentServers = await _extraLoad(
+        'playback_servers',
+        {'episode_id': 'eq.$episodeId'},
+        order: 'sort_order.asc,created_at.asc',
+      );
+      final knownUrls = currentServers
+          .map((server) => server['stream_url']?.toString() ?? '')
+          .where((url) => url.isNotEmpty)
+          .toSet();
+      final newRows = <Map<String, dynamic>>[];
+      for (final server in servers) {
+        final url = server['url'].toString().trim();
+        if (url.isEmpty || !knownUrls.add(url)) continue;
+        newRows.add({
+          'episode_id': episodeId,
+          'server_name': (server['name']?.toString().trim().isNotEmpty == true)
+              ? server['name'].toString().trim()
+              : 'سيرفر ${newRows.length + 1}',
+          'stream_url': url,
+          'sort_order': currentServers.length + newRows.length,
+          'is_active': true,
+        });
+      }
+      if (newRows.isNotEmpty) {
         final response = await http.post(
           _extraTableUrl('playback_servers'),
           headers: headers,
-          body: jsonEncode(rows),
+          body: jsonEncode(newRows),
         );
         if (response.statusCode != 200 &&
             response.statusCode != 201 &&
             response.statusCode != 204) {
           throw Exception(_readError(response));
         }
+        linkedServers += newRows.length;
       }
-      existingNumbers.add(number);
-      added++;
+      final hasServers = currentServers.isNotEmpty || newRows.isNotEmpty;
+      if (!hasServers) missingServers++;
     }
-    showMessage('تم استيراد $added حلقة جديدة وربط سيرفراتها المتاحة');
+
+    final message = 'حلقات جديدة: $added • تم تحديث: $updated • سيرفرات جديدة: $linkedServers';
+    showMessage(missingServers > 0
+        ? '$message • $missingServers حلقة بلا سيرفر مشاهدة'
+        : message, isError: missingServers > 0);
   }
 
   Future<void> openCatalogForm(
@@ -1359,10 +1449,11 @@ class _AdminPageState extends State<AdminPage> {
     final tmdbController = TextEditingController(
       text: existing?['tmdb_id']?.toString() ?? '',
     );
-    final pageUrlController = TextEditingController();
+    final pageUrlController = TextEditingController(text: existing?['source_page_url']?.toString() ?? '');
     bool pageImportLoading = false;
     bool isLive = existing?['is_live'] != false;
     List<Map<String, dynamic>> importedAkwamEpisodes = [];
+    String? episodeImportWarning;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
     final packageType = isSeries ? 'series' : 'channel';
@@ -1416,6 +1507,7 @@ class _AdminPageState extends State<AdminPage> {
                                   importedAkwamEpisodes = await ContentPageImportService.inspectAkwamSeries(pageUrlController.text.trim());
                                 } catch (episodeError) {
                                   importedAkwamEpisodes = [];
+                                  episodeImportWarning = episodeError.toString().replaceFirst('Exception: ', '');
                                   showMessage('تم جلب بيانات المسلسل، لكن تعذر استيراد الحلقات: ${episodeError.toString().replaceFirst('Exception: ', '')}', isError: true);
                                 }
                               }
@@ -1621,6 +1713,7 @@ class _AdminPageState extends State<AdminPage> {
                       'cast': castController.text.trim().isEmpty ? null : castController.text.trim(),
                       'release_year': int.tryParse(yearController.text.trim()),
                       'rating': double.tryParse(ratingController.text.trim()),
+                      'source_page_url': pageUrlController.text.trim().isEmpty ? null : pageUrlController.text.trim(),
                     });
                   } else {
                     data.addAll({
@@ -1663,7 +1756,10 @@ class _AdminPageState extends State<AdminPage> {
         }
         await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
       }
-      showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
+      showMessage(episodeImportWarning != null
+          ? 'تم حفظ بيانات المسلسل، لكن تعذر استيراد الحلقات: $episodeImportWarning'
+          : existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح',
+          isError: episodeImportWarning != null);
     } catch (e) {
       showMessage(e.toString(), isError: true);
     } finally {
