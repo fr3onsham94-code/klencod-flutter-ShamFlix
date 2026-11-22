@@ -135,7 +135,7 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
                         ),
                         _field(
                           parserController,
-                          'مفتاح المحلل (m_yala_wordpress_cards أو fel3ardaa_json_api)',
+                          'مفتاح المحلل (m_yala_wordpress_cards أو fel3ardaa_json_api أو syrialive_my_cards)',
                         ),
                         _field(userAgentController, 'User-Agent'),
                         _field(
@@ -326,6 +326,7 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
     const supportedParsers = {
       'm_yala_wordpress_cards',
       'fel3ardaa_json_api',
+      'syrialive_my_cards',
     };
     if (active && !supportedParsers.contains(source['parser_key'])) {
       ScaffoldMessenger.of(context).showSnackBar(
