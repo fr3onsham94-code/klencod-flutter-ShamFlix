@@ -4836,11 +4836,11 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
     });
   };
 
-  document.querySelectorAll('video[src], video source[src], audio[src], audio source[src], source[src]').forEach(el => {
-    add(el.src || el.getAttribute('src'), 'media', 'وسم فيديو/مصدر');
+  document.querySelectorAll('video[src], video[data-src], video source[src], video source[data-src], audio[src], audio source[src], source[src], source[data-src]').forEach(el => {
+    add(el.src || el.getAttribute('src') || el.getAttribute('data-src'), 'media', 'وسم فيديو/مصدر');
   });
-  document.querySelectorAll('iframe[src], frame[src]').forEach(el => {
-    add(el.src || el.getAttribute('src'), 'iframe', 'إطار تضمين');
+  document.querySelectorAll('iframe[src], iframe[data-src], iframe[data-lazy-src], frame[src], frame[data-src]').forEach(el => {
+    add(el.src || el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || el.getAttribute('data-url'), 'iframe', 'إطار تضمين');
   });
   document.querySelectorAll('embed[src], object[data]').forEach(el => {
     add(el.src || el.data || el.getAttribute('src') || el.getAttribute('data'), 'embed', 'مشغل مضمّن');
