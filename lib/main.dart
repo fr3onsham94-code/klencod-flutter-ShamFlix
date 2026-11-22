@@ -4825,15 +4825,14 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
     if (!raw || typeof raw !== 'string') return;
     let url;
     try { url = new URL(raw.trim(), location.href).href; } catch (_) { return; }
-    if (!/^https?:\\/\\//i.test(url)) return;
-    if (url.length > 4096) return;
+    if (!/^https?:\/\//i.test(url) || url.length > 4096) return;
     const key = url.split('#')[0];
     const path = (() => { try { return new URL(key).pathname.toLowerCase(); } catch (_) { return ''; } })();
-    const direct = /\\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd|ts)(?:$)/i.test(path);
+    const direct = /\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd|ts)(?:$)/i.test(path);
     const old = found.get(key);
     if (!old || (direct && !old.direct)) found.set(key, {
-      url: key, kind: direct ? 'media' : kind, label: label || (direct ? 'رابط فيديو مباشر' : 'صفحة تضمين'),
-      direct: direct
+      url: key, kind: direct ? 'media' : kind,
+      label: label || (direct ? 'رابط فيديو مباشر' : 'صفحة تضمين'), direct: direct
     });
   };
 
@@ -4848,30 +4847,27 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
   });
   document.querySelectorAll('a[href]').forEach(el => {
     const href = el.href || el.getAttribute('href');
-    if (href && /\\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:$|[?#])/i.test(href)) {
+    if (href && /\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:$|[?#])/i.test(href)) {
       add(href, 'media', 'رابط فيديو');
     }
   });
-
-  // موارد الشبكة التي أتاحها المتصفح للصفحة الحالية فقط.
   try {
     performance.getEntriesByType('resource').forEach(entry => {
-      if (/\\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:$|[?#])/i.test(entry.name)) {
+      if (/\.(m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:$|[?#])/i.test(entry.name)) {
         add(entry.name, 'media', 'مورد فيديو محمّل');
       }
     });
   } catch (_) {}
 
-  // إعدادات المشغل المنشورة داخل HTML/JavaScript، دون تنفيذ أكواد إضافية.
   const html = document.documentElement ? document.documentElement.innerHTML : '';
   const patterns = [
-    /https?:\\/\\/[^\\s\\\"\'<>\\\\]+\\.(?:m3u8|mp4|mkv|mpd)(?:\\?[^\\s\\\"\'<>\\\\]*)?/ig,
-    /(?:file|src|source|hls|mp4|playlist)\\s*[:=]\\s*[\\\"\']([^\\\"\']+)[\\\"\']/ig
+    /https?:\/\/[^\s"'<>\\]+\.(?:m3u8|mp4|mkv|mpd)(?:\?[^\s"'<>\\]*)?/ig,
+    /(?:file|src|source|hls|mp4|playlist)\s*[:=]\s*["']([^"']+)["']/ig
   ];
   patterns.forEach((pattern, index) => {
     let match, count = 0;
     while ((match = pattern.exec(html)) && count++ < 100) {
-      add(index === 0 ? match[0].replace(/\\\\\\//g, '/') : match[1], 'media', 'عنوان ضمن إعدادات الصفحة');
+      add(index === 0 ? match[0] : match[1], 'media', 'عنوان ضمن إعدادات الصفحة');
     }
   });
   return JSON.stringify(Array.from(found.values()).slice(0, 80));
