@@ -113,11 +113,13 @@ class ContentPageImportService {
     final episodes = <Map<String, dynamic>>[];
     final ordered = episodeLinks.entries.toList()
       ..sort((a, b) => int.parse(a.value['number']!).compareTo(int.parse(b.value['number']!)));
-    for (final entry in ordered) {
+    Future<Map<String, dynamic>> inspectEpisode(
+      MapEntry<String, Map<String, String>> entry,
+    ) async {
       final episodeUri = _validatedUri(entry.key);
       final episodeHtml = await _fetchPublicHtml(episodeUri);
       String? watchUrl;
-      for (final match in RegExp(r'<a\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
+      for (final match in RegExp(r'<a\\b[^>]*>', caseSensitive: false).allMatches(episodeHtml)) {
         final attrs = _attributes(match.group(0)!);
         final href = attrs['href'] ?? '';
         if (href.contains('/watch/')) {
@@ -136,12 +138,18 @@ class ContentPageImportService {
           'kind': 'iframe',
         });
       }
-      episodes.add({
+      return {
         'episode_number': int.parse(entry.value['number']!),
         'title': entry.value['title'],
         'watch_url': watchUrl,
         'servers': servers,
-      });
+      };
+    }
+
+    // Process small batches in parallel to avoid a long serial crawl.
+    for (var start = 0; start < ordered.length; start += 4) {
+      final batch = ordered.skip(start).take(4);
+      episodes.addAll(await Future.wait(batch.map(inspectEpisode)));
     }
     return episodes;
   }
