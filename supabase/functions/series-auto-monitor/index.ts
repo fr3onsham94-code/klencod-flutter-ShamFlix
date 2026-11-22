@@ -253,7 +253,19 @@ Deno.serve(async (req: Request) => {
           const {data:oldEpisode,error:duplicateError} = await db.from("episodes").select("id")
             .eq("season_id",seasonId).eq("episode_number",episode.number).maybeSingle();
           if (duplicateError) throw duplicateError;
-          if (oldEpisode) { summary.skipped++; continue; }
+          if (oldEpisode) {
+            const {data:oldServers,error:oldServerError}=await db.from("playback_servers").select("stream_url").eq("episode_id",oldEpisode.id);
+            if(oldServerError)throw oldServerError;
+            const oldUrls=new Set((oldServers||[]).map((x:any)=>x.stream_url));
+            const fresh=episode.sources.filter(x=>!oldUrls.has(x.url));
+            if(fresh.length){
+              const rows=fresh.map((server,index)=>({episode_id:oldEpisode.id,server_name:server.name||("السيرفر "+(index+1)),stream_url:server.url,sort_order:(oldServers||[]).length+index,is_active:true}));
+              const {error:saveNew}=await db.from("playback_servers").insert(rows);if(saveNew)throw saveNew;
+            }
+            const {error:updateEpisode}=await db.from("episodes").update({stream_url:episode.streamUrl}).eq("id",oldEpisode.id);
+            if(updateEpisode)throw updateEpisode;
+            summary.skipped++; continue;
+          }
           const {data:saved,error:saveError} = await db.from("episodes").insert({
             season_id:seasonId,episode_number:episode.number,title:episode.title||("الحلقة "+episode.number),
             stream_url:episode.streamUrl,is_published:true,
