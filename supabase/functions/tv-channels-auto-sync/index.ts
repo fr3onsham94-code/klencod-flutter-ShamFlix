@@ -198,8 +198,8 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     const aliases = [...new Set(uniqueStreams.map(x=>x.name).filter(x=>x !== preferred.name))];
     const arabic = uniqueStreams.map(x=>x.name).find(x=>/[\u0600-\u06FF]/.test(x)) || arabicAlias(preferred.name);
     const channelName = arabic || preferred.name;
-    const existing = byExternalKey.get(key) ||
-      byName.get(normalizeName(channelName)) || byName.get(normalizeName(preferred.name));
+    const nameMatch = byName.get(normalizeName(channelName)) || byName.get(normalizeName(preferred.name));
+    const existing = byExternalKey.get(key) || (nameMatch && !nameMatch.external_source_key ? nameMatch : null);
     const channelRow: Record<string,unknown> = {
       name: channelName,
       name_en: preferred.name,
