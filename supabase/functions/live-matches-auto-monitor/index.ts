@@ -17,9 +17,9 @@ function normTeam(value:string):string{let n=norm(value).replace(/^(ستاد|ن�
 
 
 function extractYallaTeamLogo(block:string,team:string,teamIndex:number,baseUrl:string):string|null{
-  const images=[...block.matchAll(/<img\\b[^>]*>/gi)].map(m=>{
+  const images=[...block.matchAll(/<img\b[^>]*>/gi)].map(m=>{
     const a=attrs(m[0]);
-    const raw=a.src||a["data-src"]||a["data-lazy-src"]||a["data-original"]||a["data-lazy"]||(a.srcset||"").split(",")[0]?.trim().split(/\\s+/)[0]||"";
+    const raw=a.src||a["data-src"]||a["data-lazy-src"]||a["data-original"]||a["data-lazy"]||(a.srcset||"").split(",")[0]?.trim().split(/\s+/)[0]||"";
     const hint=[a.alt,a.title,a.class,a["data-team"]].filter(Boolean).join(" ");
     return {raw,hint,normalized:normTeam(hint),className:String(a.class||"")};
   }).filter(x=>x.raw&&!/^data:/i.test(x.raw));
