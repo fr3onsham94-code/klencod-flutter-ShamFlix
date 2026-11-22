@@ -129,6 +129,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
 
   Future<void> _clearPackageContent(Map<String, dynamic> item) async {
     final packageId = item['id']?.toString() ?? '';
+    final packageName = item['name']?.toString() ?? '';
     if (packageId.isEmpty) return;
     final yes = await showDialog<bool>(
       context: context,
@@ -136,7 +137,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
         backgroundColor: packagePanel,
         title: Text('مسح محتوى الباقة', style: TextStyle(color: packageGold)),
         content: Text(
-          'سيتم إزالة جميع العناصر المرتبطة بباقة «${item['name']}» فقط. ستبقى الباقة وإعداداتها والمحتويات الأصلية في المكتبة والباقات الأخرى كما هي. مراقبة المصدر التلقائية ستبقى مفعّلة.',
+          "سيتم إزالة جميع العناصر المرتبطة بباقة «$packageName» فقط. ستبقى الباقة وإعداداتها والمحتويات الأصلية في المكتبة والباقات الأخرى كما هي. مراقبة المصدر التلقائية ستبقى مفعّلة.",
           style: TextStyle(color: AppTheme.secondaryText),
         ),
         actions: [
