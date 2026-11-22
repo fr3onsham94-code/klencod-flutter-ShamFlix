@@ -1863,7 +1863,10 @@ class _AdminPageState extends State<AdminPage> {
         if(r.statusCode!=200&&r.statusCode!=204)throw Exception(_readError(r));
       }
       final p1=await _loadAssignedPackageIds('series',primary),p2=await _loadAssignedPackageIds('series',source);
-      await _saveContentPackageAssignments('series',primary,{...p1,...p2}.toList());
+      final missingPackages=p2.where((id)=>!p1.contains(id)).toList();
+      if(missingPackages.isNotEmpty){
+        await AuthService.client.from('content_package_items').insert(missingPackages.map((packageId)=>{'package_id':packageId,'content_type':'series','content_id':primary}).toList());
+      }
       await AuthService.client.from('content_package_items').delete().eq('content_type','series').eq('content_id',source);
       final monitorResponse=await http.patch(_extraTableUrl('series_source_monitors').replace(queryParameters:{'series_id':'eq.$source'}),headers:headers,body:jsonEncode({'series_id':primary}));
       if(monitorResponse.statusCode!=200&&monitorResponse.statusCode!=204)throw Exception(_readError(monitorResponse));
