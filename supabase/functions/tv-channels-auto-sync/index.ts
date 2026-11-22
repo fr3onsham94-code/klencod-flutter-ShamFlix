@@ -1,10 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SOURCES = [
+type PlaylistSource = { id: string; name: string; url: string; customId?: string };
+
+const BUILTIN_SOURCES: PlaylistSource[] = [
   { id: "iptv-org", name: "IPTV-ORG", url: "https://iptv-org.github.io/iptv/index.category.m3u" },
   { id: "free-tv", name: "FREE-TV", url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" },
   { id: "nexus", name: "IPTV-NEXUS", url: "https://dearbulut.github.io/iptv/playlists/index.m3u" },
-] as const;
+];
+const MAX_CUSTOM_SOURCES = 20;
 
 const MAX_PLAYLIST_BYTES = 24 * 1024 * 1024;
 const MAX_CHANNELS_PER_RUN = 6000;
@@ -122,7 +125,7 @@ function isArabicOrTurkishChannel(entry: {name:string; tvgLanguage:string; tvgCo
   return false;
 }
 
-function parseM3u(text: string, sourceId: string) {
+function parseM3u(text: string, sourceId: string, sourceName: string) {
   const result: Array<{sourceId:string;sourceName:string;key:string;name:string;nameEn:string;tvgId:string;logo:string;category:string;url:string;position:number;tvgLanguage:string;tvgCountry:string;groupTitle:string}> = [];
   let pending: Record<string,string> | null = null;
   let displayName = "";
@@ -144,7 +147,7 @@ function parseM3u(text: string, sourceId: string) {
       const tvgId = pending["tvg-id"] || "";
       result.push({
         sourceId,
-        sourceName: sourceId === "iptv-org" ? "IPTV-ORG" : sourceId === "free-tv" ? "FREE-TV" : "IPTV-NEXUS",
+        sourceName,
         key: canonicalKey(tvgId, name, sourceId),
         name,
         nameEn: name,
@@ -165,19 +168,49 @@ function parseM3u(text: string, sourceId: string) {
   return result;
 }
 
-const ALLOWED_PLAYLIST_HOSTS = new Set([
-  "iptv-org.github.io",
-  "raw.githubusercontent.com",
-  "dearbulut.github.io",
-]);
+function isPublicIpAddress(address: string): boolean {
+  const value = address.toLowerCase().split("%")[0];
+  if (value.includes(":")) {
+    // Only globally routable IPv6 unicast addresses are accepted.
+    if (value.startsWith("2001:db8:")) return false;
+    const first = parseInt(value.split(":")[0] || "0", 16);
+    return first >= 0x2000 && first <= 0x3fff;
+  }
+  const parts = value.split(".").map(Number);
+  if (parts.length !== 4 || parts.some(x => !Number.isInteger(x) || x < 0 || x > 255)) return false;
+  const [a,b] = parts;
+  if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && (b === 168 || b === 0)) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false;
+  if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
+  if (a === 203 && b === 0) return false;
+  return true;
+}
 
-async function fetchPlaylist(source: typeof SOURCES[number]) {
+async function validatePublicPlaylistUrl(url: URL) {
+  const host = url.hostname.toLowerCase();
+  if (url.protocol !== "https:" || url.username || url.password ||
+      (url.port && url.port !== "443") || !host || host === "localhost" ||
+      host.endsWith(".localhost") || host.endsWith(".local") ||
+      host.endsWith(".internal") || host.endsWith(".test") ||
+      host.includes(":") || /^\\d{1,3}(?:\\.\\d{1,3}){3}$/.test(host)) {
+    throw new Error("Only public HTTPS playlist URLs are allowed");
+  }
+  const records: string[] = [];
+  try { records.push(...await Deno.resolveDns(host, "A")); } catch {}
+  try { records.push(...await Deno.resolveDns(host, "AAAA")); } catch {}
+  if (!records.length || records.some(address => !isPublicIpAddress(address))) {
+    throw new Error("Playlist host did not resolve exclusively to public IP addresses");
+  }
+}
+
+async function fetchPlaylist(source: PlaylistSource) {
   let current = new URL(source.url);
   let response: Response | null = null;
   for (let hop = 0; hop <= 3; hop++) {
-    if (current.protocol !== "https:" || !ALLOWED_PLAYLIST_HOSTS.has(current.hostname.toLowerCase())) {
-      throw new Error(source.id + " redirected to a non-approved playlist host");
-    }
+    await validatePublicPlaylistUrl(current);
     response = await fetch(current.toString(), {
       redirect: "manual",
       signal: AbortSignal.timeout(45000),
@@ -193,7 +226,7 @@ async function fetchPlaylist(source: typeof SOURCES[number]) {
   const body = await response.text();
   if (new TextEncoder().encode(body).length > MAX_PLAYLIST_BYTES) throw new Error(source.id + " playlist exceeds size limit");
   if (!body.trimStart().startsWith("#EXTM3U")) throw new Error(source.id + " returned an invalid M3U playlist");
-  const entries = parseM3u(body, source.id);
+  const entries = parseM3u(body, source.id, source.name);
   if (!entries.length) throw new Error(source.id + " contained no supported direct HLS/DASH streams");
   return entries;
 }
@@ -226,15 +259,47 @@ async function verifySecret(db: any, token: string) {
 }
 
 async function syncChannels(db: any) {
+  const { data: customRows, error: customSourcesError } = await db.from("tv_channel_sources")
+    .select("id,name,playlist_url")
+    .eq("is_active", true)
+    .order("created_at", { ascending: true })
+    .limit(MAX_CUSTOM_SOURCES + 1);
+  if (customSourcesError) throw new Error("custom source lookup: " + JSON.stringify(customSourcesError));
+  if ((customRows || []).length > MAX_CUSTOM_SOURCES) {
+    throw new Error("Too many custom TV sources; maximum is " + MAX_CUSTOM_SOURCES);
+  }
+  const sources: PlaylistSource[] = [
+    ...BUILTIN_SOURCES,
+    ...(customRows || []).map((row: any) => ({
+      id: "custom:" + row.id,
+      customId: String(row.id),
+      name: clean(row.name).slice(0, 80),
+      url: String(row.playlist_url),
+    })),
+  ];
+
   // Each source is reconciled independently. A failed source must never affect its saved servers.
-  const settledSources = await Promise.all(SOURCES.map(async source => ({
-    source,
-    entries: await fetchPlaylist(source),
-  })).map(p => p.then(value => ({ status: "fulfilled" as const, value }))
-    .catch(reason => ({ status: "rejected" as const, reason }))));
-  const sourceResults = settledSources.filter((x): x is {status:"fulfilled";value:{source:typeof SOURCES[number];entries:ReturnType<typeof parseM3u>}} => x.status === "fulfilled")
-    .map(x => ({ ...x.value, entries: x.value.entries.filter(isArabicOrTurkishChannel) }));
-  const sourceErrors = settledSources.filter(x => x.status === "rejected");
+  const settledSources = await Promise.all(sources.map(async source => {
+    try {
+      return { status: "fulfilled" as const, source, entries: await fetchPlaylist(source) };
+    } catch (reason) {
+      return { status: "rejected" as const, source, reason };
+    }
+  }));
+  const sourceResults = settledSources
+    .filter((x): x is {status:"fulfilled";source:PlaylistSource;entries:ReturnType<typeof parseM3u>} => x.status === "fulfilled")
+    .map(x => ({ source: x.source, entries: x.entries.filter(isArabicOrTurkishChannel) }));
+  const sourceErrors = settledSources.filter((x): x is {status:"rejected";source:PlaylistSource;reason:unknown} => x.status === "rejected");
+
+  const checkedAt = new Date().toISOString();
+  for (const result of settledSources) {
+    if (!result.source.customId) continue;
+    const status = result.status === "fulfilled"
+      ? { last_checked_at: checkedAt, last_error: null, last_entry_count: result.entries.filter(isArabicOrTurkishChannel).length }
+      : { last_checked_at: checkedAt, last_error: String(result.reason instanceof Error ? result.reason.message : result.reason).slice(0, 1000) };
+    const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.customId);
+    if (error) throw new Error("custom source status update: " + JSON.stringify(error));
+  }
   if (!sourceResults.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
   const grouped = new Map<string, typeof sourceResults[number]["entries"]>();
   for (const { entries } of sourceResults) {
@@ -409,12 +474,13 @@ async function syncChannels(db: any) {
     packages: packageRows.length,
     sources: [
       ...sourceResults.map(x => ({ id:x.source.id, entries:x.entries.length, status:"synced" })),
-      ...sourceErrors.map((x:any, index:number) => ({ id:SOURCES[settledSources.indexOf(x)]?.id || "unknown", status:"failed", error:String(x.reason?.message || x.reason || "fetch failed") })),
+      ...sourceErrors.map(x => ({ id:x.source.id, status:"failed", error:String(x.reason instanceof Error ? x.reason.message : x.reason || "fetch failed") })),
     ],
     retainedServerLimit: 2,
     retentionScope: "two latest URLs per channel, source, and quality",
     languageFilter: ["Arabic", "Turkish"],
     filteredEntries: sourceResults.reduce((n,x)=>n+x.entries.length,0),
+    customSources: customRows?.length || 0,
   };
 }
 
