@@ -1,3 +1,5 @@
 [functions.series-auto-monitor]
 verify_jwt = false
 
+[functions.tv-channels-auto-sync]
+verify_jwt = false
