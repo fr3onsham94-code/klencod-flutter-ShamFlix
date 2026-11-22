@@ -181,6 +181,7 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
   if (oldError) throw oldError;
   const byName = new Map<string, any>();
   const byExternalKey = new Map<string, any>();
+  const claimedManualIds = new Set<string>();
   for (const row of oldChannels || []) {
     byName.set(normalizeName(row.name || ""), row);
     if (row.external_source_key) byExternalKey.set(row.external_source_key, row);
@@ -200,7 +201,8 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     const arabic = uniqueStreams.map(x=>x.name).find(x=>/[\u0600-\u06FF]/.test(x)) || arabicAlias(preferred.name);
     const channelName = arabic || preferred.name;
     const nameMatch = byName.get(normalizeName(channelName)) || byName.get(normalizeName(preferred.name));
-    const existing = byExternalKey.get(key) || (nameMatch && !nameMatch.external_source_key ? nameMatch : null);
+    const existing = byExternalKey.get(key) || (nameMatch && !nameMatch.external_source_key && !claimedManualIds.has(nameMatch.id) ? nameMatch : null);
+    if (existing?.id && !existing.external_source_key) claimedManualIds.add(existing.id);
     const channelRow: Record<string,unknown> = {
       name: channelName,
       name_en: preferred.name,
@@ -246,8 +248,8 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     return { ...server, channel_id: channelId };
   }).filter((row:any)=>row.channel_id);
 
-  for (let i=0; i<serverRows.length; i+=250) {
-    const { error } = await db.from("playback_servers").upsert(serverRows.slice(i,i+250), { onConflict:"source_key" });
+  for (let i=0; i<serverRows.length; i+=500) {
+    const { error } = await db.from("playback_servers").upsert(serverRows.slice(i,i+500), { onConflict:"source_key" });
     if (error) throw error;
   }
 
@@ -268,9 +270,9 @@ async function syncChannels(db: ReturnType<typeof createClient>) {
     const packageId = packageIds.get("قنوات تلقائية — " + category);
     if (channelId && packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
   }
-  for (let i=0; i<itemRows.length; i+=250) {
+  for (let i=0; i<itemRows.length; i+=500) {
     const { error } = await db.from("content_package_items")
-      .upsert(itemRows.slice(i,i+250), { onConflict:"package_id,content_type,content_id", ignoreDuplicates:true });
+      .upsert(itemRows.slice(i,i+500), { onConflict:"package_id,content_type,content_id", ignoreDuplicates:true });
     if (error) throw error;
   }
 
