@@ -91,10 +91,112 @@ class _ContentImportPageState extends State<ContentImportPage> {
   // Import visible Akwam episode pages and their public playback-page links.
   // Existing episodes/servers are updated or deduplicated, so rerunning a
   // category import can also backfill episodes for series imported earlier.
+  Future<Map<String, dynamic>?> _askSeasonMerge(
+    String importedTitle,
+    List<Map<String, dynamic>> existingSeries,
+  ) async {
+    if (existingSeries.isEmpty) return null;
+    String selectedSeriesId = existingSeries.first['id'].toString();
+    final seasonController = TextEditingController(text: '2');
+    try {
+      return await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('ضم الموسم إلى مسلسل موجود'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('تم العثور على مسلسل مشابه لـ: ' + importedTitle),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedSeriesId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'المسلسل الأساسي'),
+                  items: existingSeries.map((series) => DropdownMenuItem<String>(
+                    value: series['id'].toString(),
+                    child: Text(
+                      (series['title'] ?? 'بدون عنوان').toString() +
+                      (series['release_year'] == null ? '' : ' (' + series['release_year'].toString() + ')'),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  )).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedSeriesId = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: seasonController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'رقم الموسم لهذا الرابط',
+                    hintText: 'مثلاً 2',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'سيتم إضافة الحلقات والسيرفرات إلى الموسم المحدد دون حذف المسلسل أو مواسمه الحالية.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('تخطي'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final seasonNumber = int.tryParse(seasonController.text.trim());
+                  if (seasonNumber == null || seasonNumber < 1 || seasonNumber > 100) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('أدخل رقم موسم صحيحاً')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, {
+                    'series_id': selectedSeriesId,
+                    'season_number': seasonNumber,
+                  });
+                },
+                child: const Text('ضم الموسم'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      seasonController.dispose();
+    }
+  }
+
+  Future<void> _ensureSeriesInPackage(String seriesId) async {
+    if (packageId == null) return;
+    final existing = await AuthService.client
+        .from('content_package_items')
+        .select('id')
+        .eq('package_id', packageId!)
+        .eq('content_type', 'series')
+        .eq('content_id', seriesId)
+        .limit(1);
+    if (existing.isEmpty) {
+      await AuthService.client.from('content_package_items').insert({
+        'package_id': packageId,
+        'content_type': 'series',
+        'content_id': seriesId,
+      });
+    }
+  }
+
   Future<Map<String, int>> _saveAkwamSeriesEpisodes(
     String seriesId,
-    String pageUrl,
-  ) async {
+    String pageUrl, {
+    int seasonNumber = 1,
+  }) async {
     final importedEpisodes =
         await ContentPageImportService.inspectAkwamSeries(pageUrl);
     final seasons = await AuthService.client
@@ -103,16 +205,23 @@ class _ContentImportPageState extends State<ContentImportPage> {
         .eq('series_id', seriesId);
     String? seasonId;
     for (final season in seasons) {
-      if (season['season_number']?.toString() == '1') {
+      if (int.tryParse(season['season_number']?.toString() ?? '') == seasonNumber) {
         seasonId = season['id']?.toString();
         break;
       }
     }
     if (seasonId == null) {
+      final seasonName = seasonNumber == 1
+          ? 'الموسم الأول'
+          : seasonNumber == 2
+              ? 'الموسم الثاني'
+              : seasonNumber == 3
+                  ? 'الموسم الثالث'
+                  : 'الموسم ' + seasonNumber.toString();
       final savedSeason = await AuthService.client.from('seasons').insert({
         'series_id': seriesId,
-        'season_number': 1,
-        'name': 'الموسم الأول',
+        'season_number': seasonNumber,
+        'name': seasonName,
       }).select('id').single();
       seasonId = savedSeason['id']?.toString();
     }
@@ -224,6 +333,9 @@ class _ContentImportPageState extends State<ContentImportPage> {
       final rows = await AuthService.client.from(table).select('id,title,release_year');
       final known = <String>{};
       final existingIdsByKey = <String, String>{};
+      final existingSeries = type == 'series'
+          ? rows.map((row) => Map<String, dynamic>.from(row)).toList()
+          : <Map<String, dynamic>>[];
       for (final row in rows) {
         final existingKey = normalize(row['title']?.toString() ?? '') +
             '|' + (row['release_year']?.toString() ?? '');
@@ -245,8 +357,50 @@ class _ContentImportPageState extends State<ContentImportPage> {
         final key = normalize(title) + '|' + (year?.toString() ?? '');
         if (known.contains(key)) {
           setState(() => duplicates++);
-          // Backfill episodes for duplicate series when the user reruns an
-          // Akwam category import after adding the full-series importer.
+          // For a second Akwam URL of the same series, offer an explicit
+          // merge into the chosen existing series and season. Skipping keeps
+          // the previous duplicate/backfill behavior unchanged.
+          if (type == 'series' && _isAkwamPage(item['page_url'])) {
+            final mergeChoice = await _askSeasonMerge(title, existingSeries);
+            if (mergeChoice != null) {
+              final targetSeriesId = mergeChoice['series_id'].toString();
+              final targetSeasonNumber = mergeChoice['season_number'] as int;
+              try {
+                await _ensureSeriesInPackage(targetSeriesId);
+                akwamSeriesCount++;
+                final stats = await _saveAkwamSeriesEpisodes(
+                  targetSeriesId,
+                  item['page_url'].toString(),
+                  seasonNumber: targetSeasonNumber,
+                );
+                episodeCount += stats['episodes'] ?? 0;
+                episodeServerCount += stats['servers'] ?? 0;
+                episodeImportFailures += stats['failed'] ?? 0;
+                episodesWithoutServers += stats['without_servers'] ?? 0;
+                if (monitorSeries) {
+                  final sourceUri = Uri.tryParse(item['page_url']?.toString() ?? '');
+                  if (sourceUri != null &&
+                      (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
+                      sourceUri.host.isNotEmpty) {
+                    await AuthService.client.from('series_source_monitors').upsert({
+                      'series_id': targetSeriesId,
+                      'source_url': sourceUri.toString(),
+                      'source_host': sourceUri.host,
+                      'season_number': targetSeasonNumber,
+                      'check_interval_minutes': monitorInterval,
+                      'is_active': true,
+                    }, onConflict: 'series_id,source_url');
+                    monitorsCreated++;
+                  }
+                }
+              } catch (_) {
+                episodeImportFailures++;
+              }
+              continue;
+            }
+          }
+          // Backfill episodes for duplicate series when the user skips the
+          // merge prompt or reruns an existing import.
           if (type == 'series' && _isAkwamPage(item['page_url'])) {
             final existingId = existingIdsByKey[key];
             if (existingId != null) {
