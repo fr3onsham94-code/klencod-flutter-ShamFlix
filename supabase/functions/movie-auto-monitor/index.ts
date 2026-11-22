@@ -183,8 +183,28 @@ function extractSources(html: string, page: URL) {
 }
 async function inspectMovie(card: {url:string;title:string;poster:string}, host: string, category: string) {
   const page = await fetchHtml(card.url,host);
+  let sources=extractSources(page.html,page.url);
+  let watchUrl:string|null=null;
+  for(const match of page.html.matchAll(/<a\\b[^>]*>/gi)){
+    const a=attrs(match[0]),href=a.href;
+    if(!href)continue;
+    const label=clean(a.title||a["aria-label"]||match[0].replace(/<[^>]+>/g,""));
+    try{
+      const candidate=validateUrl(new URL(href,page.url).toString());
+      if(candidate.hostname===host && (/\\/(?:watch|view)(?:\\/|$)/i.test(candidate.pathname)||/مشاهدة|watch/i.test(label))){
+        watchUrl=candidate.toString();break;
+      }
+    }catch{}
+  }
+  if(watchUrl){
+    try{
+      const watch=await fetchHtml(watchUrl,host);
+      sources=[...sources,...extractSources(watch.html,watch.url)];
+    }catch{}
+  }
+  const unique=[...new Map(sources.map(item=>[item.url,item])).values()].slice(0,60);
   return {...parseMetadata(page.html,page.url,card.title,card.poster,category),
-    page_url:page.url.toString(),sources:extractSources(page.html,page.url)};
+    page_url:page.url.toString(),sources:unique};
 }
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok",{headers:corsHeaders});
