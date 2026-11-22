@@ -1233,6 +1233,93 @@ class _AdminPageState extends State<AdminPage> {
     return data;
   }
 
+  Future<void> _saveImportedAkwamEpisodes(
+    String seriesId,
+    List<Map<String, dynamic>> importedEpisodes,
+  ) async {
+    final seasons = await _extraLoad(
+      'seasons',
+      {'series_id': 'eq.$seriesId'},
+      order: 'season_number.asc',
+    );
+    String? seasonId;
+    for (final season in seasons) {
+      if (season['season_number']?.toString() == '1') {
+        seasonId = season['id']?.toString();
+        break;
+      }
+    }
+    seasonId ??= await _extraSave('seasons', {
+      'series_id': seriesId,
+      'season_number': 1,
+      'name': 'الموسم الأول',
+    });
+    if (seasonId == null) {
+      throw Exception('تم حفظ المسلسل لكن تعذر إنشاء الموسم الأول');
+    }
+
+    final existingEpisodes = await _extraLoad(
+      'episodes',
+      {'season_id': 'eq.$seasonId'},
+      order: 'episode_number.asc',
+    );
+    final existingNumbers = existingEpisodes
+        .map((episode) => int.tryParse(episode['episode_number']?.toString() ?? ''))
+        .whereType<int>()
+        .toSet();
+
+    var added = 0;
+    for (final item in importedEpisodes) {
+      final number = int.tryParse(item['episode_number']?.toString() ?? '');
+      if (number == null || number < 1 || existingNumbers.contains(number)) continue;
+      final servers = (item['servers'] as List? ?? [])
+          .whereType<Map>()
+          .map((server) => Map<String, dynamic>.from(server))
+          .where((server) => (server['url']?.toString() ?? '').trim().isNotEmpty)
+          .toList();
+      final firstUrl = servers.isEmpty ? '' : servers.first['url'].toString();
+      final episodeId = await _extraSave('episodes', {
+        'season_id': seasonId,
+        'episode_number': number,
+        'title': (item['title']?.toString().trim().isNotEmpty == true)
+            ? item['title'].toString().trim()
+            : 'الحلقة $number',
+        'description': item['watch_url']?.toString(),
+        'stream_url': firstUrl,
+        'is_published': servers.isNotEmpty,
+      });
+      if (episodeId == null) continue;
+      if (servers.isNotEmpty) {
+        final rows = <Map<String, dynamic>>[];
+        for (var index = 0; index < servers.length; index++) {
+          final server = servers[index];
+          rows.add({
+            'episode_id': episodeId,
+            'server_name': (server['name']?.toString().trim().isNotEmpty == true)
+                ? server['name'].toString().trim()
+                : 'سيرفر ${index + 1}',
+            'stream_url': server['url'].toString(),
+            'sort_order': index,
+            'is_active': true,
+          });
+        }
+        final response = await http.post(
+          _extraTableUrl('playback_servers'),
+          headers: headers,
+          body: jsonEncode(rows),
+        );
+        if (response.statusCode != 200 &&
+            response.statusCode != 201 &&
+            response.statusCode != 204) {
+          throw Exception(_readError(response));
+        }
+      }
+      existingNumbers.add(number);
+      added++;
+    }
+    showMessage('تم استيراد $added حلقة جديدة وربط سيرفراتها المتاحة');
+  }
+
   Future<void> openCatalogForm(
     String section, {
     Map<String, dynamic>? existing,
@@ -1273,8 +1360,8 @@ class _AdminPageState extends State<AdminPage> {
     );
     final pageUrlController = TextEditingController();
     bool pageImportLoading = false;
-    bool published = existing?['is_published'] == true;
     bool isLive = existing?['is_live'] != false;
+    List<Map<String, dynamic>> importedAkwamEpisodes = [];
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
     final packageType = isSeries ? 'series' : 'channel';
@@ -1322,6 +1409,10 @@ class _AdminPageState extends State<AdminPage> {
                             setDialogState(() => pageImportLoading = true);
                             try {
                               final data = await _inspectContentPage(pageUrlController.text, 'series');
+                              final pageHost = Uri.tryParse(pageUrlController.text.trim())?.host.toLowerCase() ?? '';
+                              if (pageHost == 'akwam.ss' || pageHost.endsWith('.akwam.ss')) {
+                                importedAkwamEpisodes = await ContentPageImportService.inspectAkwamSeries(pageUrlController.text.trim());
+                              }
                               if (!dialogContext.mounted) return;
                               setDialogState(() {
                                 titleController.text = data['title']?.toString() ?? titleController.text;
@@ -1334,7 +1425,9 @@ class _AdminPageState extends State<AdminPage> {
                                 yearController.text = data['release_year']?.toString() ?? '';
                                 ratingController.text = data['rating']?.toString() ?? '';
                               });
-                              showMessage('تم تحليل الصفحة وجلب البيانات المتاحة');
+                              showMessage(importedAkwamEpisodes.isEmpty
+                                  ? 'تم تحليل الصفحة وجلب البيانات المتاحة'
+                                  : 'تم جلب بيانات المسلسل و\u200e${importedAkwamEpisodes.length}\u200e حلقة من أكوام');
                             } catch (e) {
                               if (dialogContext.mounted) showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
                             } finally {
@@ -1492,12 +1585,6 @@ class _AdminPageState extends State<AdminPage> {
                               );
                             }).toList(),
                     ),
-                    SwitchListTile(
-                      value: published,
-                      activeColor: adminGold,
-                      title: Text('نشر المحتوى للمستخدمين', style: TextStyle(color: AppTheme.text)),
-                      onChanged: (value) => setDialogState(() => published = value),
-                    ),
                   ],
                 ),
               ),
@@ -1510,16 +1597,15 @@ class _AdminPageState extends State<AdminPage> {
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () {
-                  if (titleController.text.trim().isEmpty ||
-                      (!isSeries && _firstServerUrl(serverDrafts).isEmpty)) {
-                    showMessage(isSeries ? 'أدخل اسم المسلسل' : 'أدخل اسم القناة ورابط البث', isError: true);
+                  if (titleController.text.trim().isEmpty) {
+                    showMessage(isSeries ? 'أدخل اسم المسلسل' : 'أدخل اسم القناة', isError: true);
                     return;
                   }
                   final data = <String, dynamic>{
                     (isSeries ? 'title' : 'name'): titleController.text.trim(),
                     (isSeries ? 'poster_url' : 'logo_url'): posterController.text.trim().isEmpty ? null : posterController.text.trim(),
                     'category': categoryController.text.trim().isEmpty ? null : categoryController.text.trim(),
-                    'is_published': published,
+                    'is_published': true,
                   };
                   if (isSeries) {
                     data.addAll({
@@ -1567,6 +1653,9 @@ class _AdminPageState extends State<AdminPage> {
       final savedId = await saveCatalogItem(section, result, id: existing?['id']?.toString());
       if (savedId != null) {
         if (!isSeries) await _saveServerDrafts('channel', savedId, serverDrafts);
+        if (isSeries && importedAkwamEpisodes.isNotEmpty) {
+          await _saveImportedAkwamEpisodes(savedId, importedAkwamEpisodes);
+        }
         await _saveContentPackageAssignments(packageType, savedId, selectedPackageIds);
       }
       showMessage(existing == null ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح');
@@ -2455,12 +2544,6 @@ class _AdminPageState extends State<AdminPage> {
                     adminField(description, 'وصف الحلقة', maxLines: 3),
                     adminField(poster, 'رابط صورة الحلقة'),
                     _serverDraftsEditor(drafts: serverDrafts, setDialogState: setFormState),
-                    SwitchListTile(
-                      value: published,
-                      activeColor: adminGold,
-                      title: Text('نشر الحلقة', style: TextStyle(color: AppTheme.text)),
-                      onChanged: (v) => setFormState(() => published = v),
-                    ),
                   ],
                 ),
               ),
@@ -2475,10 +2558,6 @@ class _AdminPageState extends State<AdminPage> {
                     showMessage('أدخل رقم الحلقة وعنوانها', isError: true);
                     return;
                   }
-                  if (_firstServerUrl(serverDrafts).isEmpty) {
-                    showMessage('أضف رابط سيرفر واحد على الأقل للحلقة', isError: true);
-                    return;
-                  }
                   Navigator.pop(ctx, {
                     'season_id': seasonId,
                     'episode_number': n,
@@ -2486,7 +2565,7 @@ class _AdminPageState extends State<AdminPage> {
                     'description': description.text.trim().isEmpty ? null : description.text.trim(),
                     'poster_url': poster.text.trim().isEmpty ? null : poster.text.trim(),
                     'stream_url': _firstServerUrl(serverDrafts),
-                    'is_published': published,
+                    'is_published': true,
                   });
                 },
                 child: const Text('حفظ الحلقة'),
@@ -3533,8 +3612,6 @@ class _AdminPageState extends State<AdminPage> {
       text: existing?['stream_url']?.toString() ?? '',
     );
 
-    bool published =
-        existing?['is_published'] == true;
     bool tmdbLoading = false;
     Map<String, dynamic>? tmdbPreview;
     const packageType = 'movie';
@@ -3852,22 +3929,6 @@ class _AdminPageState extends State<AdminPage> {
                                   );
                                 }).toList(),
                         ),
-                        CheckboxListTile(
-                          value: published,
-                          activeColor: adminGold,
-                          checkColor: Colors.black,
-                          title: Text(
-                            'نشر الفيلم للمستخدمين',
-                            style: TextStyle(
-                              color: AppTheme.text,
-                            ),
-                          ),
-                          onChanged: (value) {
-                            setDialogState(() {
-                              published = value ?? false;
-                            });
-                          },
-                        ),
                       ],
                     ),
                   ),
@@ -3904,11 +3965,6 @@ class _AdminPageState extends State<AdminPage> {
                         );
                         return;
                       }
-                      if (_firstServerUrl(serverDrafts).isEmpty) {
-                        showMessage('أضف رابط سيرفر واحد على الأقل', isError: true);
-                        return;
-                      }
-
                       final tmdbId = _extractTmdbId(
                         tmdbController.text,
                       );
@@ -3933,7 +3989,7 @@ class _AdminPageState extends State<AdminPage> {
                         ),
                         'stream_url':
                             _firstServerUrl(serverDrafts),
-                        'is_published': published,
+                        'is_published': true,
                       });
                     },
                     child: const Text('حفظ الفيلم'),
