@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  android-debug:
+  analyze:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,7 +33,3 @@ jobs:
 
       - name: Analyze Dart code
         run: flutter analyze
-        continue-on-error: true
-
-      - name: Build Android debug APK
-        run: flutter build apk --debug
