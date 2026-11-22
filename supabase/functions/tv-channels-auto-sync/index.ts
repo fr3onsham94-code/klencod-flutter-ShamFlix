@@ -3,13 +3,31 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 type PlaylistSource = { id: string; name: string; url: string; customId?: string };
 
 const BUILTIN_SOURCES: PlaylistSource[] = [
-  { id: "iptv-org", name: "IPTV-ORG", url: "https://iptv-org.github.io/iptv/index.category.m3u" },
+  // Original core sources
+  { id: "iptv-org", name: "IPTV-ORG CATEGORIES", url: "https://iptv-org.github.io/iptv/index.category.m3u" },
   { id: "free-tv", name: "FREE-TV", url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" },
   { id: "nexus", name: "IPTV-NEXUS", url: "https://dearbulut.github.io/iptv/playlists/index.m3u" },
-  { id: "tdtchannels", name: "TDTCHANNELS", url: "https://www.tdtchannels.com/lists/tv.m3u8" },
+  // Additional public playlists referenced by the Androidsis guide
+  { id: "iptv-org-all", name: "IPTV-ORG ALL", url: "https://iptv-org.github.io/iptv/index.m3u" },
+  { id: "iptv-org-spanish-language", name: "IPTV-ORG SPANISH LANGUAGE", url: "https://iptv-org.github.io/iptv/languages/spa.m3u" },
+  { id: "iptv-org-spain", name: "IPTV-ORG SPAIN", url: "https://iptv-org.github.io/iptv/countries/es.m3u" },
+  { id: "tdtchannels", name: "TDTCHANNELS TV M3U8", url: "https://www.tdtchannels.com/lists/tv.m3u8" },
+  { id: "tdtchannels-m3u", name: "TDTCHANNELS TV M3U", url: "https://www.tdtchannels.com/lists/tv.m3u" },
   { id: "m3ucl-total", name: "M3U.CL TOTAL", url: "https://www.m3u.cl/lista/total.m3u" },
   { id: "m3ucl-music", name: "M3U.CL MUSIC", url: "https://www.m3u.cl/lista/musica.m3u" },
   { id: "m3ucl-religious", name: "M3U.CL RELIGIOUS", url: "https://www.m3u.cl/lista/religiosos.m3u" },
+  { id: "m3ucl-ar", name: "M3U.CL ARGENTINA", url: "https://www.m3u.cl/lista/AR.m3u" },
+  { id: "m3ucl-bo", name: "M3U.CL BOLIVIA", url: "https://www.m3u.cl/lista/BO.m3u" },
+  { id: "m3ucl-br", name: "M3U.CL BRAZIL", url: "https://www.m3u.cl/lista/BR.m3u" },
+  { id: "m3ucl-cl", name: "M3U.CL CHILE", url: "https://www.m3u.cl/lista/CL.m3u" },
+  { id: "m3ucl-co", name: "M3U.CL COLOMBIA", url: "https://www.m3u.cl/lista/CO.m3u" },
+  { id: "m3ucl-ec", name: "M3U.CL ECUADOR", url: "https://www.m3u.cl/lista/EC.m3u" },
+  { id: "m3ucl-es", name: "M3U.CL SPAIN", url: "https://www.m3u.cl/lista/ES.m3u" },
+  { id: "m3ucl-mx", name: "M3U.CL MEXICO", url: "https://www.m3u.cl/lista/MX.m3u" },
+  { id: "m3ucl-py", name: "M3U.CL PARAGUAY", url: "https://www.m3u.cl/lista/PY.m3u" },
+  { id: "m3ucl-pe", name: "M3U.CL PERU", url: "https://www.m3u.cl/lista/PE.m3u" },
+  { id: "m3ucl-do", name: "M3U.CL DOMINICAN REPUBLIC", url: "https://www.m3u.cl/lista/DO.m3u" },
+  { id: "m3ucl-ve", name: "M3U.CL VENEZUELA", url: "https://www.m3u.cl/lista/VE.m3u" },
 ];
 const MAX_CUSTOM_SOURCES = 20;
 
