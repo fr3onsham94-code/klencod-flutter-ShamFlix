@@ -101,7 +101,7 @@ class ContentCategoryImportService {
       }
       if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
         await streamed.stream.drain();
-        throw Exception('الموقع رفض قراءة الصفحة (HTTP \${streamed.statusCode})');
+        throw Exception('الموقع رفض قراءة الصفحة (HTTP ${streamed.statusCode})');
       }
       final response = await http.Response.fromStream(streamed);
       if (response.bodyBytes.length > maxHtmlBytes) throw Exception('حجم صفحة الموقع أكبر من الحد المسموح للتحليل');
