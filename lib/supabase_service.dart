@@ -123,7 +123,7 @@ class SupabaseService {
     return _getRows('playback_servers', {
       foreignKey: 'eq.$contentId',
       'is_active': 'eq.true',
-      'order': 'sort_order.asc',
+      'order': 'sort_order.asc,created_at.asc',
     });
   }
 
