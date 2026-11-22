@@ -136,7 +136,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
         backgroundColor: packagePanel,
         title: Text('مسح محتوى الباقة', style: TextStyle(color: packageGold)),
         content: Text(
-          'سيتم إزالة جميع العناصر المرتبطة بباقة «\${item['name']}» فقط. ستبقى الباقة وإعداداتها والمحتويات الأصلية في المكتبة والباقات الأخرى كما هي. مراقبة المصدر التلقائية ستبقى مفعّلة.',
+          'سيتم إزالة جميع العناصر المرتبطة بباقة «${item['name']}» فقط. ستبقى الباقة وإعداداتها والمحتويات الأصلية في المكتبة والباقات الأخرى كما هي. مراقبة المصدر التلقائية ستبقى مفعّلة.',
           style: TextStyle(color: AppTheme.secondaryText),
         ),
         actions: [
