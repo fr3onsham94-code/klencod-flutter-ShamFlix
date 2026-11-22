@@ -26,6 +26,7 @@ import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
 import 'shamflix_presence_service.dart';
 import 'stream_source_detector.dart';
+import 'live_matches_panel.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -3599,6 +3600,9 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   bool sidebarOpen=false;
   double sidebarWidth=110,sidebarButtonSize=42,packageFontSize=11,sectionFontSize=12,packageIconSize=15,packageItemHeight=38;
 
+  bool get _isMatchesPackage => packages.any((p) =>
+      p['id']?.toString() == selectedPackageId &&
+      p['name']?.toString().trim() == 'مباريات اليوم');
 
   @override
   void initState() {
@@ -3719,6 +3723,10 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   }
 
   Future<void> _loadChannels() async {
+    if (_isMatchesPackage) {
+      channels = [];
+      return;
+    }
     if (selectedPackageId == null) {
       channels = await SupabaseService.getChannels();
       return;
@@ -3748,6 +3756,60 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       error = e.toString();
     }
     if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _openMatchServer(
+    Map<String, dynamic> match,
+    List<Map<String, dynamic>> servers,
+    int serverIndex,
+  ) async {
+    if (serverIndex < 0 || serverIndex >= servers.length) return;
+    final server = servers[serverIndex];
+    final url = valueOf(server['stream_url']).trim();
+    if (url.isEmpty) return;
+
+    final headers = <String, String>{};
+    final rawHeaders = server['request_headers'];
+    if (rawHeaders is Map) {
+      for (final entry in rawHeaders.entries) {
+        final key = entry.key.toString();
+        final value = entry.value?.toString() ?? '';
+        if (value.isNotEmpty &&
+            !RegExp(r'^(host|content-length|connection|cookie|authorization|proxy-|origin|forwarded|x-forwarded-)', caseSensitive: false).hasMatch(key)) {
+          headers[key] = value;
+        }
+      }
+    }
+    final userAgent = valueOf(server['user_agent']).trim();
+    final referer = valueOf(server['referer']).trim();
+    if (userAgent.isNotEmpty) headers['User-Agent'] = userAgent;
+    if (referer.isNotEmpty) headers['Referer'] = referer;
+
+    final title = '${match['home_team']} × ${match['away_team']}';
+    final isWebPage = url.contains('/albaplayer/') ||
+        url.contains('syrialive.my/matches/') ||
+        url.contains('pandab-hd.com/') ||
+        RegExp(r'\\.php(?:\\?|$)', caseSensitive: false).hasMatch(url);
+    if (isWebPage) {
+      await Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ShamFlixWebPage(
+          url: url,
+          title: title,
+          headers: headers,
+        ),
+      ));
+      return;
+    }
+
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => ShamFlixPlayerPage(
+        url: url,
+        title: title,
+        servers: servers,
+        initialServerIndex: serverIndex,
+        progressKey: 'match-${match['id']}',
+      ),
+    ));
   }
 
   Future<void> _playChannel(Map<String, dynamic> channel) async {
@@ -3965,11 +4027,16 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                     ? Center(child: CircularProgressIndicator(color: livePrimary))
                                     : error != null
                                         ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
-                                        : channels.isEmpty
-                                            ? Center(child: Text(
-                                                appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
-                                                style: TextStyle(color: liveSecondaryText)))
-                                            : RefreshIndicator(
+                                        : _isMatchesPackage
+                                            ? LiveMatchesPanel(
+                                                key: ValueKey('matches-$selectedPackageId'),
+                                                onServerSelected: _openMatchServer,
+                                              )
+                                            : channels.isEmpty
+                                                ? Center(child: Text(
+                                                    appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
+                                                    style: TextStyle(color: liveSecondaryText)))
+                                                : RefreshIndicator(
                                                 color: livePrimary,
                                                 onRefresh: _load,
                                                 child: GridView.builder(
@@ -5174,10 +5241,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 class ShamFlixWebPage extends StatefulWidget {
   final String url;
   final String title;
+  final Map<String, String> headers;
   final bool playerOnly;
   final bool returnToPlayer;
   final ValueChanged<List<Map<String, dynamic>>>? onSourcesDetected;
-  const ShamFlixWebPage({super.key, required this.url, required this.title, this.playerOnly = false, this.returnToPlayer = false, this.onSourcesDetected});
+  const ShamFlixWebPage({super.key, required this.url, required this.title, this.headers = const {}, this.playerOnly = false, this.returnToPlayer = false, this.onSourcesDetected});
   @override
   State<ShamFlixWebPage> createState() => _ShamFlixWebPageState();
 }
@@ -5445,7 +5513,7 @@ class _ShamFlixWebPageState extends State<ShamFlixWebPage> {
           }
         },
       ))
-      ..loadRequest(Uri.parse(widget.url));
+      ..loadRequest(Uri.parse(widget.url), headers: widget.headers);
     if (widget.playerOnly) {
       unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
       unawaited(SystemChrome.setPreferredOrientations(const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]));
