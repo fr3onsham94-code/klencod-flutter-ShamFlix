@@ -7,8 +7,8 @@ import 'content_page_import_service.dart';
 /// Discovers public detail pages from a public category/listing page.
 /// It follows ordinary pagination only and never bypasses access controls.
 class ContentCategoryImportService {
-  static const int maxPages = 8;
-  static const int maxItems = 120;
+  static const int maxPages = 100;
+  static const int maxItems = 500;
   static const int maxHtmlBytes = 2 * 1024 * 1024;
 
   static Future<List<Map<String, dynamic>>> scan(
@@ -87,6 +87,8 @@ class ContentCategoryImportService {
         ..headers.addAll({
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
+          'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+          'Cache-Control': 'no-cache',
         });
       final streamed = await client.send(request).timeout(const Duration(seconds: 18));
       if (streamed.statusCode >= 300 && streamed.statusCode < 400) {
