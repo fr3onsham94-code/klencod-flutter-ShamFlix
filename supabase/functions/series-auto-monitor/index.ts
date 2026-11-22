@@ -70,6 +70,7 @@ function parseEpisodeNumber(text: string): number | null {
     /(?:episode|الحلقة|حلقة|ep)\s*[-:#_]?\s*(\d{1,4})/i,
     /(?:episode|ep)[-_](\d{1,4})/i,
     /-(\d{1,4})(?:[/?#]|$)/i,
+    /\/(?:episode|episodes)\/[^/]*?(\d{1,4})(?:\/|$)/i,
   ]) {
     const n = Number(pattern.exec(text)?.[1]);
     if (Number.isInteger(n) && n > 0 && n <= 9999) return n;
@@ -112,7 +113,7 @@ function extractSources(html: string, base: URL) {
   }
   return [...found.values()].slice(0,15);
 }
-async function inspectEpisode(link: {url:string;title:string;number:number}, host: string) {
+async function inspectEpisode(link: {url:string;title:string;number:number}, host: string, fallbackSeason: number) {
   const page = await fetchHtml(link.url, host);
   const title = titleFromHtml(page.html) || link.title || ("الحلقة " + link.number);
   let watchUrl: string | null = null;
@@ -129,7 +130,13 @@ async function inspectEpisode(link: {url:string;title:string;number:number}, hos
   }
   if (watchUrl && !sources.some(s=>s.url===watchUrl)) sources.push({url:watchUrl,name:"صفحة مشاهدة الحلقة"});
   const unique = [...new Map(sources.map(s=>[s.url,s])).values()].slice(0,15);
-  return {number:link.number,title,streamUrl:unique[0]?.url ?? null,sources:unique};
+  return {
+    number: link.number,
+    seasonNumber: parseSeason(title + " " + link.url, fallbackSeason),
+    title,
+    streamUrl: unique[0]?.url ?? null,
+    sources: unique,
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -159,26 +166,26 @@ Deno.serve(async (req: Request) => {
       const listing = await fetchHtml(source.toString(),source.hostname);
       const links = extractEpisodeLinks(listing.html,listing.url);
       if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة في صفحة المسلسل");
-      const seasonNumber = parseSeason(titleFromHtml(listing.html)+" "+listing.html,Number(monitor.season_number)||1);
-      const {data:oldSeason,error:seasonReadError} = await db.from("seasons").select("id")
-        .eq("series_id",monitor.series_id).eq("season_number",seasonNumber).maybeSingle();
-      if (seasonReadError) throw seasonReadError;
-      let seasonId = oldSeason?.id;
-      if (!seasonId) {
-        const {data:newSeason,error:seasonInsertError} = await db.from("seasons").insert({
-          series_id:monitor.series_id,season_number:seasonNumber,name:"الموسم "+seasonNumber,
-        }).select("id").single();
-        if (seasonInsertError) throw seasonInsertError;
-        seasonId = newSeason.id;
-      }
+      const defaultSeason = parseSeason(titleFromHtml(listing.html)+" "+listing.html,Number(monitor.season_number)||1);
       for (const link of links) {
         try {
+          const episode = await inspectEpisode(link,source.hostname,defaultSeason);
+          if (!episode.streamUrl) { summary.skipped++; continue; }
+          const {data:oldSeason,error:seasonReadError} = await db.from("seasons").select("id")
+            .eq("series_id",monitor.series_id).eq("season_number",episode.seasonNumber).maybeSingle();
+          if (seasonReadError) throw seasonReadError;
+          let seasonId = oldSeason?.id;
+          if (!seasonId) {
+            const {data:newSeason,error:seasonInsertError} = await db.from("seasons").insert({
+              series_id:monitor.series_id,season_number:episode.seasonNumber,name:"الموسم "+episode.seasonNumber,
+            }).select("id").single();
+            if (seasonInsertError) throw seasonInsertError;
+            seasonId = newSeason.id;
+          }
           const {data:oldEpisode,error:duplicateError} = await db.from("episodes").select("id")
-            .eq("season_id",seasonId).eq("episode_number",link.number).maybeSingle();
+            .eq("season_id",seasonId).eq("episode_number",episode.number).maybeSingle();
           if (duplicateError) throw duplicateError;
           if (oldEpisode) { summary.skipped++; continue; }
-          const episode = await inspectEpisode(link,source.hostname);
-          if (!episode.streamUrl) { summary.skipped++; continue; }
           const {data:saved,error:saveError} = await db.from("episodes").insert({
             season_id:seasonId,episode_number:episode.number,title:episode.title||("الحلقة "+episode.number),
             stream_url:episode.streamUrl,is_published:true,
