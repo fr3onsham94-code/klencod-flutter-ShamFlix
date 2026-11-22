@@ -1369,7 +1369,7 @@ class _AdminPageState extends State<AdminPage> {
       'content_type': 'eq.$packageType',
     }, order: 'sort_order.asc,created_at.asc');
     final selectedPackageIds = existing == null
-        ? <String>[]
+        ? _defaultContentPackageIds(packageType, packageOptions)
         : await _loadAssignedPackageIds(packageType, existing['id'].toString());
     final serverDrafts = isSeries
         ? <Map<String, dynamic>>[]
@@ -1810,6 +1810,27 @@ class _AdminPageState extends State<AdminPage> {
 
   Uri _extraTableUrl(String table) =>
       Uri.parse(SupabaseService.projectUrl + '/rest/v1/' + table);
+
+  List<String> _defaultContentPackageIds(
+    String contentType,
+    List<Map<String, dynamic>> packageOptions,
+  ) {
+    String normalize(String value) => value
+        .trim()
+        .toLowerCase()
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ى', 'ي');
+
+    final requiredNames = contentType == 'series'
+        ? {'all', 'يعرض الان'}
+        : {'all'};
+    return packageOptions.where((package) {
+      final name = normalize(package['name']?.toString() ?? '');
+      return requiredNames.contains(name);
+    }).map((package) => package['id'].toString()).toSet().toList();
+  }
 
   Future<List<String>> _loadAssignedPackageIds(String contentType, String contentId) async {
     final rows = await _extraLoad('content_package_items', {
@@ -3624,7 +3645,7 @@ class _AdminPageState extends State<AdminPage> {
       'content_type': 'eq.movie',
     }, order: 'sort_order.asc,created_at.asc');
     final selectedPackageIds = existing == null
-        ? <String>[]
+        ? _defaultContentPackageIds(packageType, packageOptions)
         : await _loadAssignedPackageIds(packageType, existing['id'].toString());
     final serverDrafts = await _loadServerDrafts(
       'movie',
