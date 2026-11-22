@@ -842,12 +842,7 @@ class _HomePageState extends State<HomePage> {
               }
 
               final sourceItems = snapshot.data ?? [];
-              final items = title == appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler')
-                  ? sourceItems.where((item) {
-                      final category = valueOf(item['category']).toLowerCase();
-                      return category.contains('أنمي') || category.contains('انمي') || category.contains('anime');
-                    }).toList()
-                  : sourceItems;
+              final items = sourceItems.take(2).toList();
 
               if (items.isEmpty) {
                 return Center(
@@ -1134,7 +1129,6 @@ class _HomePageState extends State<HomePage> {
           continueWatchingSection(),
           mediaSection(appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'), movies, isSeries: false),
           mediaSection(appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'), series, isSeries: true),
-          mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), series, isSeries: true),
           recentChannelsSection(),
           const SizedBox(height: 30),
         ],
@@ -1246,7 +1240,7 @@ class PackageCatalogPage extends StatefulWidget {
 }
 
 class _PackageCatalogPageState extends State<PackageCatalogPage> {
-  String get themeSection => widget.contentType == 'movie' ? 'movies' : 'series';
+  String get themeSection => 'live';
   Color get sectionBackground => AppTheme.sectionColor(themeSection, 'background');
   Color get sectionPrimary => AppTheme.sectionColor(themeSection, 'primary');
   Color get sectionPanel => AppTheme.sectionColor(themeSection, 'panel');
@@ -1254,6 +1248,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   Color get sectionSecondaryText => AppTheme.sectionColor(themeSection, 'secondaryText');
   Color get sectionButton => AppTheme.sectionColor(themeSection, 'button');
   Color get sectionBorder => AppTheme.sectionColor(themeSection, 'border');
+  Color get sectionPackageBorder => AppTheme.sectionColor(themeSection, 'packageBorder');
   Color get sectionBadge => AppTheme.sectionColor(themeSection, 'badge');
 
   bool loading = true;
@@ -1548,7 +1543,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: active ? sectionPrimary : sectionBorder,
+                            color: active ? sectionPrimary : sectionPackageBorder,
                             width: active ? 1.2 : 0.7,
                           ),
                         ),
@@ -3391,6 +3386,15 @@ class ChannelsPackagesPage extends StatefulWidget {
 }
 
 class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
+  Color get liveBackground => AppTheme.sectionColor('live', 'background');
+  Color get livePrimary => AppTheme.sectionColor('live', 'primary');
+  Color get livePanel => AppTheme.sectionColor('live', 'panel');
+  Color get liveText => AppTheme.sectionColor('live', 'text');
+  Color get liveSecondaryText => AppTheme.sectionColor('live', 'secondaryText');
+  Color get liveButton => AppTheme.sectionColor('live', 'button');
+  Color get liveBorder => AppTheme.sectionColor('live', 'border');
+  Color get livePackageBorder => AppTheme.sectionColor('live', 'packageBorder');
+
   bool loading = true;
   String? error;
   List<Map<String, dynamic>> packages = [];
@@ -3402,15 +3406,18 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   @override
   void initState() {
     super.initState();
+    AppTheme.revision.addListener(_onThemeChanged);
     _load();
     channelRefreshNotifier.addListener(_onExternalRefresh);
   }
 
   void _onExternalRefresh() { _load(); }
+  void _onThemeChanged() { if (mounted) setState(() {}); }
 
   @override
   void dispose() {
     channelRefreshNotifier.removeListener(_onExternalRefresh);
+    AppTheme.revision.removeListener(_onThemeChanged);
     super.dispose();
   }
 
@@ -3542,7 +3549,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       onTap: () => _playChannel(channel),
       child: Container(
         decoration: BoxDecoration(
-          color: active ? const Color(0xFF302719) : panel,
+          color: active ? const Color(0xFF302719) : livePanel,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: active ? gold : Colors.white10, width: active ? 1.4 : 0.7),
         ),
@@ -3556,24 +3563,24 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                   Center(
                     child: Container(
                       width: double.infinity,
-                      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(color: liveBackground, borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.all(5),
                       child: logo.isEmpty
-                          ? Icon(Icons.live_tv, color: gold, size: 30)
+                          ? Icon(Icons.live_tv, color: livePrimary, size: 30)
                           : Image.network(logo, fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: gold, size: 30)),
+                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: livePrimary, size: 30)),
                     ),
                   ),
                   Positioned(
                     top: 4, right: 4,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(color: const Color(0xFFE50914), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: liveButton, borderRadius: BorderRadius.circular(4)),
                       child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   if (active)
-                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: gold, size: 16)),
+                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: livePrimary, size: 16)),
                 ],
               ),
             ),
@@ -3593,8 +3600,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     return Container(
       width: 126,
       decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+        color: liveBackground,
+        border: Border(right: BorderSide(color: liveBorder)),
       ),
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
@@ -3602,7 +3609,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(7, 4, 7, 10),
             child: Text(appText('الباقات', 'PACKAGES', 'PAKETLER'),
-              style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+              style: TextStyle(color: liveText, fontSize: 11, fontWeight: FontWeight.bold)),
           ),
           ...packages.map((package) {
             final id = package['id'].toString();
@@ -3610,7 +3617,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Material(
-                color: active ? const Color(0xFFE50914) : panel,
+                color: active ? const Color(0xFFE50914) : livePanel,
                 borderRadius: BorderRadius.circular(8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
@@ -3641,23 +3648,25 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
-      child: Column(
+      child: Container(
+        color: liveBackground,
+        child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
             child: Row(children: [
-              Container(width: 4, height: 22, color: gold),
+              Container(width: 4, height: 22, color: livePrimary),
               const SizedBox(width: 9),
               Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
-                style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: liveText, fontSize: 19, fontWeight: FontWeight.bold)),
               const Spacer(),
-              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: gold)),
+              IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: livePrimary)),
             ]),
           ),
           if (starting)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: LinearProgressIndicator(color: gold, backgroundColor: panel),
+              child: LinearProgressIndicator(color: livePrimary, backgroundColor: livePanel),
             ),
           Expanded(
             child: Row(
@@ -3676,20 +3685,20 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                             child: Text(
                               packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
                                 orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
-                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                              style: TextStyle(color: liveText, fontSize: 14, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
                       Expanded(
                         child: loading
-                            ? Center(child: CircularProgressIndicator(color: gold))
+                            ? Center(child: CircularProgressIndicator(color: livePrimary))
                             : error != null
                                 ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
                                 : channels.isEmpty
                                     ? Center(child: Text(appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
-                                        style: TextStyle(color: Colors.white70)))
+                                        style: TextStyle(color: liveSecondaryText)))
                                     : RefreshIndicator(
-                                        color: gold,
+                                        color: livePrimary,
                                         onRefresh: _load,
                                         child: GridView.builder(
                                           padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
@@ -3711,6 +3720,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
