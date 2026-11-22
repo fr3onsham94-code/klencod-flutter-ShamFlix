@@ -65,10 +65,10 @@ jobs:
           umask 077
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
           {
-            printf 'storePassword=%s\\n' "$ANDROID_KEYSTORE_PASSWORD"
-            printf 'keyPassword=%s\\n' "$ANDROID_KEY_PASSWORD"
-            printf 'keyAlias=%s\\n' "$ANDROID_KEY_ALIAS"
-            printf 'storeFile=app/upload-keystore.jks\\n'
+            printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'storeFile=app/upload-keystore.jks\n'
           } > android/key.properties
 
       - name: Build APK
