@@ -1,4 +1,3 @@
-
 name: shamflix
 description: ShamFlix - Movies, Series and Live TV
 publish_to: 'none'
@@ -21,7 +20,7 @@ dependencies:
   android_intent_plus: ^5.3.1
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
-  file_picker: ^6.2.1
+  file_picker: ^8.3.7
   media_kit_libs_video: ^1.0.7
   webview_flutter: ^4.13.1
   url_launcher: ^6.1.9
@@ -38,3 +37,4 @@ flutter:
 # ShamFlix - آخر تحديث: 21-11-2026
 # استخدام path_provider لمسح الملفات المؤقتة وتجهيز تحديث التطبيق الداخلي.
 # ShamFlix - آخر تحديث: إضافة file_picker لاختيار ملفات الترجمة الخارجية | التاريخ والوقت: 22/11/2026, 00:29:37 بتوقيت تركيا.
+# تم تحديث file_picker إلى 8.3.7 لدعم Flutter Android embedding الحديث مع الحفاظ على API المستخدمة.
