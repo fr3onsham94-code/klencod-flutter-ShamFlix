@@ -87,7 +87,7 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
       text: source?['base_url']?.toString() ?? '',
     );
     final parserController = TextEditingController(
-      text: source?['parser_key']?.toString() ?? 'm_yala_wordpress_cards',
+      text: source?['parser_key']?.toString() ?? 'unsupported',
     );
     final userAgentController = TextEditingController(
       text: source?['user_agent']?.toString() ?? 'Mozilla/5.0',
@@ -261,6 +261,23 @@ class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('أدخل أسماء دومينات فقط دون بروتوكول أو مسار'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    const supportedParsers = {
+                      'm_yala_wordpress_cards',
+                      'yandex_kora_cards',
+                      'fel3ardaa_json_api',
+                      'syrialive_my_cards',
+                      'yalla_shoot_ltd_cards',
+                    };
+                    if (active &&
+                        !supportedParsers.contains(parserController.text.trim())) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('لا يمكن تفعيل مصدر قبل اختيار محلل منفّذ ومختبر'),
                         ),
                       );
                       return;
