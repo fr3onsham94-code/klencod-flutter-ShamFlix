@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'supabase_service.dart';
 class LiveMatchesPanel extends StatefulWidget {
@@ -9,7 +10,25 @@ class _LiveMatchesPanelState extends State<LiveMatchesPanel>{
   bool loading=true; String? error; List<Map<String,dynamic>> matches=[];
   final Map<String,List<Map<String,dynamic>>> serversByMatch={};
   final Set<String> expandedMatches={},loadingServers={};
-  @override void initState(){super.initState();_load();}
+  Timer? refreshTimer;
+  @override void initState(){super.initState();_load();refreshTimer=Timer.periodic(const Duration(minutes:5),(_)=>_refreshQuietly());}
+  Future<void> _refreshQuietly() async {
+    try {
+      final fresh=await SupabaseService.getLiveMatches();
+      if(!mounted)return;
+      final validIds=fresh.map((m)=>m['id']?.toString()??'').where((id)=>id.isNotEmpty).toSet();
+      serversByMatch.removeWhere((id,_)=>!validIds.contains(id));
+      expandedMatches.removeWhere((id)=>!validIds.contains(id));
+      setState(()=>matches=fresh);
+      for(final id in expandedMatches.toList()){
+        if(loadingServers.contains(id))continue;
+        loadingServers.add(id);
+        try{serversByMatch[id]=await SupabaseService.getLiveMatchServers(id);}catch(_){serversByMatch[id]=[];}
+        if(mounted)setState(()=>loadingServers.remove(id));
+      }
+    }catch(_){/* Keep the last successful schedule visible during temporary network failures. */}
+  }
+  @override void dispose(){refreshTimer?.cancel();super.dispose();}
   Future<void> _load() async {if(mounted)setState(() { loading=true; error=null; });try{matches=await SupabaseService.getLiveMatches();serversByMatch.clear();expandedMatches.clear();}catch(e){error='تعذر تحميل جدول المباريات: $e';}if(mounted)setState(()=>loading=false);}
   Future<void> _toggle(Map<String,dynamic> match) async {final id=match['id']?.toString()??'';if(id.isEmpty)return;if(expandedMatches.contains(id)){setState(()=>expandedMatches.remove(id));return;}setState(()=>expandedMatches.add(id));if(serversByMatch.containsKey(id)||loadingServers.contains(id))return;setState(()=>loadingServers.add(id));try{serversByMatch[id]=await SupabaseService.getLiveMatchServers(id);}catch(_){serversByMatch[id]=[];}if(mounted)setState(()=>loadingServers.remove(id));}
   String _status(Map<String,dynamic> m){switch((m['match_status']??'scheduled').toString().toLowerCase()){case 'live':case 'in_progress':return 'مباشرة';case 'finished':case 'completed':return 'انتهت';default:return 'لم تبدأ';}}
