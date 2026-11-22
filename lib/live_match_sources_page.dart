@@ -1,35 +1,557 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
 import 'admin_auth_service.dart';
-const Color _sourceBg=Color(0xFF090909),_sourcePanel=Color(0xFF191919),_sourceGold=Color(0xFFD6AC55);
-class LiveMatchSourcesPage extends StatefulWidget{const LiveMatchSourcesPage({super.key});@override State<LiveMatchSourcesPage> createState()=>_LiveMatchSourcesPageState();}
-class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage>{
- bool loading=true;String? error;List<Map<String,dynamic>> sources=[];
- @override void initState(){super.initState();_load();}
- Future<void> _load()async{setState(() { loading=true; error=null; });try{final rows=await AuthService.client.from('live_match_sources').select('*').order('created_at');sources=rows.map((r)=>Map<String,dynamic>.from(r)).toList();}catch(e){error=e.toString();}if(mounted)setState(()=>loading=false);}
- Future<void> _editSource([Map<String,dynamic>? source])async{
-  final name=TextEditingController(text:source?['source_name']?.toString()??''),url=TextEditingController(text:source?['base_url']?.toString()??''),parser=TextEditingController(text:source?['parser_key']?.toString()??'m_yala_wordpress_cards'),ua=TextEditingController(text:source?['user_agent']?.toString()??'Mozilla/5.0'),referer=TextEditingController(text:source?['referer']?.toString()??''),headers=TextEditingController(text:const JsonEncoder.withIndent('  ').convert(source?['request_headers']??{})),hosts=TextEditingController(text:((source?['allowed_redirect_hosts'] as List?)??[]).join(', ')),interval=TextEditingController(text:(source?['check_interval_minutes']??60).toString());
-  bool active=source?['is_active']==true;final key=GlobalKey<FormState>();
-  final saved=await showDialog<bool>(context:context,builder:(dc)=>StatefulBuilder(builder:(context,setDialog)=>AlertDialog(backgroundColor:_sourcePanel,title:Text(source==null?'إضافة مصدر مباريات':'تعديل المصدر',style:const TextStyle(color:_sourceGold)),content:SizedBox(width:520,child:Form(key:key,child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
-   _field(name,'اسم المصدر'),_field(url,'رابط الموقع الأساسي',keyboard:TextInputType.url),_field(parser,'مفتاح المحلل (jsonld_sports_event)'),_field(ua,'User-Agent'),_field(referer,'Referer (اختياري)',keyboard:TextInputType.url,requiredField:false),_field(headers,'Headers بصيغة JSON',maxLines:4),_field(hosts,'دومينات التحويل المسموحة، افصل بينها بفاصلة',maxLines:2,requiredField:false),_field(interval,'فاصل الفحص بالدقائق (15 إلى 1440)',keyboard:TextInputType.number),
-   SwitchListTile(value:active,onChanged:(v)=>setDialog(()=>active=v),title:const Text('تفعيل المصدر',style:TextStyle(color:Colors.white)),subtitle:const Text('لا تفعّل المصدر قبل التأكد من ملاءمة المحلل للموقع',style:TextStyle(color:Colors.white54,fontSize:11)),activeColor:_sourceGold)
-  ])))),actions:[TextButton(onPressed:()=>Navigator.pop(dc,false),child:const Text('إلغاء')),FilledButton(style:FilledButton.styleFrom(backgroundColor:_sourceGold,foregroundColor:Colors.black),onPressed:()async{
-   if(!key.currentState!.validate())return;Map<String,dynamic> parsed;
-   try{final v=jsonDecode(headers.text.trim().isEmpty?'{}':headers.text);if(v is! Map)throw const FormatException('يجب أن تكون Headers كائن JSON');parsed=Map<String,dynamic>.from(v);for(final e in parsed.entries){if(e.value is! String)throw const FormatException('قيم Headers يجب أن تكون نصوصاً');if(RegExp(r'^(host|content-length|connection|cookie|authorization|proxy-|origin|forwarded|x-forwarded-)',caseSensitive:false).hasMatch(e.key))throw const FormatException('Header غير مسموح');}}catch(e){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Headers غير صالحة: $e')));return;}
-   final u=Uri.tryParse(url.text.trim());if(u==null||!['http','https'].contains(u.scheme)||u.host.isEmpty||u.userInfo.isNotEmpty){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('رابط الموقع غير صالح')));return;}
-   final mins=int.tryParse(interval.text.trim());if(mins==null||mins<15||mins>1440){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('الفاصل يجب أن يكون بين 15 و1440 دقيقة')));return;}
-   final hostList=hosts.text.split(',').map((h)=>h.trim().toLowerCase()).where((h)=>h.isNotEmpty).toSet().toList();if(hostList.any((h)=>h.contains('/')||h.contains(':')||h.contains('@')||h.contains(' '))){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('أدخل أسماء دومينات فقط')));return;}
-   final payload={'source_name':name.text.trim(),'base_url':u.toString(),'parser_key':parser.text.trim(),'user_agent':ua.text.trim(),'referer':referer.text.trim().isEmpty?null:referer.text.trim(),'request_headers':parsed,'allowed_redirect_hosts':hostList,'check_interval_minutes':mins,'is_active':active,'updated_at':DateTime.now().toUtc().toIso8601String()};
-   try{if(source==null){await AuthService.client.from('live_match_sources').insert(payload);}else{await AuthService.client.from('live_match_sources').update(payload).eq('id',source['id']);}if(dc.mounted)Navigator.pop(dc,true);}catch(e){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('تعذر حفظ المصدر: $e')));}
-  },child:const Text('حفظ'))]));
-  name.dispose();url.dispose();parser.dispose();ua.dispose();referer.dispose();headers.dispose();hosts.dispose();interval.dispose();if(saved==true)_load();
- }
- Widget _field(TextEditingController c,String label,{TextInputType keyboard=TextInputType.text,int maxLines=1,bool requiredField=true})=>Padding(padding:const EdgeInsets.only(bottom:10),child:TextFormField(controller:c,keyboardType:keyboard,maxLines:maxLines,style:const TextStyle(color:Colors.white),validator:(v)=>requiredField&&(v==null||v.trim().isEmpty)?'هذا الحقل مطلوب':null,decoration:InputDecoration(labelText:label,labelStyle:const TextStyle(color:Colors.white60,fontSize:12),enabledBorder:const OutlineInputBorder(borderSide:BorderSide(color:Colors.white24)),focusedBorder:const OutlineInputBorder(borderSide:BorderSide(color:_sourceGold)))));
- Future<void> _toggle(Map<String,dynamic> s,bool active)async{if(active&&!['m_yala_wordpress_cards','fel3ardaa_json_api'].contains(s['parser_key'])){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('لا يمكن تفعيل مصدر قبل اختيار محلل مدعوم')));return;}try{await AuthService.client.from('live_match_sources').update({'is_active':active,'updated_at':DateTime.now().toUtc().toIso8601String()}).eq('id',s['id']);_load();}catch(e){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('تعذر تغيير الحالة: $e')));}}
- Future<void> _delete(Map<String,dynamic> s)async{final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(backgroundColor:_sourcePanel,title:const Text('حذف المصدر؟',style:TextStyle(color:_sourceGold)),content:Text('سيتم حذف مصدر '+(s['source_name']?.toString()??'')+' وروابطه المرتبطة حسب قيود قاعدة البيانات.',style:const TextStyle(color:Colors.white70)),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('إلغاء')),TextButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('حذف',style:TextStyle(color:Colors.redAccent)))]));if(ok!=true)return;try{await AuthService.client.from('live_match_sources').delete().eq('id',s['id']);_load();}catch(e){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('تعذر حذف المصدر: $e')));}}
- @override Widget build(BuildContext context){if(!AuthService.isLoggedIn||!AuthService.isAdmin)return const Scaffold(backgroundColor:_sourceBg,body:Center(child:Text('هذه الصفحة للمديرين فقط',style:TextStyle(color:Colors.white))));return Directionality(textDirection:TextDirection.rtl,child:Scaffold(backgroundColor:_sourceBg,appBar:AppBar(backgroundColor:_sourceBg,title:const Text('مصادر المباريات',style:TextStyle(color:_sourceGold,fontWeight:FontWeight.bold)),actions:[IconButton(onPressed:_load,icon:const Icon(Icons.refresh,color:_sourceGold))]),floatingActionButton:FloatingActionButton.extended(backgroundColor:_sourceGold,foregroundColor:Colors.black,onPressed:()=>_editSource(),icon:const Icon(Icons.add),label:const Text('إضافة مصدر')),body:loading?const Center(child:CircularProgressIndicator(color:_sourceGold)):error!=null?Center(child:Text(error!,style:const TextStyle(color:Colors.redAccent))):sources.isEmpty?const Center(child:Text('لا توجد مصادر مسجلة',style:TextStyle(color:Colors.white54))):ListView.builder(padding:const EdgeInsets.fromLTRB(12,12,12,90),itemCount:sources.length,itemBuilder:(context,i){final s=sources[i],active=s['is_active']==true;return Card(color:_sourcePanel,child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-  Row(children:[Expanded(child:Text(s['source_name']?.toString()??'مصدر',style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold))),Switch(value:active,onChanged:(v)=>_toggle(s,v),activeColor:_sourceGold),PopupMenuButton<String>(icon:const Icon(Icons.more_vert,color:Colors.white70),onSelected:(v){if(v=='edit')_editSource(s);if(v=='delete')_delete(s);},itemBuilder:(_)=>const[PopupMenuItem(value:'edit',child:Text('تعديل')),PopupMenuItem(value:'delete',child:Text('حذف'))])]),
-  Text(s['base_url']?.toString()??'',textDirection:TextDirection.ltr,style:const TextStyle(color:Colors.white54,fontSize:11)),const SizedBox(height:6),
-  Text('المحلل: '+(s['parser_key']?.toString()??'')+'  •  الفحص كل '+(s['check_interval_minutes']?.toString()??'60')+' دقيقة',style:const TextStyle(color:_sourceGold,fontSize:11)),
-  Text('المكتشف: '+(s['last_found_count']?.toString()??'0')+'  •  آخر خطأ: '+(s['last_error']?.toString()??'لا يوجد'),maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white54,fontSize:11))
- ])));})));}}
+
+const Color _sourceBg = Color(0xFF090909);
+const Color _sourcePanel = Color(0xFF191919);
+const Color _sourceGold = Color(0xFFD6AC55);
+
+class LiveMatchSourcesPage extends StatefulWidget {
+  const LiveMatchSourcesPage({super.key});
+
+  @override
+  State<LiveMatchSourcesPage> createState() => _LiveMatchSourcesPageState();
+}
+
+class _LiveMatchSourcesPageState extends State<LiveMatchSourcesPage> {
+  bool loading = true;
+  String? error;
+  List<Map<String, dynamic>> sources = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (mounted) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
+    try {
+      final rows = await AuthService.client
+          .from('live_match_sources')
+          .select('*')
+          .order('created_at');
+      sources = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+    } catch (e) {
+      error = e.toString();
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    TextInputType keyboard = TextInputType.text,
+    int maxLines = 1,
+    bool requiredField = true,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboard,
+        maxLines: maxLines,
+        style: const TextStyle(color: Colors.white),
+        validator: (value) {
+          if (requiredField && (value == null || value.trim().isEmpty)) {
+            return 'هذا الحقل مطلوب';
+          }
+          return null;
+        },
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white60, fontSize: 12),
+          enabledBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.white24),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: _sourceGold),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editSource([Map<String, dynamic>? source]) async {
+    final nameController = TextEditingController(
+      text: source?['source_name']?.toString() ?? '',
+    );
+    final urlController = TextEditingController(
+      text: source?['base_url']?.toString() ?? '',
+    );
+    final parserController = TextEditingController(
+      text: source?['parser_key']?.toString() ?? 'm_yala_wordpress_cards',
+    );
+    final userAgentController = TextEditingController(
+      text: source?['user_agent']?.toString() ?? 'Mozilla/5.0',
+    );
+    final refererController = TextEditingController(
+      text: source?['referer']?.toString() ?? '',
+    );
+    final headersController = TextEditingController(
+      text: const JsonEncoder.withIndent('  ')
+          .convert(source?['request_headers'] ?? {}),
+    );
+    final hostsController = TextEditingController(
+      text: ((source?['allowed_redirect_hosts'] as List?) ?? []).join(', '),
+    );
+    final intervalController = TextEditingController(
+      text: (source?['check_interval_minutes'] ?? 60).toString(),
+    );
+    final formKey = GlobalKey<FormState>();
+    bool active = source?['is_active'] == true;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: _sourcePanel,
+              title: Text(
+                source == null ? 'إضافة مصدر مباريات' : 'تعديل المصدر',
+                style: const TextStyle(color: _sourceGold),
+              ),
+              content: SizedBox(
+                width: 520,
+                child: Form(
+                  key: formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _field(nameController, 'اسم المصدر'),
+                        _field(
+                          urlController,
+                          'رابط الموقع الأساسي',
+                          keyboard: TextInputType.url,
+                        ),
+                        _field(
+                          parserController,
+                          'مفتاح المحلل (m_yala_wordpress_cards أو fel3ardaa_json_api)',
+                        ),
+                        _field(userAgentController, 'User-Agent'),
+                        _field(
+                          refererController,
+                          'Referer (اختياري)',
+                          keyboard: TextInputType.url,
+                          requiredField: false,
+                        ),
+                        _field(
+                          headersController,
+                          'Headers بصيغة JSON',
+                          maxLines: 4,
+                        ),
+                        _field(
+                          hostsController,
+                          'دومينات التحويل المسموحة، افصل بينها بفاصلة',
+                          maxLines: 2,
+                          requiredField: false,
+                        ),
+                        _field(
+                          intervalController,
+                          'فاصل الفحص بالدقائق (15 إلى 1440)',
+                          keyboard: TextInputType.number,
+                        ),
+                        SwitchListTile(
+                          value: active,
+                          onChanged: (value) {
+                            setDialogState(() => active = value);
+                          },
+                          title: const Text(
+                            'تفعيل المصدر',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          subtitle: const Text(
+                            'لا تفعّل المصدر قبل التأكد من ملاءمة المحلل للموقع',
+                            style: TextStyle(color: Colors.white54, fontSize: 11),
+                          ),
+                          activeThumbColor: _sourceGold,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('إلغاء'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _sourceGold,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+
+                    Map<String, dynamic> parsedHeaders;
+                    try {
+                      final decoded = jsonDecode(
+                        headersController.text.trim().isEmpty
+                            ? '{}'
+                            : headersController.text,
+                      );
+                      if (decoded is! Map) {
+                        throw const FormatException(
+                          'يجب أن تكون Headers كائن JSON',
+                        );
+                      }
+                      parsedHeaders = Map<String, dynamic>.from(decoded);
+                      for (final entry in parsedHeaders.entries) {
+                        if (entry.value is! String) {
+                          throw const FormatException(
+                            'قيم Headers يجب أن تكون نصوصاً',
+                          );
+                        }
+                        if (RegExp(
+                          r'^(host|content-length|connection|cookie|authorization|proxy-|origin|forwarded|x-forwarded-)',
+                          caseSensitive: false,
+                        ).hasMatch(entry.key)) {
+                          throw const FormatException('Header غير مسموح');
+                        }
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Headers غير صالحة: $e')),
+                      );
+                      return;
+                    }
+
+                    final parsedUrl = Uri.tryParse(urlController.text.trim());
+                    if (parsedUrl == null ||
+                        !['http', 'https'].contains(parsedUrl.scheme) ||
+                        parsedUrl.host.isEmpty ||
+                        parsedUrl.userInfo.isNotEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('رابط الموقع غير صالح')),
+                      );
+                      return;
+                    }
+
+                    final minutes = int.tryParse(intervalController.text.trim());
+                    if (minutes == null || minutes < 15 || minutes > 1440) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('الفاصل يجب أن يكون بين 15 و1440 دقيقة'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final allowedHosts = hostsController.text
+                        .split(',')
+                        .map((host) => host.trim().toLowerCase())
+                        .where((host) => host.isNotEmpty)
+                        .toSet()
+                        .toList();
+                    if (allowedHosts.any((host) =>
+                        host.contains('/') ||
+                        host.contains(':') ||
+                        host.contains('@') ||
+                        host.contains(' '))) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('أدخل أسماء دومينات فقط دون بروتوكول أو مسار'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final payload = <String, dynamic>{
+                      'source_name': nameController.text.trim(),
+                      'base_url': parsedUrl.toString(),
+                      'parser_key': parserController.text.trim(),
+                      'user_agent': userAgentController.text.trim(),
+                      'referer': refererController.text.trim().isEmpty
+                          ? null
+                          : refererController.text.trim(),
+                      'request_headers': parsedHeaders,
+                      'allowed_redirect_hosts': allowedHosts,
+                      'check_interval_minutes': minutes,
+                      'is_active': active,
+                      'updated_at': DateTime.now().toUtc().toIso8601String(),
+                    };
+
+                    try {
+                      if (source == null) {
+                        await AuthService.client
+                            .from('live_match_sources')
+                            .insert(payload);
+                      } else {
+                        await AuthService.client
+                            .from('live_match_sources')
+                            .update(payload)
+                            .eq('id', source['id']);
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext, true);
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('تعذر حفظ المصدر: $e')),
+                      );
+                    }
+                  },
+                  child: const Text('حفظ'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    urlController.dispose();
+    parserController.dispose();
+    userAgentController.dispose();
+    refererController.dispose();
+    headersController.dispose();
+    hostsController.dispose();
+    intervalController.dispose();
+
+    if (saved == true) _load();
+  }
+
+  Future<void> _toggle(Map<String, dynamic> source, bool active) async {
+    const supportedParsers = {
+      'm_yala_wordpress_cards',
+      'fel3ardaa_json_api',
+    };
+    if (active && !supportedParsers.contains(source['parser_key'])) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن تفعيل مصدر قبل اختيار محلل مدعوم'),
+        ),
+      );
+      return;
+    }
+    try {
+      await AuthService.client.from('live_match_sources').update({
+        'is_active': active,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', source['id']);
+      _load();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تغيير الحالة: $e')),
+      );
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> source) async {
+    final sourceName = source['source_name']?.toString() ?? '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _sourcePanel,
+        title: const Text(
+          'حذف المصدر؟',
+          style: TextStyle(color: _sourceGold),
+        ),
+        content: Text(
+          'سيتم حذف مصدر $sourceName وروابطه المرتبطة حسب قيود قاعدة البيانات.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'حذف',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await AuthService.client
+          .from('live_match_sources')
+          .delete()
+          .eq('id', source['id']);
+      _load();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر حذف المصدر: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
+      return const Scaffold(
+        backgroundColor: _sourceBg,
+        body: Center(
+          child: Text(
+            'هذه الصفحة للمديرين فقط',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: _sourceBg,
+        appBar: AppBar(
+          backgroundColor: _sourceBg,
+          title: const Text(
+            'مصادر المباريات',
+            style: TextStyle(
+              color: _sourceGold,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          actions: [
+            IconButton(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh, color: _sourceGold),
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          backgroundColor: _sourceGold,
+          foregroundColor: Colors.black,
+          onPressed: () => _editSource(),
+          icon: const Icon(Icons.add),
+          label: const Text('إضافة مصدر'),
+        ),
+        body: loading
+            ? const Center(
+                child: CircularProgressIndicator(color: _sourceGold),
+              )
+            : error != null
+                ? Center(
+                    child: Text(
+                      error!,
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
+                  )
+                : sources.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'لا توجد مصادر مسجلة',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                        itemCount: sources.length,
+                        itemBuilder: (context, index) {
+                          final source = sources[index];
+                          final active = source['is_active'] == true;
+                          return Card(
+                            color: _sourcePanel,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          source['source_name']?.toString() ??
+                                              'مصدر',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      Switch(
+                                        value: active,
+                                        onChanged: (value) =>
+                                            _toggle(source, value),
+                                        activeThumbColor: _sourceGold,
+                                      ),
+                                      PopupMenuButton<String>(
+                                        icon: const Icon(
+                                          Icons.more_vert,
+                                          color: Colors.white70,
+                                        ),
+                                        onSelected: (value) {
+                                          if (value == 'edit') {
+                                            _editSource(source);
+                                          } else if (value == 'delete') {
+                                            _delete(source);
+                                          }
+                                        },
+                                        itemBuilder: (_) => const [
+                                          PopupMenuItem(
+                                            value: 'edit',
+                                            child: Text('تعديل'),
+                                          ),
+                                          PopupMenuItem(
+                                            value: 'delete',
+                                            child: Text('حذف'),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    source['base_url']?.toString() ?? '',
+                                    textDirection: TextDirection.ltr,
+                                    style: const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'المحلل: ' +
+                                        (source['parser_key']?.toString() ??
+                                            '') +
+                                        ' • الفحص كل ' +
+                                        (source['check_interval_minutes']
+                                                ?.toString() ??
+                                            '60') +
+                                        ' دقيقة',
+                                    style: const TextStyle(
+                                      color: _sourceGold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  Text(
+                                    'المكتشف: ' +
+                                        (source['last_found_count']
+                                                ?.toString() ??
+                                            '0') +
+                                        ' • آخر خطأ: ' +
+                                        (source['last_error']?.toString() ??
+                                            'لا يوجد'),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+      ),
+    );
+  }
+}
