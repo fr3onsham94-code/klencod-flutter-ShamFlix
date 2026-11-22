@@ -3078,6 +3078,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                               if (referer.isNotEmpty) serverHeaders['Referer'] = referer;
                               if (url.contains('/albaplayer/') ||
                                   url.contains('syrialive.my/matches/') ||
+                                  url.contains('pandab-hd.com/') ||
                                   RegExp(r'\.php(?:\?|$)', caseSensitive: false).hasMatch(url)) {
                                 Navigator.push(
                                   context,
