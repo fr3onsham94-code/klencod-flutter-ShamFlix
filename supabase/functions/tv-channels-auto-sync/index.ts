@@ -148,8 +148,8 @@ function arabicAlias(name: string): string | null {
   const n = normalizeName(name);
   const known: Record<string,string> = {
     aljazeera: "الجزيرة الإخبارية", aljazeeraenglish: "الجزيرة الإنجليزية",
-    aljazeeraarabic: "الجزيرة الإخبارية", "الجزيرةالاخباريه": "الجزيرة الإخبارية",
-    "قناةالجزيرة": "الجزيرة الإخبارية", "الجزيرة": "الجزيرة الإخبارية",
+    aljazeeraarabic: "الجزيرة الإخبارية", "الجزيرهالاخباريه": "الجزيرة الإخبارية",
+    "قناهالجزيره": "الجزيرة الإخبارية", "الجزيره": "الجزيرة الإخبارية",
     alarabiya: "العربية", alhadath: "الحدث",
     skynewsarabia: "سكاي نيوز عربية", bbcnewsarabic: "بي بي سي عربي",
     alhurra: "الحرة", almayadeen: "الميادين",
