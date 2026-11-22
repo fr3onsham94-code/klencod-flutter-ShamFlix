@@ -577,6 +577,10 @@ class _HomePageState extends State<HomePage> {
   late Future<List<Map<String, dynamic>>> series;
   late Future<List<Map<String, dynamic>>> channels;
   late Future<List<Map<String, dynamic>>> recentHistory;
+  late Future<List<Map<String, dynamic>>> featuredItems;
+  final PageController _featuredController = PageController();
+  Timer? _featuredTimer;
+  int _featuredIndex = 0;
 
   final List<String> categories = [
     'الكل',
@@ -640,6 +644,8 @@ class _HomePageState extends State<HomePage> {
     authRefreshNotifier.removeListener(onAuthChanged);
     localProfileRefreshNotifier.removeListener(onProfileChanged);
     channelRefreshNotifier.removeListener(onChannelsChanged);
+    _featuredTimer?.cancel();
+    _featuredController.dispose();
     super.dispose();
   }
 
@@ -647,6 +653,30 @@ class _HomePageState extends State<HomePage> {
     movies = SupabaseService.getMovies();
     series = SupabaseService.getSeries();
     channels = SupabaseService.getChannels();
+    featuredItems = Future.wait([movies, series]).then((lists) {
+      final latestMovies = lists[0].take(2).map((item) => {...item, '_isSeries': false});
+      final latestSeries = lists[1].take(2).map((item) => {...item, '_isSeries': true});
+      return [...latestMovies, ...latestSeries];
+    });
+    _featuredTimer?.cancel();
+    _featuredTimer = null;
+    _featuredIndex = 0;
+    if (_featuredController.hasClients) {
+      _featuredController.jumpToPage(0);
+    }
+  }
+
+  void _startFeaturedTimer(int count) {
+    if (count < 2 || _featuredTimer != null) return;
+    _featuredTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || !_featuredController.hasClients) return;
+      final next = (_featuredIndex + 1) % count;
+      _featuredController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 550),
+        curve: Curves.easeInOut,
+      );
+    });
   }
 
   Future<void> refreshData() async {
@@ -842,7 +872,12 @@ class _HomePageState extends State<HomePage> {
               }
 
               final sourceItems = snapshot.data ?? [];
-              final items = sourceItems.take(2).toList();
+              final items = title == appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler')
+                  ? sourceItems.where((item) {
+                      final category = valueOf(item['category']).toLowerCase();
+                      return category.contains('أنمي') || category.contains('انمي') || category.contains('anime');
+                    }).toList()
+                  : sourceItems;
 
               if (items.isEmpty) {
                 return Center(
@@ -974,15 +1009,31 @@ class _HomePageState extends State<HomePage> {
 
   Widget featuredHero() {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: movies,
+      future: featuredItems,
       builder: (context, snapshot) {
         final items = snapshot.data ?? [];
-        final featured = items.isEmpty ? null : items.first;
-        final poster = featured == null ? '' : valueOf(featured['poster_url']);
-        final title = featured == null
-            ? appText('اكتشف أحدث الأفلام', 'Discover the latest movies', 'En Yeni Filmleri Keşfet')
-            : valueOf(featured['title'], appText('فيلم مميز', 'Featured movie', 'Öne Çıkan Film'));
-
+        if (snapshot.connectionState == ConnectionState.waiting && items.isEmpty) {
+          return Container(
+            height: 365,
+            margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+            decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16)),
+            child: Center(child: CircularProgressIndicator(color: gold)),
+          );
+        }
+        if (items.isEmpty) {
+          return Container(
+            height: 365,
+            margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+            decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16)),
+            child: Center(
+              child: Text(
+                appText('لا يوجد محتوى مضاف حديثاً', 'No recent additions', 'Yeni eklenen içerik yok'),
+                style: TextStyle(color: AppTheme.secondaryText),
+              ),
+            ),
+          );
+        }
+        _startFeaturedTimer(items.length);
         return Container(
           height: 365,
           margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
@@ -994,96 +1045,134 @@ class _HomePageState extends State<HomePage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (poster.isNotEmpty)
-                Image.network(
-                  poster,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF171717)),
-                )
-              else
-                const ColoredBox(color: Color(0xFF171717)),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.05),
-                      Colors.black.withOpacity(0.28),
-                      Colors.black.withOpacity(0.96),
-                    ],
-                    stops: const [0.0, 0.42, 1.0],
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 14,
-                right: 14,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: gold,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    'SHAM FLIX',
-                    style: TextStyle(color: AppTheme.text, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 18,
-                right: 18,
-                bottom: 20,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      appText('اختيارنا لك', 'FEATURED FOR YOU', 'SENİN İÇİN SEÇİLDİ'),
-                      style: const TextStyle(color: Color(0xFFFF4B55), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: AppTheme.text, fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        if (featured != null)
-                          ElevatedButton.icon(
-                            onPressed: () => openDetails(featured, isSeries: false),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: gold,
-                              foregroundColor: AppTheme.text,
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                            ),
-                            icon: const Icon(Icons.play_arrow, size: 21),
-                            label: Text(appText('شاهد الآن', 'Watch now', 'Şimdi İzle'), style: const TextStyle(fontWeight: FontWeight.bold)),
-                          )
-                        else
-                          const SizedBox.shrink(),
-                        const SizedBox(width: 9),
-                        if (featured != null)
-                          OutlinedButton.icon(
-                            onPressed: () => openDetails(featured, isSeries: false),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.text,
-                              side: BorderSide(color: AppTheme.secondaryText),
-                              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                            ),
-                            icon: const Icon(Icons.info_outline, size: 18),
-                            label: Text(appText('التفاصيل', 'Details', 'Detaylar')),
+              PageView.builder(
+                controller: _featuredController,
+                itemCount: items.length,
+                onPageChanged: (index) {
+                  if (mounted) setState(() => _featuredIndex = index);
+                },
+                itemBuilder: (context, index) {
+                  final featured = items[index];
+                  final isSeries = featured['_isSeries'] == true;
+                  final poster = valueOf(featured['poster_url']);
+                  final title = valueOf(
+                    featured['title'],
+                    appText('محتوى مميز', 'Featured content', 'Öne Çıkan İçerik'),
+                  );
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (poster.isNotEmpty)
+                        Image.network(
+                          poster,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF171717)),
+                        )
+                      else
+                        const ColoredBox(color: Color(0xFF171717)),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.05),
+                              Colors.black.withOpacity(0.28),
+                              Colors.black.withOpacity(0.96),
+                            ],
+                            stops: const [0.0, 0.42, 1.0],
                           ),
-                      ],
-                    ),
-                  ],
-                ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 14,
+                        right: 14,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(5)),
+                          child: Text(
+                            isSeries
+                                ? appText('مسلسل جديد', 'NEW SERIES', 'YENİ DİZİ')
+                                : appText('فيلم جديد', 'NEW MOVIE', 'YENİ FİLM'),
+                            style: TextStyle(color: AppTheme.text, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 18,
+                        right: 18,
+                        bottom: 20,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              appText('أحدث الإضافات', 'LATEST ADDITIONS', 'SON EKLENENLER'),
+                              style: const TextStyle(color: Color(0xFFFF4B55), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                            ),
+                            const SizedBox(height: 7),
+                            Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: AppTheme.text, fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: () => openDetails(featured, isSeries: isSeries),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: gold,
+                                    foregroundColor: AppTheme.text,
+                                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                                  ),
+                                  icon: const Icon(Icons.play_arrow, size: 21),
+                                  label: Text(appText('مشاهدة', 'Watch', 'İzle'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                ),
+                                const SizedBox(width: 9),
+                                OutlinedButton.icon(
+                                  onPressed: () => openDetails(featured, isSeries: isSeries),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.text,
+                                    side: BorderSide(color: AppTheme.secondaryText),
+                                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                                  ),
+                                  icon: const Icon(Icons.info_outline, size: 18),
+                                  label: Text(appText('التفاصيل', 'Details', 'Detaylar')),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
+              if (items.length > 1)
+                Positioned(
+                  bottom: 7,
+                  left: 0,
+                  right: 0,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(items.length, (index) {
+                      final active = index == _featuredIndex;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        width: active ? 18 : 6,
+                        height: 6,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: active ? gold : Colors.white54,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
             ],
           ),
         );
@@ -1129,6 +1218,7 @@ class _HomePageState extends State<HomePage> {
           continueWatchingSection(),
           mediaSection(appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'), movies, isSeries: false),
           mediaSection(appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'), series, isSeries: true),
+          mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), series, isSeries: true),
           recentChannelsSection(),
           const SizedBox(height: 30),
         ],
