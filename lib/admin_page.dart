@@ -14,6 +14,7 @@ import 'content_page_import_service.dart';
 import 'content_import_page.dart';
 import 'series_monitor_page.dart';
 import 'movie_monitor_page.dart';
+import 'tv_sources_settings_page.dart';
 
 Color get adminBg => AppTheme.background;
 Color get adminGold => AppTheme.primary;
@@ -4723,6 +4724,17 @@ class _AdminPageState extends State<AdminPage> {
           subtitle: 'إضافة وتعديل وحذف وإدارة البث المباشر',
           icon: Icons.tv,
           onTap: () => navigateTo('channels'),
+        ),
+        Card(
+          color: adminPanel,
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: ListTile(
+            leading: Icon(Icons.playlist_add_check_circle_outlined, color: adminGold, size: 30),
+            title: Text('مصادر قنوات IPTV', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+            subtitle: Text('إضافة وإدارة روابط قوائم M3U وM3U8 ودمج قنواتها تلقائياً', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+            trailing: Icon(Icons.chevron_left, color: adminGold),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TvSourcesSettingsPage())),
+          ),
         ),
         _homeCard(
           title: 'المتصلون الآن',
