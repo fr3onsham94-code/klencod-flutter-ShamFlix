@@ -127,6 +127,47 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
     }
   }
 
+  Future<void> _clearPackageContent(Map<String, dynamic> item) async {
+    final packageId = item['id']?.toString() ?? '';
+    if (packageId.isEmpty) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: packagePanel,
+        title: Text('مسح محتوى الباقة', style: TextStyle(color: packageGold)),
+        content: Text(
+          'سيتم إزالة جميع العناصر المرتبطة بباقة «\${item['name']}» فقط. ستبقى الباقة وإعداداتها والمحتويات الأصلية في المكتبة والباقات الأخرى كما هي. مراقبة المصدر التلقائية ستبقى مفعّلة.',
+          style: TextStyle(color: AppTheme.secondaryText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('مسح المحتوى', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    try {
+      final rows = await AuthService.client
+          .from('content_package_items')
+          .select('id')
+          .eq('package_id', packageId);
+      final count = rows.length;
+      await AuthService.client
+          .from('content_package_items')
+          .delete()
+          .eq('package_id', packageId);
+      if (mounted) _message('تم مسح $count عنصر من الباقة، والباقة نفسها لم تُحذف');
+    } catch (e) {
+      if (mounted) _message('تعذر مسح محتوى الباقة: $e', isError: true);
+    }
+  }
+
   Future<void> _deletePackage(Map<String, dynamic> item) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -226,6 +267,11 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
                               subtitle: Text('الترتيب: ${item['sort_order'] ?? 0}',
                                   style: TextStyle(color: AppTheme.secondaryText)),
                               trailing: Wrap(children: [
+                                IconButton(
+                                  tooltip: 'مسح محتوى الباقة',
+                                  onPressed: () => _clearPackageContent(item),
+                                  icon: const Icon(Icons.cleaning_services_outlined, color: Colors.orangeAccent),
+                                ),
                                 IconButton(onPressed: () => _editPackage(existing: item),
                                     icon: Icon(Icons.edit_outlined, color: packageGold)),
                                 IconButton(onPressed: () => _deletePackage(item),
