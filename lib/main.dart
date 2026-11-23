@@ -2986,6 +2986,13 @@ class DetailsPage extends StatefulWidget {
 }
 
 class _DetailsPageState extends State<DetailsPage> {
+  Color get detailsBackground => AppTheme.sectionColor('details', 'background');
+  Color get detailsPrimary => AppTheme.sectionColor('details', 'primary');
+  Color get detailsPanel => AppTheme.sectionColor('details', 'detailsPanel');
+  Color get detailsText => AppTheme.sectionColor('details', 'text');
+  Color get detailsSecondaryText => AppTheme.sectionColor('details', 'secondaryText');
+  Color get detailsButton => AppTheme.sectionColor('details', 'button');
+  void _onDetailsThemeChanged() { if (mounted) setState(() {}); }
   bool isFavorite = false;
   bool seasonsLoading = false;
   double myRating = 0;
@@ -2998,8 +3005,15 @@ class _DetailsPageState extends State<DetailsPage> {
   @override
   void initState() {
     super.initState();
+    AppTheme.revision.addListener(_onDetailsThemeChanged);
     _loadFavoriteState();
     if (widget.isSeries) _loadSeasons();
+  }
+
+  @override
+  void dispose() {
+    AppTheme.revision.removeListener(_onDetailsThemeChanged);
+    super.dispose();
   }
 
   Future<void> _loadFavoriteState() async {
@@ -3067,29 +3081,29 @@ class _DetailsPageState extends State<DetailsPage> {
     final average = (ratingSummary['average'] as num?)?.toDouble() ?? 0;
     final count = ratingSummary['count'] ?? 0;
     return Card(
-      color: panel,
+      color: detailsPanel,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(appText('تقييمك للمحتوى', 'Your Rating', 'Puanınız'), style: TextStyle(color: gold, fontSize: 17, fontWeight: FontWeight.bold)),
+          Text(appText('تقييمك للمحتوى', 'Your Rating', 'Puanınız'), style: TextStyle(color: detailsPrimary, fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Row(children: [
             for (int i = 1; i <= 5; i++)
               IconButton(
                 visualDensity: VisualDensity.compact,
                 onPressed: () => _saveEngagement(rating: i.toDouble()),
-                icon: Icon(i <= myRating ? Icons.star : Icons.star_border, color: gold),
+                icon: Icon(i <= myRating ? Icons.star : Icons.star_border, color: detailsPrimary),
               ),
             const Spacer(),
-            Text(average == 0 ? appText('لا يوجد تقييم', 'No rating yet', 'Henüz puan yok') : average.toStringAsFixed(1), style: TextStyle(color: Colors.white)),
-            Icon(Icons.star, color: gold, size: 17),
-            Text(' ($count)', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            Text(average == 0 ? appText('لا يوجد تقييم', 'No rating yet', 'Henüz puan yok') : average.toStringAsFixed(1), style: TextStyle(color: detailsText)),
+            Icon(Icons.star, color: detailsPrimary, size: 17),
+            Text(' ($count)', style: TextStyle(color: detailsSecondaryText, fontSize: 12)),
           ]),
           Row(children: [
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'like'),
-              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? gold : Colors.white70), label: Text(appText('إعجاب', 'Like', 'Beğen'))),
+              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? detailsPrimary : detailsSecondaryText), label: Text(appText('إعجاب', 'Like', 'Beğen'))),
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'dislike'),
-              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : Colors.white70), label: Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
+              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? detailsPrimary : detailsSecondaryText), label: Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
           ]),
         ]),
       ),
@@ -3114,7 +3128,7 @@ class _DetailsPageState extends State<DetailsPage> {
         if (items.isEmpty) return const SizedBox.shrink();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const SizedBox(height: 22),
-          Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: detailsPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           SizedBox(height: 195, child: ListView.builder(
             reverse: true, scrollDirection: Axis.horizontal, itemCount: items.length,
@@ -3126,10 +3140,10 @@ class _DetailsPageState extends State<DetailsPage> {
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(item: relatedItem, isSeries: isSeriesItem))),
                 child: Container(width: 112, margin: const EdgeInsets.only(left: 10), child: Column(children: [
                   Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(9), child: posterUrl.isEmpty
-                    ? Container(color: panel, child: Icon(Icons.movie, color: gold))
-                    : Image.network(posterUrl, width: 112, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: Icon(Icons.movie, color: gold))))),
+                    ? Container(color: detailsPanel, child: Icon(Icons.movie, color: detailsPrimary))
+                    : Image.network(posterUrl, width: 112, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: detailsPanel, child: Icon(Icons.movie, color: detailsPrimary))))),
                   const SizedBox(height: 6),
-                  Text(valueOf(relatedItem['title']), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 12)),
+                  Text(valueOf(relatedItem['title']), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: detailsText, fontSize: 12)),
                 ])),
               );
             },
@@ -3246,7 +3260,7 @@ class _DetailsPageState extends State<DetailsPage> {
                     padding: const EdgeInsets.all(12),
                     children: [
                       Text(appText('اختر سيرفر التشغيل', 'Choose a Server', 'Sunucu Seçin'), textAlign: TextAlign.center,
-                        style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold)),
+                        style: TextStyle(color: detailsPrimary, fontSize: 14, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       ...servers.map((server) => ListTile(
                         dense: true,
@@ -3254,7 +3268,7 @@ class _DetailsPageState extends State<DetailsPage> {
                         contentPadding: EdgeInsets.zero,
                         title: Text('${valueOf(server['server_name'], 'سيرفر')}${valueOf(server['id'] ?? server['server_name']) == preferredServer ? ' • المفضل' : ''}',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                          style: TextStyle(color: detailsText, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, server),
                       )),
                     ],
@@ -3406,7 +3420,7 @@ class _DetailsPageState extends State<DetailsPage> {
       future: SupabaseService.getEpisodes(seasonId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: gold)));
+          return Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: detailsPrimary)));
         }
         if (snapshot.hasError) {
           return const Padding(padding: EdgeInsets.all(12), child: Text('تعذر تحميل الحلقات', style: TextStyle(color: Colors.redAccent)));
@@ -3415,7 +3429,7 @@ class _DetailsPageState extends State<DetailsPage> {
         if (episodes.isEmpty) {
           return Padding(padding: const EdgeInsets.all(12), child: Text(
             appText('لا توجد حلقات منشورة في هذا الموسم', 'No episodes published in this season', 'Bu sezonda yayınlanmış bölüm yok'),
-            style: TextStyle(color: Colors.white70)));
+            style: TextStyle(color: detailsSecondaryText)));
         }
         return Column(children: episodes.asMap().entries.map((entry) {
           final episode = entry.value;
@@ -3429,13 +3443,13 @@ class _DetailsPageState extends State<DetailsPage> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
               leading: Container(
                 width: 46, height: 46, alignment: Alignment.center,
-                decoration: BoxDecoration(color: gold.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
-                child: Text(number, style: TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 16))),
+                decoration: BoxDecoration(color: detailsPrimary.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
+                child: Text(number, style: TextStyle(color: detailsPrimary, fontWeight: FontWeight.bold, fontSize: 16))),
               title: Text(episodeTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                style: TextStyle(color: detailsText, fontWeight: FontWeight.w600, fontSize: 14)),
               subtitle: Text(duration.isEmpty ? appText('تشغيل الحلقة', 'Play episode', 'Bölümü oynat') : '$duration • ${appText('دقيقة', 'min', 'dk')}',
-                style: TextStyle(color: Colors.white70, fontSize: 12)),
-              trailing: Icon(Icons.play_circle_fill_rounded, color: gold, size: 30),
+                style: TextStyle(color: detailsSecondaryText, fontSize: 12)),
+              trailing: Icon(Icons.play_circle_fill_rounded, color: detailsPrimary, size: 30),
               onTap: () async {
                 final episodeRecord = Map<String, dynamic>.from(episode);
                 if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
@@ -3461,8 +3475,8 @@ class _DetailsPageState extends State<DetailsPage> {
       width: double.infinity, height: heroHeight,
       child: Stack(fit: StackFit.expand, children: [
         if (heroImage.isNotEmpty)
-          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: panel))
-        else ColoredBox(color: panel),
+          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: detailsPanel))
+        else ColoredBox(color: detailsPanel),
         const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
           colors: [Color(0x22000000), Color(0x55000000), Color(0xFF090909)],
@@ -3474,19 +3488,19 @@ class _DetailsPageState extends State<DetailsPage> {
               borderRadius: BorderRadius.circular(9),
               child: SizedBox(width: posterWidth, height: posterHeight,
                 child: poster.isEmpty
-                  ? Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))
+                  ? Container(color: detailsPanel, child: Icon(Icons.movie, color: detailsPrimary, size: 42))
                   : Image.network(poster, width: posterWidth, height: posterHeight, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))))),
+                      errorBuilder: (_, __, ___) => Container(color: detailsPanel, child: Icon(Icons.movie, color: detailsPrimary, size: 42))))),
             if (!isChannel) const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: detailsPrimary, borderRadius: BorderRadius.circular(4)),
                 child: Text(isChannel ? appText('مباشر', 'LIVE', 'CANLI') : 'SHAM FLIX',
-                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+                  style: TextStyle(color: detailsText, fontSize: 9, fontWeight: FontWeight.bold))),
               const SizedBox(height: 8),
               Text(title, maxLines: isLandscape ? 2 : 3, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
+                style: TextStyle(color: detailsText, fontSize: 25, fontWeight: FontWeight.bold,
                   shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
             ])),
           ]),
@@ -3514,21 +3528,21 @@ class _DetailsPageState extends State<DetailsPage> {
         Wrap(spacing: 8, runSpacing: 8, children: category.split(RegExp(r'[,،|]')).map((genre) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
           decoration: BoxDecoration(color: const Color(0xFF292929), borderRadius: BorderRadius.circular(20)),
-          child: Text(genre.trim(), style: TextStyle(color: Colors.white70, fontSize: 12)),
+          child: Text(genre.trim(), style: TextStyle(color: detailsSecondaryText, fontSize: 12)),
         )).toList()),
       ],
       const SizedBox(height: 20),
       Text(appText('القصة والوصف', 'About this title', 'Hikâye ve Açıklama'),
-        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        style: TextStyle(color: detailsText, fontSize: 18, fontWeight: FontWeight.bold)),
       const SizedBox(height: 9),
-      Text(description, style: TextStyle(color: Colors.white70, height: 1.7, fontSize: 14)),
+      Text(description, style: TextStyle(color: detailsSecondaryText, height: 1.7, fontSize: 14)),
       if (director.isNotEmpty) ...[
         const SizedBox(height: 14),
-        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: TextStyle(color: Colors.white70, fontSize: 13)),
+        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: TextStyle(color: detailsSecondaryText, fontSize: 13)),
       ],
       if (cast.isNotEmpty) ...[
         const SizedBox(height: 8),
-        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: TextStyle(color: detailsSecondaryText, fontSize: 13, height: 1.5)),
       ],
       const SizedBox(height: 18),
       _recommendationsSection(),
@@ -3537,7 +3551,7 @@ class _DetailsPageState extends State<DetailsPage> {
 
   Widget _moviePlaySection(Map<String, dynamic> item, String title, {required bool isChannel}) {
     return SizedBox(width: double.infinity, child: FilledButton.icon(
-      style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white,
+      style: FilledButton.styleFrom(backgroundColor: detailsPrimary, foregroundColor: detailsText,
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 18),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
       onPressed: () => _chooseAndPlay(contentType: isChannel ? 'channel' : 'movie',
@@ -3552,19 +3566,19 @@ class _DetailsPageState extends State<DetailsPage> {
     final selectedSeason = seasons.isNotEmpty ? seasons[selectedSeasonIndex.clamp(0, seasons.length - 1).toInt()] : null;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Container(width: 4, height: 22, decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4))),
+        Container(width: 4, height: 22, decoration: BoxDecoration(color: detailsPrimary, borderRadius: BorderRadius.circular(4))),
         const SizedBox(width: 9),
         Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'),
-          style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+          style: TextStyle(color: detailsText, fontSize: 19, fontWeight: FontWeight.bold)),
       ]),
       const SizedBox(height: 14),
       if (seasonsLoading)
-        Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: gold)))
+        Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: detailsPrimary)))
       else if (seasonsError != null)
         Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
       else if (seasons.isEmpty)
         Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'),
-          style: TextStyle(color: Colors.white70))
+          style: TextStyle(color: detailsSecondaryText))
       else ...[
         SizedBox(height: 42, child: ListView.separated(
           scrollDirection: Axis.horizontal, reverse: true, itemCount: seasons.length,
@@ -3576,8 +3590,8 @@ class _DetailsPageState extends State<DetailsPage> {
             return ChoiceChip(
               label: Text(label), selected: selected,
               onSelected: (_) => setState(() => selectedSeasonIndex = index),
-              selectedColor: gold, backgroundColor: const Color(0xFF292929),
-              labelStyle: TextStyle(color: Colors.white, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+              selectedColor: detailsPrimary, backgroundColor: const Color(0xFF292929),
+              labelStyle: TextStyle(color: detailsText, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
               side: BorderSide.none, showCheckmark: false,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
             );
@@ -3606,11 +3620,11 @@ class _DetailsPageState extends State<DetailsPage> {
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
+        backgroundColor: detailsBackground,
+        appBar: AppBar(backgroundColor: detailsBackground, title: Text(title), actions: [
           IconButton(tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
             onPressed: _toggleFavorite,
-            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : Colors.white)),
+            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? detailsPrimary : detailsText)),
         ]),
         body: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -3639,9 +3653,9 @@ class _DetailsPageState extends State<DetailsPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: gold, size: 16),
+        Icon(icon, color: detailsPrimary, size: 16),
         const SizedBox(width: 5),
-        Text(text, style: TextStyle(color: Colors.white70)),
+        Text(text, style: TextStyle(color: detailsSecondaryText)),
       ],
     );
   }
