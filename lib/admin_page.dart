@@ -516,7 +516,10 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget themePaletteSection() {
     final sections = <String, String>{'global': 'الألوان العامة', ...AppTheme.sectionLabels};
-    final prefix = selectedThemeSection == 'global' ? '' : '${selectedThemeSection}_';
+    final prefix = selectedThemeSection == 'global' ? '' : '\${selectedThemeSection}_';
+    final sectionName = sections[selectedThemeSection] ?? 'القسم';
+    final previewColor = (String role) => AppTheme.color('\${prefix}\${role}');
+    final previewTitle = selectedThemeSection == 'global' ? 'SHAM FLIX' : sectionName;
     return Card(
       color: adminPanel,
       child: Padding(
@@ -526,7 +529,8 @@ class _AdminPageState extends State<AdminPage> {
           children: [
             Text('تخصيص ألوان التطبيق', style: TextStyle(color: adminGold, fontSize: 17, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            Text('اختر القسم ثم عدّل ألوان عناصره بشكل مستقل. التغيير يظهر مباشرة قبل الحفظ.', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12, height: 1.5)),
+            Text('اختر القسم، شاهد معاينة شكلية له، ثم اختر اسم العنصر من القائمة أسفل المعاينة لتغيير لونه.',
+              style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12, height: 1.5)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: selectedThemeSection,
@@ -537,171 +541,96 @@ class _AdminPageState extends State<AdminPage> {
                 labelStyle: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
                 enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                 focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: adminGold)),
-              ),              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
+              ),
+              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
               onChanged: (value) { if (value != null) setState(() => selectedThemeSection = value); },
             ),
             const SizedBox(height: 14),
-            for (final entry in AppTheme.colorLabels.entries)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: themeSaving
-                      ? null
-                      : () => pickThemeColor('${prefix}${entry.key}', entry.value),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.color('${prefix}panel'),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.color('${prefix}border')),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(entry.value, style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 3),
-                              Text('اضغط لاختيار لون من القائمة', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 11)),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: AppTheme.color('${prefix}${entry.key}'),
-                            borderRadius: BorderRadius.circular(9),
-                            border: Border.all(color: Colors.white54, width: 1.2),
-                          ),
-                          child: const Icon(Icons.palette_outlined, color: Colors.white, size: 20),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(Icons.chevron_left, color: AppTheme.sectionColor('admin', 'secondaryText')),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+            Text('معاينة القسم', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.color(prefix + 'background'),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.color(prefix + 'border')),
-              ),
+              decoration: BoxDecoration(color: previewColor('background'), borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: previewColor('border'))),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                InkWell(
-                  onTap: themeSaving ? null : () => pickThemeColor(prefix + 'primary', 'عنوان الصفحة'),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      selectedThemeSection == 'home' ? 'الرئيسية' :
-                      selectedThemeSection == 'movies' ? 'الأفلام' :
-                      selectedThemeSection == 'series' ? 'المسلسلات' :
-                      selectedThemeSection == 'live' ? 'البث المباشر' :
-                      selectedThemeSection == 'settings' ? 'الإعدادات' :
-                      selectedThemeSection == 'admin' ? 'إعدادات المدير' : 'SHAM FLIX',
-                      style: TextStyle(color: AppTheme.color(prefix + 'primary'), fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: themeSaving ? null : () => pickThemeColor(prefix + 'panel', 'خلفية البطاقة'),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.color(prefix + 'panel'),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.color(prefix + 'border')),
-                    ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      InkWell(
-                        onTap: themeSaving ? null : () => pickThemeColor(prefix + 'latestMoviesText', 'عنوان أحدث الأفلام'),
-                        child: Text(
-                          'أحدث الأفلام',
-                          style: TextStyle(
-                            color: AppTheme.color(prefix + 'latestMoviesText'),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      InkWell(
-                        onTap: themeSaving ? null : () => pickThemeColor(prefix + 'latestSeriesText', 'عنوان أحدث المسلسلات'),
-                        child: Text(
-                          'أحدث المسلسلات',
-                          style: TextStyle(
-                            color: AppTheme.color(prefix + 'latestSeriesText'),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      InkWell(
-                        onTap: themeSaving ? null : () => pickThemeColor(prefix + 'secondaryText', 'النص الثانوي'),
-                        child: Text('اضغط على أي عنصر في المعاينة لتغيير لونه مباشرة', style: TextStyle(color: AppTheme.color(prefix + 'secondaryText'), fontSize: 11)),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(spacing: 6, children: [
-                        InkWell(
-                          onTap: themeSaving ? null : () => pickThemeColor(prefix + 'badge', 'الشارات'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                            decoration: BoxDecoration(color: AppTheme.color(prefix + 'badge'), borderRadius: BorderRadius.circular(20)),
-                            child: Text('جديد', style: TextStyle(color: AppTheme.color(prefix + 'text'), fontSize: 11)),
-                          ),
-                        ),
-                        InkWell(
-                          onTap: themeSaving ? null : () => pickThemeColor(prefix + 'packageBorder', 'حدود الباقات'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                            decoration: BoxDecoration(border: Border.all(color: AppTheme.color(prefix + 'packageBorder')), borderRadius: BorderRadius.circular(20)),
-                            child: Text('باقة مميزة', style: TextStyle(color: AppTheme.color(prefix + 'text'), fontSize: 11)),
-                          ),
-                        ),
-                      ]),
+                Text(previewTitle, style: TextStyle(color: previewColor('primary'), fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: previewColor('panel'), borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: previewColor('border'))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('أحدث الأفلام', style: TextStyle(color: previewColor('latestMoviesText'), fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 5),
+                    Text('أحدث المسلسلات', style: TextStyle(color: previewColor('latestSeriesText'), fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 7),
+                    Text('نص توضيحي يظهر ضمن عناصر القسم', style: TextStyle(color: previewColor('secondaryText'), fontSize: 11)),
+                    const SizedBox(height: 10),
+                    Wrap(spacing: 7, runSpacing: 7, children: [
+                      Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                        decoration: BoxDecoration(color: previewColor('badge'), borderRadius: BorderRadius.circular(20)),
+                        child: Text('جديد', style: TextStyle(color: previewColor('text'), fontSize: 11))),
+                      Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                        decoration: BoxDecoration(border: Border.all(color: previewColor('packageBorder')), borderRadius: BorderRadius.circular(20)),
+                        child: Text('باقة مميزة', style: TextStyle(color: previewColor('text'), fontSize: 11))),
                     ]),
-                  ),
+                  ]),
                 ),
                 const SizedBox(height: 10),
-                InkWell(
-                  onTap: themeSaving ? null : () => pickThemeColor(prefix + 'button', 'الأزرار'),
-                  child: Container(
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(color: AppTheme.color(prefix + 'button'), borderRadius: BorderRadius.circular(8)),
-                    child: Text('زر تجريبي', style: TextStyle(color: AppTheme.color(prefix + 'text'), fontWeight: FontWeight.bold)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text('كل عنصر قابل للاختيار من المعاينة', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.color(prefix + 'secondaryText'), fontSize: 10)),
+                Container(alignment: Alignment.center, padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(color: previewColor('button'), borderRadius: BorderRadius.circular(8)),
+                  child: Text('زر تجريبي', style: TextStyle(color: previewColor('text'), fontWeight: FontWeight.bold))),
               ]),
             ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: themeSaving ? null : saveThemePalette,
-              icon: const Icon(Icons.save),
+            const SizedBox(height: 14),
+            Text('اختر العنصر الذي تريد تغيير لونه', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            for (final entry in AppTheme.colorLabels.entries)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  decoration: BoxDecoration(color: previewColor('panel'), borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: previewColor('border'))),
+                  child: Row(children: [
+                    Expanded(child: ListTile(
+                      dense: true,
+                      leading: Container(width: 34, height: 34,
+                        decoration: BoxDecoration(color: previewColor(entry.key), borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white54)),
+                        child: const Icon(Icons.palette_outlined, color: Colors.white, size: 18)),
+                      title: Text(entry.value, style: TextStyle(color: previewColor('text'), fontWeight: FontWeight.w600)),
+                      subtitle: Text(themeColorControllers['\${prefix}\${entry.key}']?.text ?? AppTheme.defaults['\${prefix}\${entry.key}'] ?? '',
+                        style: TextStyle(color: previewColor('secondaryText'), fontSize: 11)),
+                      onTap: themeSaving ? null : () => pickThemeColor('\${prefix}\${entry.key}', entry.value),
+                    )),
+                    IconButton(tooltip: 'استعادة اللون الافتراضي لهذا العنصر',
+                      onPressed: themeSaving ? null : () {
+                        final key = '\${prefix}\${entry.key}';
+                        final fallback = AppTheme.defaults[key];
+                        if (fallback == null) return;
+                        themeColorControllers[key]?.text = fallback;
+                        previewThemePalette();
+                      },
+                      icon: Icon(Icons.restart_alt, color: previewColor('secondaryText'))),
+                  ]),
+                ),
+              ),
+            const SizedBox(height: 8),
+            FilledButton.icon(onPressed: themeSaving ? null : saveThemePalette, icon: const Icon(Icons.save),
               label: Text(themeSaving ? 'جارٍ الحفظ...' : 'حفظ الألوان'),
-              style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text')),
-            ),
+              style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text'))),
             TextButton.icon(
               onPressed: themeSaving ? null : () async {
-                final keys = selectedThemeSection == 'global'
-                    ? AppTheme.colorLabels.keys
-                    : AppTheme.colorLabels.keys.map((key) => '${selectedThemeSection}_$key');
-                for (final key in keys) {
-                  themeColorControllers[key]?.text = AppTheme.defaults[key]!;
+                for (final key in AppTheme.colorLabels.keys) {
+                  final fullKey = '\${prefix}\${key}';
+                  final fallback = AppTheme.defaults[fullKey];
+                  if (fallback != null) themeColorControllers[fullKey]?.text = fallback;
                 }
                 previewThemePalette();
                 await saveThemePalette();
               },
               icon: const Icon(Icons.restart_alt),
-              label: Text('استعادة ألوان هذا القسم', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
-            ),
+              label: Text('استعادة ألوان القسم بالكامل', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')))),
           ],
         ),
       ),
