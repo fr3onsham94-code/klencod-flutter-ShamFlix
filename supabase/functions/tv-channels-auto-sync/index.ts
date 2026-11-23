@@ -161,7 +161,7 @@ function countryPackageLabel(entry: {name:string; tvgLanguage:string; tvgCountry
     tr:"تركيا", tur:"تركيا", turkey:"تركيا", turkiye:"تركيا",
   };
   if (countries[raw]) return countries[raw];
-  if (/[\\u0600-\\u06FF]/.test(entry.name) || /arabic|عربي|العربية/i.test(entry.tvgLanguage + " " + entry.groupTitle)) return "قنوات عربية متنوعة";
+  if (/[\u0600-\u06FF]/.test(entry.name) || /arabic|عربي|العربية/i.test(entry.tvgLanguage + " " + entry.groupTitle)) return "قنوات عربية متنوعة";
   if (/turkish|turkce|تركي|تركية/i.test(entry.tvgLanguage + " " + entry.groupTitle) || /[ğüşöçıİ]/.test(entry.name)) return "تركيا";
   return "قنوات عربية متنوعة";
 }
@@ -309,7 +309,7 @@ function countriesOrder(label: string): number {
 
 async function verifyAdminBearer(db: any, req: Request): Promise<boolean> {
   const authorization = req.headers.get("authorization") || "";
-  const match = authorization.match(/^Bearer\\s+(.+)$/i);
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
   if (!match) return false;
   const { data, error } = await db.auth.getUser(match[1]);
   if (error || !data?.user) return false;
