@@ -1913,6 +1913,10 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                                 Positioned.fill(
                                   child: GestureDetector(
                                     onTap: () => setState(() => sidebarOpen = false),
+                                    onHorizontalDragEnd: (details) {
+                                      if (!swipeSidebarEnabled) return;
+                                      if ((details.primaryVelocity ?? 0) < -250) setState(() => sidebarOpen = false);
+                                    },
                                     child: Container(color: Colors.black54),
                                   ),
                                 ),
@@ -3676,6 +3680,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   void initState() {
     super.initState();
     AppTheme.revision.addListener(_onThemeChanged);
+    appSettingsRefreshNotifier.addListener(_onSidebarSettingsChanged);
     _load();
     _loadLiveSidebarSettings();
     channelRefreshNotifier.addListener(_onExternalRefresh);
@@ -3683,10 +3688,12 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
 
   void _onExternalRefresh() { _load(); }
   void _onThemeChanged() { if (mounted) setState(() {}); }
+  void _onSidebarSettingsChanged() { _loadLiveSidebarSettings(); }
 
   @override
   void dispose() {
     channelRefreshNotifier.removeListener(_onExternalRefresh);
+    appSettingsRefreshNotifier.removeListener(_onSidebarSettingsChanged);
     AppTheme.revision.removeListener(_onThemeChanged);
     _searchController.dispose();
     super.dispose();
@@ -4119,6 +4126,10 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                     Positioned.fill(
                       child: GestureDetector(
                         onTap: () => setState(() => sidebarOpen = false),
+                        onHorizontalDragEnd: (details) {
+                          if (!swipeSidebarEnabled) return;
+                          if ((details.primaryVelocity ?? 0) < -250) setState(() => sidebarOpen = false);
+                        },
                         child: Container(color: Colors.black54),
                       ),
                     ),
