@@ -143,7 +143,7 @@ class ShamFlixBackgroundImportService {
   }
 
   static Future<void> _status(String value, {String? error, String? message, String? expectedJobId}) async {
-    final job = expectedJobId == null ? await currentJob() : await this.job(expectedJobId);
+    final job = expectedJobId == null ? await currentJob() : await ShamFlixBackgroundImportService.job(expectedJobId);
     if (job == null || (expectedJobId != null && job['id']?.toString() != expectedJobId) || (job['status'] == 'cancelled' && value != 'cancelled')) return;
     job['status'] = value;
     if (error != null) job['error'] = error;
