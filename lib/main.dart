@@ -499,62 +499,68 @@ class _ShamFlixAppState extends State<ShamFlixApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AppTheme.revision,
-      builder: (context, _) => ValueListenableBuilder<Locale>(
+    return ValueListenableBuilder<Locale>(
       valueListenable: appLocaleNotifier,
       builder: (context, locale, _) => MaterialApp(
-      locale: locale,
-      supportedLocales: const [Locale('ar'), Locale('en'), Locale('tr')],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      scaffoldMessengerKey: messengerKey,
-      debugShowCheckedModeBanner: false,
-      title: 'ShamFlix',
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: AppTheme.background,
-        canvasColor: AppTheme.background,
-        dividerColor: Colors.white12,
-        colorScheme: ColorScheme.dark(
-          primary: AppTheme.primary,
-          secondary: AppTheme.primary,
-          surface: AppTheme.panel,
-          onPrimary: AppTheme.text,
-          onSecondary: AppTheme.text,
-          onSurface: AppTheme.text,
+        locale: locale,
+        supportedLocales: const [Locale('ar'), Locale('en'), Locale('tr')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        scaffoldMessengerKey: messengerKey,
+        debugShowCheckedModeBanner: false,
+        title: 'ShamFlix',
+        // Keep MaterialApp/Navigator stable while the legacy palette changes.
+        // Rebuilding Theme below updates colors without replacing routes or dialogs.
+        theme: ThemeData.dark(),
+        builder: (context, child) => ValueListenableBuilder<int>(
+          valueListenable: AppTheme.revision,
+          builder: (context, revision, _) => Theme(
+            data: ThemeData.dark().copyWith(
+              scaffoldBackgroundColor: AppTheme.background,
+              canvasColor: AppTheme.background,
+              dividerColor: Colors.white12,
+              colorScheme: ColorScheme.dark(
+                primary: AppTheme.primary,
+                secondary: AppTheme.primary,
+                surface: AppTheme.panel,
+                onPrimary: AppTheme.text,
+                onSecondary: AppTheme.text,
+                onSurface: AppTheme.text,
+              ),
+              appBarTheme: AppBarTheme(
+                backgroundColor: AppTheme.background,
+                foregroundColor: AppTheme.primary,
+                elevation: 0,
+                surfaceTintColor: Colors.transparent,
+              ),
+              iconTheme: IconThemeData(color: AppTheme.primary),
+              progressIndicatorTheme: ProgressIndicatorThemeData(
+                color: AppTheme.primary,
+                linearTrackColor: AppTheme.panel,
+              ),
+              textSelectionTheme: TextSelectionThemeData(
+                cursorColor: AppTheme.primary,
+                selectionColor: AppTheme.primary.withOpacity(0.25),
+                selectionHandleColor: AppTheme.primary,
+              ),
+              snackBarTheme: SnackBarThemeData(
+                backgroundColor: AppTheme.panel,
+                contentTextStyle: TextStyle(color: AppTheme.text),
+                behavior: SnackBarBehavior.floating,
+              ),
+              floatingActionButtonTheme: FloatingActionButtonThemeData(
+                backgroundColor: AppTheme.button,
+                foregroundColor: AppTheme.text,
+              ),
+            ),
+            child: child ?? const SizedBox.shrink(),
+          ),
         ),
-        appBarTheme: AppBarTheme(
-          backgroundColor: AppTheme.background,
-          foregroundColor: AppTheme.primary,
-          elevation: 0,
-          surfaceTintColor: Colors.transparent,
-        ),
-        iconTheme: IconThemeData(color: AppTheme.primary),
-        progressIndicatorTheme: ProgressIndicatorThemeData(
-          color: AppTheme.primary,
-          linearTrackColor: AppTheme.panel,
-        ),
-        textSelectionTheme: TextSelectionThemeData(
-          cursorColor: AppTheme.primary,
-          selectionColor: AppTheme.primary.withOpacity(0.25),
-          selectionHandleColor: AppTheme.primary,
-        ),
-        snackBarTheme: SnackBarThemeData(
-          backgroundColor: AppTheme.panel,
-          contentTextStyle: TextStyle(color: AppTheme.text),
-          behavior: SnackBarBehavior.floating,
-        ),
-        floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: AppTheme.button,
-          foregroundColor: AppTheme.text,
-        ),
+        home: const HomePage(),
       ),
-      home: const HomePage(),
-    ),
-    ),
     );
   }
 }
