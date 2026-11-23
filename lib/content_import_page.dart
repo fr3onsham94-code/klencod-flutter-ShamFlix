@@ -36,6 +36,13 @@ class _ContentImportPageState extends State<ContentImportPage> {
   Timer? _backgroundJobTimer;
   Map<String, dynamic>? backgroundJob;
 
+  double get _backgroundProgress {
+    final total = (backgroundJob?['total'] as num?)?.toDouble() ?? 0;
+    final processed = (backgroundJob?['processed'] as num?)?.toDouble() ?? 0;
+    if (total <= 0) return 0;
+    return (processed / total).clamp(0.0, 1.0).toDouble();
+  }
+
   Color get accent => AppTheme.primary;
   Color get bg => AppTheme.background;
   Color get panel => AppTheme.panel;
@@ -904,11 +911,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
                     Text((backgroundJob!['status'] ?? '').toString()),
                   ]),
                   const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: (backgroundJob!['total'] as num? ?? 0) == 0 ? 0 :
-                      ((backgroundJob!['processed'] as num? ?? 0) / (backgroundJob!['total'] as num)).clamp(0.0, 1.0),
-                    color: accent,
-                  ),
+                  LinearProgressIndicator(value: _backgroundProgress, color: accent),
                   const SizedBox(height: 8),
                   Text((backgroundJob!['message'] ?? '').toString()),
                   Text('تمت الإضافة: ${backgroundJob!['imported'] ?? 0} • المكرر: ${backgroundJob!['duplicates'] ?? 0} • تعذر: ${backgroundJob!['failed'] ?? 0}'),
