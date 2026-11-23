@@ -168,6 +168,25 @@ function countryPackageLabel(entry: {name:string; tvgLanguage:string; tvgCountry
   return "قنوات عربية متنوعة";
 }
 
+function extinfNameSeparator(line: string): number {
+  // EXTINF attributes may contain commas inside quoted values (notably User-Agent).
+  // Only the first comma outside quotes separates attributes from the channel name.
+  let quote = "";
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quote) {
+      if (ch === quote && line[i - 1] !== "\\") quote = "";
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ",") return i;
+  }
+  return -1;
+}
+
 function parseM3u(text: string, sourceId: string, sourceName: string) {
   const result: Array<{sourceId:string;sourceName:string;key:string;name:string;nameEn:string;tvgId:string;logo:string;category:string;url:string;position:number;tvgLanguage:string;tvgCountry:string;groupTitle:string}> = [];
   let pending: Record<string,string> | null = null;
@@ -177,8 +196,9 @@ function parseM3u(text: string, sourceId: string, sourceName: string) {
     const line = raw.trim();
     if (!line) continue;
     if (line.startsWith("#EXTINF")) {
-      const comma = line.indexOf(",");
-      pending = parseAttrs(line);
+      const comma = extinfNameSeparator(line);
+      const attributes = comma >= 0 ? line.slice(0, comma) : line;
+      pending = parseAttrs(attributes);
       displayName = comma >= 0 ? clean(line.slice(comma + 1)) : "";
       continue;
     }
@@ -210,7 +230,6 @@ function parseM3u(text: string, sourceId: string, sourceName: string) {
   }
   return result;
 }
-
 function isPublicIpAddress(address: string): boolean {
   const value = address.toLowerCase().split("%")[0];
   if (value.includes(":")) {
