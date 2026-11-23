@@ -463,21 +463,21 @@ class _AdminPageState extends State<AdminPage> {
                     Row(children: [
                       const SizedBox(width: 62, child: Text('درجة اللون')),
                       Expanded(child: Slider(
-                        value: hue.clamp(0.0, 360.0), min: 0, max: 360,
+                        value: hue, min: 0, max: 360,
                         onChanged: (v) { hue = v; updateColor(); },
                       )),
                     ]),
                     Row(children: [
                       const SizedBox(width: 62, child: Text('التشبّع')),
                       Expanded(child: Slider(
-                        value: saturation.clamp(0.0, 1.0), min: 0, max: 1,
+                        value: saturation, min: 0, max: 1,
                         onChanged: (v) { saturation = v; updateColor(); },
                       )),
                     ]),
                     Row(children: [
                       const SizedBox(width: 62, child: Text('السطوع')),
                       Expanded(child: Slider(
-                        value: value.clamp(0.0, 1.0), min: 0, max: 1,
+                        value: value, min: 0, max: 1,
                         onChanged: (v) { value = v; updateColor(); },
                       )),
                     ]),
