@@ -94,7 +94,7 @@ class ShamFlixBackgroundImportService {
         ),
       );
     } catch (e) {
-      await _status('failed', error: e.toString(), expectedJobId: inputData?['job_id']?.toString());
+      await _status('failed', error: e.toString(), expectedJobId: job['id']?.toString());
       rethrow;
     }
   }
