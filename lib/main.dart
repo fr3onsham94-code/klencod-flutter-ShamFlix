@@ -575,7 +575,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   Color get homeBackground => AppTheme.sectionColor('home', 'background');
   Color get homePrimary => AppTheme.sectionColor('home', 'primary');
-  Color get homePanel => AppTheme.sectionColor('home', 'homePanel');
+  Color get homePanel => AppTheme.sectionColor('home', 'panel');
   Color get homeText => AppTheme.sectionColor('home', 'text');
   Color get homeSecondaryText => AppTheme.sectionColor('home', 'secondaryText');
   Color get homeButton => AppTheme.sectionColor('home', 'button');
@@ -2007,7 +2007,7 @@ class AccountPage extends StatefulWidget {
 class _AccountPageState extends State<AccountPage> {
   Color get accountBackground => AppTheme.sectionColor('account', 'background');
   Color get accountPrimary => AppTheme.sectionColor('account', 'primary');
-  Color get accountPanel => AppTheme.sectionColor('account', 'accountPanel');
+  Color get accountPanel => AppTheme.sectionColor('account', 'panel');
   Color get accountText => AppTheme.sectionColor('account', 'text');
   Color get accountSecondaryText => AppTheme.sectionColor('account', 'secondaryText');
   Color get accountButton => AppTheme.sectionColor('account', 'button');
@@ -2872,7 +2872,7 @@ class FavoritesPage extends StatefulWidget {
 class _FavoritesPageState extends State<FavoritesPage> {
   Color get favoritesBackground => AppTheme.sectionColor('favorites', 'background');
   Color get favoritesPrimary => AppTheme.sectionColor('favorites', 'primary');
-  Color get favoritesPanel => AppTheme.sectionColor('favorites', 'favoritesPanel');
+  Color get favoritesPanel => AppTheme.sectionColor('favorites', 'panel');
   Color get favoritesText => AppTheme.sectionColor('favorites', 'text');
   Color get favoritesSecondaryText => AppTheme.sectionColor('favorites', 'secondaryText');
   void _onFavoritesThemeChanged() { if (mounted) setState(() {}); }
@@ -2927,7 +2927,7 @@ class WatchHistoryPage extends StatefulWidget {
 class _WatchHistoryPageState extends State<WatchHistoryPage> {
   Color get historyBackground => AppTheme.sectionColor('history', 'background');
   Color get historyPrimary => AppTheme.sectionColor('history', 'primary');
-  Color get historyPanel => AppTheme.sectionColor('history', 'historyPanel');
+  Color get historyPanel => AppTheme.sectionColor('history', 'panel');
   Color get historyText => AppTheme.sectionColor('history', 'text');
   Color get historySecondaryText => AppTheme.sectionColor('history', 'secondaryText');
   void _onHistoryThemeChanged() { if (mounted) setState(() {}); }
@@ -2988,7 +2988,7 @@ class DetailsPage extends StatefulWidget {
 class _DetailsPageState extends State<DetailsPage> {
   Color get detailsBackground => AppTheme.sectionColor('details', 'background');
   Color get detailsPrimary => AppTheme.sectionColor('details', 'primary');
-  Color get detailsPanel => AppTheme.sectionColor('details', 'detailsPanel');
+  Color get detailsPanel => AppTheme.sectionColor('details', 'panel');
   Color get detailsText => AppTheme.sectionColor('details', 'text');
   Color get detailsSecondaryText => AppTheme.sectionColor('details', 'secondaryText');
   Color get detailsButton => AppTheme.sectionColor('details', 'button');
@@ -4288,7 +4288,7 @@ class ShamFlixPlayerPage extends StatefulWidget {
 
 class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   Color get playerPrimary => AppTheme.sectionColor('player', 'primary');
-  Color get playerPanel => AppTheme.sectionColor('player', 'playerPanel');
+  Color get playerPanel => AppTheme.sectionColor('player', 'panel');
   Color get playerText => AppTheme.sectionColor('player', 'text');
   Color get playerSecondaryText => AppTheme.sectionColor('player', 'secondaryText');
   Color get playerButton => AppTheme.sectionColor('player', 'button');
