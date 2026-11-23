@@ -573,6 +573,13 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  Color get homeBackground => AppTheme.sectionColor('home', 'background');
+  Color get homePrimary => AppTheme.sectionColor('home', 'primary');
+  Color get homePanel => AppTheme.sectionColor('home', 'homePanel');
+  Color get homeText => AppTheme.sectionColor('home', 'text');
+  Color get homeSecondaryText => AppTheme.sectionColor('home', 'secondaryText');
+  Color get homeButton => AppTheme.sectionColor('home', 'button');
+  Color get homeBorder => AppTheme.sectionColor('home', 'border');
   int selectedTab = 0;
   int selectedCategory = 0;
 
@@ -601,6 +608,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    AppTheme.revision.addListener(_onHomeThemeChanged);
     loadData();
     recentHistory = ShamFlixLocalStore.getHistory();
     loadCategoryBadgeSetting();
@@ -646,8 +654,13 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  void _onHomeThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    AppTheme.revision.removeListener(_onHomeThemeChanged);
     authRefreshNotifier.removeListener(onAuthChanged);
     localProfileRefreshNotifier.removeListener(onProfileChanged);
     channelRefreshNotifier.removeListener(onChannelsChanged);
@@ -730,12 +743,12 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
       child: Row(
         children: [
-          Container(width: 4, height: 22, color: gold),
+          Container(width: 4, height: 22, color: homePrimary),
           const SizedBox(width: 9),
           Text(
             title,
             style: TextStyle(
-              color: color ?? AppTheme.text,
+              color: color ?? homeText,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -749,9 +762,9 @@ class _HomePageState extends State<HomePage> {
     if (url == null || url.isEmpty) {
       return Container(
         height: height,
-        color: panel,
+        color: homePanel,
         child: Center(
-          child: Icon(Icons.movie, color: gold, size: 48),
+          child: Icon(Icons.movie, color: homePrimary, size: 48),
         ),
       );
     }
@@ -764,9 +777,9 @@ class _HomePageState extends State<HomePage> {
       errorBuilder: (_, __, ___) {
         return Container(
           height: height,
-          color: panel,
+          color: homePanel,
           child: Center(
-            child: Icon(Icons.movie, color: gold, size: 48),
+            child: Icon(Icons.movie, color: homePrimary, size: 48),
           ),
         );
       },
@@ -825,13 +838,13 @@ class _HomePageState extends State<HomePage> {
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: gold,
+                            color: homePrimary,
                             borderRadius: BorderRadius.circular(7),
                           ),
                           child: Text(
                             category,
                             style: TextStyle(
-                              color: AppTheme.text,
+                              color: homeText,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
@@ -848,14 +861,14 @@ class _HomePageState extends State<HomePage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: AppTheme.text,
+                color: homeText,
                 fontWeight: FontWeight.bold,
               ),
             ),
             Text(
               valueOf(item['release_year'], 'ShamFlix'),
               style: TextStyle(
-                color: AppTheme.secondaryText,
+                color: homeSecondaryText,
                 fontSize: 11,
               ),
             ),
@@ -882,7 +895,7 @@ class _HomePageState extends State<HomePage> {
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Center(
-                  child: CircularProgressIndicator(color: gold),
+                  child: CircularProgressIndicator(color: homePrimary),
                 );
               }
 
@@ -890,7 +903,7 @@ class _HomePageState extends State<HomePage> {
                 return Center(
                   child: Text(
                     'تعذر تحميل البيانات',
-                    style: TextStyle(color: AppTheme.secondaryText),
+                    style: TextStyle(color: homeSecondaryText),
                   ),
                 );
               }
@@ -907,7 +920,7 @@ class _HomePageState extends State<HomePage> {
                 return Center(
                   child: Text(
                     'لا يوجد محتوى منشور حالياً',
-                    style: TextStyle(color: AppTheme.secondaryText),
+                    style: TextStyle(color: homeSecondaryText),
                   ),
                 );
               }
@@ -950,9 +963,9 @@ class _HomePageState extends State<HomePage> {
             SizedBox(
               height: 112,
               child: snapshot.connectionState == ConnectionState.waiting
-                  ? Center(child: CircularProgressIndicator(color: gold))
+                  ? Center(child: CircularProgressIndicator(color: homePrimary))
                   : records.isEmpty
-                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: AppTheme.secondaryText)))
+                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: homeSecondaryText)))
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
                           reverse: true,
@@ -970,22 +983,22 @@ class _HomePageState extends State<HomePage> {
                                 width: 150,
                                 margin: const EdgeInsets.only(left: 10),
                                 padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(12)),
+                                decoration: BoxDecoration(color: homePanel, borderRadius: BorderRadius.circular(12)),
                                 child: Row(children: [
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(30),
                                     child: SizedBox(
                                       width: 48, height: 48,
                                       child: logo.isEmpty
-                                          ? ColoredBox(color: bg, child: Icon(Icons.live_tv, color: gold))
+                                          ? ColoredBox(color: homeBackground, child: Icon(Icons.live_tv, color: homePrimary))
                                           : Image.network(logo, fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => ColoredBox(color: bg, child: Icon(Icons.live_tv, color: gold))),
+                                              errorBuilder: (_, __, ___) => ColoredBox(color: homeBackground, child: Icon(Icons.live_tv, color: homePrimary))),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(valueOf(record['title'], appText('قناة', 'Channel', 'Kanal')), maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold))),
+                                    style: TextStyle(color: homeText, fontWeight: FontWeight.bold))),
                                 ]),
                               ),
                             );
@@ -1017,13 +1030,13 @@ class _HomePageState extends State<HomePage> {
                 child: Container(width: 145, margin: const EdgeInsets.only(left: 12),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     ClipRRect(borderRadius: BorderRadius.circular(10), child: SizedBox(width: 145, height: 145,
-                      child: poster.isEmpty ? Container(color: panel, child: Icon(Icons.play_circle, color: gold, size: 42)) :
+                      child: poster.isEmpty ? Container(color: homePanel, child: Icon(Icons.play_circle, color: homePrimary, size: 42)) :
                         Image.network(poster, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
-                          Container(color: panel, child: Icon(Icons.play_circle, color: gold, size: 42))))),
+                          Container(color: homePanel, child: Icon(Icons.play_circle, color: homePrimary, size: 42))))),
                     const SizedBox(height: 7),
                     Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
-                    Text('متابعة من ${formatWatchPosition(record['position'])}', style: TextStyle(color: gold, fontSize: 11)),
+                      style: TextStyle(color: homeText, fontWeight: FontWeight.bold)),
+                    Text('متابعة من ${formatWatchPosition(record['position'])}', style: TextStyle(color: homePrimary, fontSize: 11)),
                   ]),
                 ),
               );
@@ -1043,19 +1056,19 @@ class _HomePageState extends State<HomePage> {
           return Container(
             height: 365,
             margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-            decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16)),
-            child: Center(child: CircularProgressIndicator(color: gold)),
+            decoration: BoxDecoration(color: homePanel, borderRadius: BorderRadius.circular(16)),
+            child: Center(child: CircularProgressIndicator(color: homePrimary)),
           );
         }
         if (items.isEmpty) {
           return Container(
             height: 365,
             margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-            decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(color: homePanel, borderRadius: BorderRadius.circular(16)),
             child: Center(
               child: Text(
                 appText('لا يوجد محتوى مضاف حديثاً', 'No recent additions', 'Yeni eklenen içerik yok'),
-                style: TextStyle(color: AppTheme.secondaryText),
+                style: TextStyle(color: homeSecondaryText),
               ),
             ),
           );
@@ -1116,12 +1129,12 @@ class _HomePageState extends State<HomePage> {
                         right: 14,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(5)),
+                          decoration: BoxDecoration(color: homePrimary, borderRadius: BorderRadius.circular(5)),
                           child: Text(
                             isSeries
                                 ? appText('مسلسل جديد', 'NEW SERIES', 'YENİ DİZİ')
                                 : appText('فيلم جديد', 'NEW MOVIE', 'YENİ FİLM'),
-                            style: TextStyle(color: AppTheme.text, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                            style: TextStyle(color: homeText, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
                           ),
                         ),
                       ),
@@ -1141,7 +1154,7 @@ class _HomePageState extends State<HomePage> {
                               title,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(color: AppTheme.text, fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
+                              style: TextStyle(color: homeText, fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
                             ),
                             const SizedBox(height: 14),
                             Row(
@@ -1149,8 +1162,8 @@ class _HomePageState extends State<HomePage> {
                                 ElevatedButton.icon(
                                   onPressed: () => openDetails(featured, isSeries: isSeries),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: gold,
-                                    foregroundColor: AppTheme.text,
+                                    backgroundColor: homePrimary,
+                                    foregroundColor: homeText,
                                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                                   ),
@@ -1161,8 +1174,8 @@ class _HomePageState extends State<HomePage> {
                                 OutlinedButton.icon(
                                   onPressed: () => openDetails(featured, isSeries: isSeries),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.text,
-                                    side: BorderSide(color: AppTheme.secondaryText),
+                                    foregroundColor: homeText,
+                                    side: BorderSide(color: homeSecondaryText),
                                     padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                                   ),
@@ -1193,7 +1206,7 @@ class _HomePageState extends State<HomePage> {
                         height: 6,
                         margin: const EdgeInsets.symmetric(horizontal: 3),
                         decoration: BoxDecoration(
-                          color: active ? gold : Colors.white54,
+                          color: active ? homePrimary : Colors.white54,
                           borderRadius: BorderRadius.circular(6),
                         ),
                       );
@@ -1209,8 +1222,8 @@ class _HomePageState extends State<HomePage> {
 
   Widget homeContent() {
     return RefreshIndicator(
-      color: gold,
-      backgroundColor: panel,
+      color: homePrimary,
+      backgroundColor: homePanel,
       onRefresh: refreshData,
       child: ListView(
         children: [
@@ -1221,23 +1234,23 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(
                   'SHAM',
-                  style: TextStyle(color: AppTheme.text, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  style: TextStyle(color: homeText, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 Text(
                   'FLIX',
-                  style: TextStyle(color: gold, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  style: TextStyle(color: homePrimary, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 const Spacer(),
                 IconButton(
                   onPressed: () {
                     showSearch(context: context, delegate: ShamFlixSearch());
                   },
-                  icon: Icon(Icons.search, color: AppTheme.text),
+                  icon: Icon(Icons.search, color: homeText),
                 ),
                 IconButton(
                   tooltip: appText('الإشعارات', 'Notifications', 'Bildirimler'),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
-                  icon: Icon(Icons.notifications_none, color: AppTheme.text),
+                  icon: Icon(Icons.notifications_none, color: homeText),
                 ),
               ],
             ),
@@ -1304,13 +1317,13 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         bottomNavigationBar: NavigationBar(
-          backgroundColor: const Color(0xFF151515),
-          indicatorColor: const Color(0x33E50914),
+          backgroundColor: homeBackground,
+          indicatorColor: homePrimary.withOpacity(0.20),
           height: 62,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
             return TextStyle(
-              color: states.contains(WidgetState.selected) ? AppTheme.text : AppTheme.secondaryText,
+              color: states.contains(WidgetState.selected) ? homeText : homeSecondaryText,
               fontSize: states.contains(WidgetState.selected) ? 10 : 9,
               fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.normal,
             );
@@ -1323,25 +1336,25 @@ class _HomePageState extends State<HomePage> {
           },
           destinations: [
             NavigationDestination(
-              icon: Icon(Icons.home_outlined, color: AppTheme.secondaryText, size: 19),
-              selectedIcon: Icon(Icons.home, color: gold, size: 19),
+              icon: Icon(Icons.home_outlined, color: homeSecondaryText, size: 19),
+              selectedIcon: Icon(Icons.home, color: homePrimary, size: 19),
               label: appText('الرئيسية', 'Home', 'Ana Sayfa'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.movie_outlined, color: AppTheme.secondaryText, size: 19),
+              icon: Icon(Icons.movie_outlined, color: homeSecondaryText, size: 19),
               label: appText('الأفلام', 'Movies', 'Filmler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.video_library_outlined, color: AppTheme.secondaryText, size: 19),
+              icon: Icon(Icons.video_library_outlined, color: homeSecondaryText, size: 19),
               label: appText('المسلسلات', 'Series', 'Diziler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.live_tv_outlined, color: AppTheme.secondaryText, size: 19),
+              icon: Icon(Icons.live_tv_outlined, color: homeSecondaryText, size: 19),
               label: appText('مباشر', 'Live TV', 'Canlı TV'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.person_outline, color: AppTheme.secondaryText, size: 19),
-              selectedIcon: Icon(Icons.person, color: gold, size: 19),
+              icon: Icon(Icons.person_outline, color: homeSecondaryText, size: 19),
+              selectedIcon: Icon(Icons.person, color: homePrimary, size: 19),
               label: appText('حسابي', 'My Account', 'Hesabım'),
             ),
           ],
