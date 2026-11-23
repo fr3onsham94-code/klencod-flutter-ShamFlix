@@ -4,6 +4,7 @@ import 'admin_packages_page.dart';
 import 'app_theme.dart';
 import 'content_category_import_service.dart';
 import 'content_page_import_service.dart';
+import 'stream_source_detector.dart';
 
 class ContentImportPage extends StatefulWidget {
   const ContentImportPage({super.key});
@@ -173,10 +174,9 @@ class _ContentImportPageState extends State<ContentImportPage> {
   bool _isAkwamPlaybackPage(dynamic value) {
     final raw = value?.toString().trim() ?? '';
     final uri = Uri.tryParse(raw);
-    if (uri == null || !_isAkwamPage(raw)) return false;
-    // نسمح بملفات الوسائط المباشرة فقط، ونرفض صفحات الموقع مثل /watch و/episode.
-    return !RegExp(r'\.(m3u8|mp4|m4v|mov|webm|avi|mpd)(?:$)', caseSensitive: false)
-        .hasMatch(uri.path);
+    if (uri == null) return true;
+    // صفحات أكوام ليست روابط تشغيل؛ لا نقبل إلا ملف وسائط مباشر من أي مضيف.
+    return !StreamSourceDetector.isDirectMediaUrl(raw);
   }
 
   // Import visible Akwam episode pages and their public playback-page links.
