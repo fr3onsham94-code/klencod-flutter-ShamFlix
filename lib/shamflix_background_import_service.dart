@@ -241,6 +241,13 @@ class ShamFlixBackgroundImportService {
       job['message'] = 'تمت معالجة ' + job['processed'].toString() + ' من ' + job['total'].toString();
       job['updated_at'] = DateTime.now().toIso8601String();
       await _save(job);
+      await Workmanager().reportProgress({
+        'processed': job['processed'],
+        'total': job['total'],
+        'imported': job['imported'],
+        'duplicates': job['duplicates'],
+        'failed': job['failed'],
+      });
     }
     job['status'] = 'completed';
     job['message'] = 'اكتمل الاستيراد';
