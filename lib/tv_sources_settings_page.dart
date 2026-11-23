@@ -104,8 +104,12 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       if (!mounted) return;
       _message('تمت إضافة المصدر، جارٍ استيراد قنواته الآن...');
       try {
+        final accessToken = AuthService.client.auth.currentSession?.accessToken;
         final response = await AuthService.client.functions.invoke(
           'tv-channels-auto-sync',
+          headers: {
+            if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+          },
           body: {'mode': 'sync'},
         );
         final data = response.data;
