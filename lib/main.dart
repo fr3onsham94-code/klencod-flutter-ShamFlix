@@ -4855,10 +4855,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           content: TextField(
             controller: urlController,
             keyboardType: TextInputType.url,
-            style: const TextStyle(color: playerText),
+            style: TextStyle(color: playerText),
             decoration: InputDecoration(
               hintText: 'https://example.com/subtitle.srt',
-              hintStyle: const TextStyle(color: playerText38),
+              hintStyle: TextStyle(color: playerText.withOpacity(0.38)),
             ),
           ),
           actions: [
@@ -5305,7 +5305,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                     value: current.clamp(0.0, max).toDouble(),
                                                     max: max,
                                                     activeColor: playerPrimary,
-                                                    inactiveColor: playerText24,
+                                                    inactiveColor: playerText.withOpacity(0.24),
                                                     onChangeStart: duration == Duration.zero
                                                         ? null
                                                         : (value) {
@@ -5342,7 +5342,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                   decoration: BoxDecoration(
                                                     color: playerText.withOpacity(0.07),
                                                     borderRadius: BorderRadius.circular(16),
-                                                    border: Border.all(color: playerText12),
+                                                    border: Border.all(color: playerText.withOpacity(0.12)),
                                                   ),
                                                   child: Row(
                                                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
