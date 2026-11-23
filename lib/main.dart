@@ -1357,7 +1357,7 @@ class PackageCatalogPage extends StatefulWidget {
 }
 
 class _PackageCatalogPageState extends State<PackageCatalogPage> {
-  String get themeSection => 'live';
+  String get themeSection => widget.contentType == 'movie' ? 'movies' : 'series';
   Color get sectionBackground => AppTheme.sectionColor(themeSection, 'background');
   Color get sectionPrimary => AppTheme.sectionColor(themeSection, 'primary');
   Color get sectionPanel => AppTheme.sectionColor(themeSection, 'panel');
