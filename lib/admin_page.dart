@@ -516,9 +516,9 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget themePaletteSection() {
     final sections = <String, String>{'global': 'الألوان العامة', ...AppTheme.sectionLabels};
-    final prefix = selectedThemeSection == 'global' ? '' : '\${selectedThemeSection}_';
+    final prefix = selectedThemeSection == 'global' ? '' : '${selectedThemeSection}_';
     final sectionName = sections[selectedThemeSection] ?? 'القسم';
-    final previewColor = (String role) => AppTheme.color('\${prefix}\${role}');
+    final previewColor = (String role) => AppTheme.color('${prefix}${role}');
     final previewTitle = selectedThemeSection == 'global' ? 'SHAM FLIX' : sectionName;
     return Card(
       color: adminPanel,
@@ -599,13 +599,13 @@ class _AdminPageState extends State<AdminPage> {
                           border: Border.all(color: Colors.white54)),
                         child: const Icon(Icons.palette_outlined, color: Colors.white, size: 18)),
                       title: Text(entry.value, style: TextStyle(color: previewColor('text'), fontWeight: FontWeight.w600)),
-                      subtitle: Text(themeColorControllers['\${prefix}\${entry.key}']?.text ?? AppTheme.defaults['\${prefix}\${entry.key}'] ?? '',
+                      subtitle: Text(themeColorControllers['${prefix}${entry.key}']?.text ?? AppTheme.defaults['${prefix}${entry.key}'] ?? '',
                         style: TextStyle(color: previewColor('secondaryText'), fontSize: 11)),
-                      onTap: themeSaving ? null : () => pickThemeColor('\${prefix}\${entry.key}', entry.value),
+                      onTap: themeSaving ? null : () => pickThemeColor('${prefix}${entry.key}', entry.value),
                     )),
                     IconButton(tooltip: 'استعادة اللون الافتراضي لهذا العنصر',
                       onPressed: themeSaving ? null : () {
-                        final key = '\${prefix}\${entry.key}';
+                        final key = '${prefix}${entry.key}';
                         final fallback = AppTheme.defaults[key];
                         if (fallback == null) return;
                         themeColorControllers[key]?.text = fallback;
@@ -622,7 +622,7 @@ class _AdminPageState extends State<AdminPage> {
             TextButton.icon(
               onPressed: themeSaving ? null : () async {
                 for (final key in AppTheme.colorLabels.keys) {
-                  final fullKey = '\${prefix}\${key}';
+                  final fullKey = '${prefix}${key}';
                   final fallback = AppTheme.defaults[fullKey];
                   if (fallback != null) themeColorControllers[fullKey]?.text = fallback;
                 }
