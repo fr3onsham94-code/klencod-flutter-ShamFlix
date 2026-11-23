@@ -85,9 +85,13 @@ class _ContentImportPageState extends State<ContentImportPage> {
       .replaceAll('أ', 'ا').replaceAll('إ', 'ا').replaceAll('آ', 'ا').replaceAll('ى', 'ي')
       .replaceAll(RegExp(r'[^a-z0-9\u0600-\u06FF]+'), '');
 
+  String _comparisonTitle(String value) => normalize(value).replaceAll(
+      RegExp(r'(?:الموسم|موسم|season|الجزء|part)(?:الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\\d+)?'),
+      '');
+
   double _titleSimilarity(String first, String second) {
-    final a = normalize(first);
-    final b = normalize(second);
+    final a = _comparisonTitle(first);
+    final b = _comparisonTitle(second);
     if (a.isEmpty || b.isEmpty) return 0;
     if (a == b) return 1;
     if (a.length > 100 || b.length > 100) return 0;
@@ -414,7 +418,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
     setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; movieMonitorCreated = 0; movieMonitorFailures = 0; });
     try {
       final table = type == 'movie' ? 'movies' : 'series';
-      final rows = await AuthService.client.from(table).select('id,title,release_year');
+      final rows = await AuthService.client.from(table).select('id,title,title_en,original_title,release_year');
       final existingRecords = rows.map((row) => Map<String, dynamic>.from(row)).toList();
       var akwamSeriesCount = 0;
       var episodeCount = 0;
@@ -428,7 +432,12 @@ class _ContentImportPageState extends State<ContentImportPage> {
         final year = int.tryParse(item['release_year']?.toString() ?? '');
         final key = normalize(title) + '|' + (year?.toString() ?? '');
         final similarMatches = existingRecords.map((record) {
-          final score = _titleSimilarity(title, record['title']?.toString() ?? '');
+          final titleVariants = [record['title'], record['title_en'], record['original_title']]
+              .map((value) => value?.toString().trim() ?? '')
+              .where((value) => value.isNotEmpty).toList();
+          final score = titleVariants.isEmpty ? 0.0 : titleVariants
+              .map((value) => _titleSimilarity(title, value))
+              .reduce((a, b) => a > b ? a : b);
           final oldYear = record['release_year']?.toString() ?? '';
           final newYear = year?.toString() ?? '';
           final yearsCompatible = oldYear.isEmpty || newYear.isEmpty || oldYear == newYear;
