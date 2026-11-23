@@ -66,6 +66,16 @@ class AppTheme {
     'settings_border': '#333333',
     'settings_badge': '#E50914',
     'settings_packageBorder': '#555555',
+
+    'admin_background': '#090909',
+    'admin_primary': '#E50914',
+    'admin_panel': '#191919',
+    'admin_text': '#FFFFFF',
+    'admin_secondaryText': '#B3B3B3',
+    'admin_button': '#E50914',
+    'admin_border': '#333333',
+    'admin_badge': '#E50914',
+    'admin_packageBorder': '#555555',
   };
 
   static const Map<String, String> sectionLabels = {
@@ -74,6 +84,7 @@ class AppTheme {
     'series': 'المسلسلات',
     'live': 'البث المباشر',
     'settings': 'الإعدادات',
+    'admin': 'إعدادات المدير',
   };
 
   static const Map<String, String> colorLabels = {
