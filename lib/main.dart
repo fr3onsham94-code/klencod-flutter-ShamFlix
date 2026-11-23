@@ -1310,6 +1310,7 @@ class _HomePageState extends State<HomePage> {
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
+        backgroundColor: homeBackground,
         body: SafeArea(
           child: IndexedStack(
             index: selectedTab,
@@ -2223,8 +2224,10 @@ class _AccountPageState extends State<AccountPage> {
   Widget build(BuildContext context) {
     final loggedIn = AuthService.isLoggedIn;
 
-    return ListView(
-      padding: const EdgeInsets.all(18),
+    return Container(
+      color: accountBackground,
+      child: ListView(
+        padding: const EdgeInsets.all(18),
       children: [
         const SizedBox(height: 25),
         Icon(
@@ -2390,7 +2393,8 @@ class _AccountPageState extends State<AccountPage> {
             ),
           ),
         ],
-      ],
+        ],
+      ),
     );
   }
 }
