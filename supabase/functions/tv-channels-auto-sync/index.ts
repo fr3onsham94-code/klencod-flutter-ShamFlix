@@ -4,13 +4,10 @@ type PlaylistSource = { id: string; name: string; url: string; customId?: string
 
 const BUILTIN_SOURCES: PlaylistSource[] = [
   // Original core sources
-  { id: "iptv-org", name: "IPTV-ORG CATEGORIES", url: "https://iptv-org.github.io/iptv/index.category.m3u" },
+  { id: "iptv-org", name: "IPTV-ORG PRIMARY", url: "https://iptv-org.github.io/iptv/index.m3u" },
   { id: "free-tv", name: "FREE-TV", url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" },
   { id: "nexus", name: "IPTV-NEXUS", url: "https://dearbulut.github.io/iptv/playlists/index.m3u" },
   // Additional public playlists referenced by the Androidsis guide
-  { id: "iptv-org-all", name: "IPTV-ORG ALL", url: "https://iptv-org.github.io/iptv/index.m3u" },
-  { id: "iptv-org-spanish-language", name: "IPTV-ORG SPANISH LANGUAGE", url: "https://iptv-org.github.io/iptv/languages/spa.m3u" },
-  { id: "iptv-org-spain", name: "IPTV-ORG SPAIN", url: "https://iptv-org.github.io/iptv/countries/es.m3u" },
   { id: "tdtchannels", name: "TDTCHANNELS TV M3U8", url: "https://www.tdtchannels.com/lists/tv.m3u8" },
   { id: "tdtchannels-m3u", name: "TDTCHANNELS TV M3U", url: "https://www.tdtchannels.com/lists/tv.m3u" },
   { id: "m3ucl-total", name: "M3U.CL TOTAL", url: "https://www.m3u.cl/lista/total.m3u" },
@@ -118,8 +115,10 @@ function safeStreamUrl(raw: string): string | null {
 
 function categoryOf(raw: string, name: string): string {
   const v = (raw + " " + name).toLowerCase();
+  if (/\\bmbc\\b|ام بي سي|إم بي سي/.test(v)) return "MBC";
+  if (/\\bbein(?:\\s*[- ]?\\s*sports?)?\\b|بي ?إن ?سبورت/.test(v)) return "beIN SPORTS";
+  if (/sport|رياض|football|soccer|كرة|الكأس|ssc|sportklub/.test(v)) return "رياضية";
   if (/news|اخبار|إخبار|خبر|العربية|الجزيرة|سكاي نيوز|bbc news|cnn|france 24|euronews/.test(v)) return "إخبارية";
-  if (/sport|رياض|bein|football|soccer|كرة|الكأس|ssc|sportklub/.test(v)) return "رياضية";
   if (/movie|film|cinema|سينما|أفلام|افلام|قناة فيلم/.test(v)) return "أفلام";
   if (/kids|children|cartoon|animation|طفل|أطفال|اطفال|كرتون|براعم|طيور الجنة/.test(v)) return "أطفال";
   if (/documentary|document|وثائقي|ناشيونال|discovery|history channel|animal planet/.test(v)) return "وثائقية";
@@ -134,7 +133,7 @@ function isArabicOrTurkishChannel(entry: {name:string; tvgLanguage:string; tvgCo
   const country = normalizeName(entry.tvgCountry);
   const group = normalizeName(entry.groupTitle);
   const name = normalizeName(entry.name);
-  const arabicCountries = new Set(["dz","alg","algeria","bh","bhr","bahrain","km","comoros","dj","djibouti","eg","egy","egypt","iq","irq","iraq","jo","jor","jordan","kw","kwt","kuwait","lb","lbn","lebanon","ly","lby","libya","mr","mauritania","ma","mar","morocco","om","omn","oman","ps","pse","palestine","qa","qat","qatar","sa","sau","saudiarabia","so","somalia","sd","sdn","sudan","sy","syr","syria","tn","tun","tunisia","ye","yem","yemen"]);
+  const arabicCountries = new Set(["dz","alg","algeria","bh","bhr","bahrain","km","comoros","dj","djibouti","eg","egy","egypt","iq","irq","iraq","jo","jor","jordan","kw","kwt","kuwait","lb","lbn","lebanon","ly","lby","libya","mr","mauritania","ma","mar","morocco","om","omn","oman","ps","pse","palestine","qa","qat","qatar","sa","sau","saudiarabia","so","somalia","sd","sdn","sudan","sy","syr","syria","tn","tun","tunisia","ye","yem","yemen","ae","are","uae","unitedarabemirates"]);
   const turkishCountries = new Set(["tr","tur","turkey","turkiye","تركيا"]);
   if (/(^|[^a-z])(?:ar|ara|arabic)([^a-z]|$)/i.test(entry.tvgLanguage) ||
       /عربي|العربية|arabic/.test(entry.tvgLanguage + " " + entry.groupTitle) ||
@@ -145,6 +144,26 @@ function isArabicOrTurkishChannel(entry: {name:string; tvgLanguage:string; tvgCo
   if (/\b(?:trt ?[1-9]|trt ?haber|atv|kanal ?d|show ?tv|star ?tv|tv8|now ?tv|beyaz ?tv|a ?haber|a ?spor|teve ?2|kanal ?7|fox ?turkey)\b/i.test(entry.name) ||
       /[ğüşöçıİ]/.test(entry.name)) return true;
   return false;
+}
+
+
+function countryPackageLabel(entry: {name:string; tvgLanguage:string; tvgCountry:string; groupTitle:string}): string {
+  const raw = normalizeName(entry.tvgCountry);
+  const countries: Record<string,string> = {
+    dz:"الجزائر", alg:"الجزائر", algeria:"الجزائر", bh:"البحرين", bhr:"البحرين", bahrain:"البحرين",
+    km:"جزر القمر", comoros:"جزر القمر", dj:"جيبوتي", djibouti:"جيبوتي", eg:"مصر", egy:"مصر", egypt:"مصر",
+    iq:"العراق", irq:"العراق", iraq:"العراق", jo:"الأردن", jor:"الأردن", jordan:"الأردن", kw:"الكويت", kwt:"الكويت", kuwait:"الكويت",
+    lb:"لبنان", lbn:"لبنان", lebanon:"لبنان", ly:"ليبيا", lby:"ليبيا", libya:"ليبيا", mr:"موريتانيا", mauritania:"موريتانيا",
+    ma:"المغرب", mar:"المغرب", morocco:"المغرب", om:"عُمان", omn:"عُمان", oman:"عُمان", ps:"فلسطين", pse:"فلسطين", palestine:"فلسطين",
+    qa:"قطر", qat:"قطر", qatar:"قطر", sa:"السعودية", sau:"السعودية", saudiarabia:"السعودية", so:"الصومال", somalia:"الصومال",
+    sd:"السودان", sdn:"السودان", sudan:"السودان", sy:"سوريا", syr:"سوريا", syria:"سوريا", tn:"تونس", tun:"تونس", tunisia:"تونس",
+    ye:"اليمن", yem:"اليمن", yemen:"اليمن", ae:"الإمارات", are:"الإمارات", uae:"الإمارات", unitedarabemirates:"الإمارات",
+    tr:"تركيا", tur:"تركيا", turkey:"تركيا", turkiye:"تركيا",
+  };
+  if (countries[raw]) return countries[raw];
+  if (/[\\u0600-\\u06FF]/.test(entry.name) || /arabic|عربي|العربية/i.test(entry.tvgLanguage + " " + entry.groupTitle)) return "قنوات عربية متنوعة";
+  if (/turkish|turkce|تركي|تركية/i.test(entry.tvgLanguage + " " + entry.groupTitle) || /[ğüşöçıİ]/.test(entry.name)) return "تركيا";
+  return "قنوات عربية متنوعة";
 }
 
 function parseM3u(text: string, sourceId: string, sourceName: string) {
@@ -280,6 +299,25 @@ async function verifySecret(db: any, token: string) {
   return !error && data === true;
 }
 
+
+function countriesOrder(label: string): number {
+  const order = ["السعودية","الإمارات","مصر","قطر","الكويت","البحرين","عُمان","اليمن","العراق","سوريا","لبنان","الأردن","فلسطين","المغرب","الجزائر","تونس","ليبيا","السودان","موريتانيا","الصومال","جيبوتي","جزر القمر","تركيا","قنوات عربية متنوعة"];
+  const index = order.indexOf(label);
+  return index < 0 ? 100 : 40 + index;
+}
+
+
+async function verifyAdminBearer(db: any, req: Request): Promise<boolean> {
+  const authorization = req.headers.get("authorization") || "";
+  const match = authorization.match(/^Bearer\\s+(.+)$/i);
+  if (!match) return false;
+  const { data, error } = await db.auth.getUser(match[1]);
+  if (error || !data?.user) return false;
+  const user = data.user as any;
+  return user.id === "dda16adb-3b6e-4244-a028-83df88b7801d" ||
+    ["admin","manager"].includes(String(user.app_metadata?.role || ""));
+}
+
 async function syncChannels(db: any) {
   const { data: customRows, error: customSourcesError } = await db.from("tv_channel_sources")
     .select("id,name,playlist_url")
@@ -358,8 +396,8 @@ async function syncChannels(db: any) {
   for (const [key, entries] of grouped) {
     // The same URL may legitimately belong to multiple sources; dedupe only within a source.
     const uniqueStreams = [...new Map(entries.map(e => [e.sourceId + "|" + e.url,e])).values()];
-    const preferred = uniqueStreams.find(x => x.sourceId === "nexus") ||
-      uniqueStreams.find(x => x.sourceId === "iptv-org") || uniqueStreams[0];
+    const preferred = uniqueStreams.find(x => x.sourceId === "iptv-org") ||
+      uniqueStreams.find(x => x.sourceId === "nexus") || uniqueStreams[0];
     const categoryCounts = new Map<string,number>();
     for (const e of uniqueStreams) categoryCounts.set(e.category,(categoryCounts.get(e.category)||0)+1);
     const category = [...categoryCounts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] || "عامة";
@@ -396,7 +434,7 @@ async function syncChannels(db: any) {
         source_position: stream.position,
         source_failures: 0,
         is_active: true,
-        sort_order: stream.sourceId === "nexus" ? 0 : stream.sourceId === "iptv-org" ? 1 : 2,
+        sort_order: stream.sourceId === "iptv-org" ? 0 : stream.sourceId === "nexus" ? 1 : 2,
       });
     }
   }
@@ -463,9 +501,26 @@ async function syncChannels(db: any) {
     if (error) throw error;
   }
 
-  const categories = [...new Set(categoryByKey.values())];
-  const packageRows = categories.map(category => ({
-    name: "قنوات تلقائية — " + category, content_type: "channel", sort_order: 900,
+  const packageDefinitions = new Map<string,number>();
+  const memberships = new Map<string,Set<string>>();
+  for (const [key, entries] of grouped) {
+    const uniqueStreams = [...new Map(entries.map(e => [e.sourceId + "|" + e.url,e])).values()];
+    const category = categoryByKey.get(key) || "عامة";
+    const labels = new Set<string>();
+    const country = uniqueStreams.map(countryPackageLabel).find(Boolean) || "قنوات عربية متنوعة";
+    labels.add(country);
+    if (uniqueStreams.some(e => /\\bmbc\\b|ام بي سي|إم بي سي/i.test(e.name + " " + e.groupTitle))) labels.add("MBC");
+    if (uniqueStreams.some(e => /\\bbein(?:\\s*[- ]?\\s*sports?)?\\b|بي ?إن ?سبورت/i.test(e.name + " " + e.groupTitle))) labels.add("beIN SPORTS");
+    if (category === "رياضية" || category === "beIN SPORTS") labels.add("رياضية");
+    if (category !== "رياضية" && category !== "beIN SPORTS" && category !== "MBC") labels.add(category);
+    memberships.set(key, labels);
+    for (const label of labels) {
+      const priority = label === "beIN SPORTS" ? 10 : label === "رياضية" ? 20 : label === "MBC" ? 30 : countriesOrder(label);
+      packageDefinitions.set(label, priority);
+    }
+  }
+  const packageRows = [...packageDefinitions.entries()].map(([label,sort_order]) => ({
+    name: "قنوات تلقائية — " + label, content_type: "channel", sort_order,
   }));
   const { error: packageError } = await db.from("content_packages")
     .upsert(packageRows, { onConflict:"content_type,name" });
@@ -475,12 +530,14 @@ async function syncChannels(db: any) {
   if (packagesError) throw new Error("package lookup: " + JSON.stringify(packagesError));
   const packageIds = new Map((packages || []).map((x:any)=>[x.name,x.id]));
   const itemRows: Record<string,unknown>[] = [];
-  for (const [key,category] of categoryByKey) {
+  for (const [key,labels] of memberships) {
     const channelId = channelIds.get(key);
-    const packageId = packageIds.get("قنوات تلقائية — " + category);
-    if (channelId && packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
+    if (!channelId) continue;
+    for (const label of labels) {
+      const packageId = packageIds.get("قنوات تلقائية — " + label);
+      if (packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
+    }
   }
-  const syncedChannelIdList = [...new Set(itemRows.map(row => String(row.content_id)))];
   if (sourceErrors.length === 0) {
     const automaticPackageIds = (packages || []).map((x:any) => x.id);
     for (let i=0; i<automaticPackageIds.length; i+=100) {
@@ -531,13 +588,14 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const token = req.headers.get("x-shamflix-tv-secret") || "";
-  if (!token) return json({ error: "Unauthorized" }, 401);
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) return json({ error: "Server configuration missing" }, 500);
 
   const db: any = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-  if (!await verifySecret(db, token)) return json({ error: "Unauthorized" }, 401);
+  const cronAuthorized = token ? await verifySecret(db, token) : false;
+  const adminAuthorized = cronAuthorized ? false : await verifyAdminBearer(db, req);
+  if (!cronAuthorized && !adminAuthorized) return json({ error: "Unauthorized" }, 401);
 
   let body: Record<string,unknown> = {};
   try { body = await req.json(); } catch {}
