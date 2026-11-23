@@ -620,8 +620,25 @@ class _AdminPageState extends State<AdminPage> {
                     ),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       InkWell(
-                        onTap: themeSaving ? null : () => pickThemeColor(prefix + 'text', 'النص الرئيسي'),
-                        child: Text('أحدث الأفلام والمسلسلات', style: TextStyle(color: AppTheme.color(prefix + 'text'), fontWeight: FontWeight.w600)),
+                        onTap: themeSaving ? null : () => pickThemeColor(prefix + 'latestMoviesText', 'عنوان أحدث الأفلام'),
+                        child: Text(
+                          'أحدث الأفلام',
+                          style: TextStyle(
+                            color: AppTheme.color(prefix + 'latestMoviesText'),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      InkWell(
+                        onTap: themeSaving ? null : () => pickThemeColor(prefix + 'latestSeriesText', 'عنوان أحدث المسلسلات'),
+                        child: Text(
+                          'أحدث المسلسلات',
+                          style: TextStyle(
+                            color: AppTheme.color(prefix + 'latestSeriesText'),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       InkWell(
