@@ -17,26 +17,9 @@ import 'series_monitor_page.dart';
 import 'movie_monitor_page.dart';
 import 'tv_sources_settings_page.dart';
 
-Color get adminBg => AppTheme.sectionColor('admin', 'background');
-Color get adminGold => AppTheme.sectionColor('admin', 'primary');
-Color get adminPanel => AppTheme.sectionColor('admin', 'panel');
-Color get adminIcon => AppTheme.sectionColor('admin', 'icon');
-Color get adminDescription => AppTheme.sectionColor('admin', 'description');
-Color get adminSwitchActive => AppTheme.sectionColor('admin', 'switchActive');
-Color get adminSwitchInactive => AppTheme.sectionColor('admin', 'switchInactive');
-Color get adminDropdownBackground => AppTheme.sectionColor('admin', 'dropdownBackground');
-Color get adminDropdownText => AppTheme.sectionColor('admin', 'dropdownText');
-Color get adminDialogBackground => AppTheme.sectionColor('admin', 'dialogBackground');
-Color get adminDialogTitle => AppTheme.sectionColor('admin', 'dialogTitle');
-Color get adminInputBackground => AppTheme.sectionColor('admin', 'inputBackground');
-Color get adminInputText => AppTheme.sectionColor('admin', 'inputText');
-Color get adminInputHint => AppTheme.sectionColor('admin', 'inputHint');
-Color get adminDivider => AppTheme.sectionColor('admin', 'divider');
-Color get adminSelected => AppTheme.sectionColor('admin', 'selected');
-Color get adminDisabled => AppTheme.sectionColor('admin', 'disabled');
-Color get adminProgress => AppTheme.sectionColor('admin', 'progress');
-Color get adminError => AppTheme.sectionColor('admin', 'error');
-Color get adminSuccess => AppTheme.sectionColor('admin', 'success');
+Color get adminBg => AppTheme.background;
+Color get adminGold => AppTheme.primary;
+Color get adminPanel => AppTheme.panel;
 
 const String ownerUserId =
     'dda16adb-3b6e-4244-a028-83df88b7801d';
@@ -439,105 +422,73 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> pickThemeColor(String key, String label) async {
-    final controller = TextEditingController(
-      text: '#' + AppTheme.color(key).value.toRadixString(16).substring(2).toUpperCase(),
-    );
-    var hsv = HSVColor.fromColor(AppTheme.color(key));
+    const options = <Color>[
+      Color(0xFF090909), Color(0xFF191919), Color(0xFF303030),
+      Color(0xFF555555), Color(0xFF808080), Color(0xFFB3B3B3),
+      Color(0xFFFFFFFF), Color(0xFFE50914), Color(0xFFB20710),
+      Color(0xFFFF1744), Color(0xFFFF5252), Color(0xFFFF8A80),
+      Color(0xFFFF5722), Color(0xFFFF9800), Color(0xFFFFC107),
+      Color(0xFFFFEB3B), Color(0xFF8BC34A), Color(0xFF4CAF50),
+      Color(0xFF00C853), Color(0xFF009688), Color(0xFF00BCD4),
+      Color(0xFF03A9F4), Color(0xFF2196F3), Color(0xFF3F51B5),
+      Color(0xFF673AB7), Color(0xFF9C27B0), Color(0xFFE91E63),
+      Color(0xFF795548), Color(0xFF607D8B), Color(0xFF263238),
+    ];
     final selected = await showDialog<Color>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final color = hsv.toColor();
-          return AlertDialog(
-            backgroundColor: adminDialogBackground,
-            title: Text('اختيار لون: ' + label, style: TextStyle(color: adminDialogTitle)),
-            content: SizedBox(
-              width: 340,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      height: 74,
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white54),
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: adminPanel,
+        title: Text('اختيار لون: $label', style: TextStyle(color: AppTheme.text)),
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 11,
+              runSpacing: 13,
+              children: options.map((color) {
+                final current = AppTheme.color(key);
+                final isSelected = current.value == color.value;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () => Navigator.of(dialogContext).pop(color),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? adminGold : Colors.white38,
+                        width: isSelected ? 3 : 1,
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    const Text('درجة اللون'),
-                    Slider(
-                      min: 0, max: 360, value: hsv.hue.clamp(0.0, 360.0).toDouble(),
-                      onChanged: (value) => setDialogState(() {
-                        hsv = hsv.withHue(value);
-                        controller.text = '#' + hsv.toColor().value.toRadixString(16).substring(2).toUpperCase();
-                      }),
-                    ),
-                    const Text('التشبع'),
-                    Slider(
-                      min: 0, max: 1, value: hsv.saturation,
-                      onChanged: (value) => setDialogState(() {
-                        hsv = hsv.withSaturation(value);
-                        controller.text = '#' + hsv.toColor().value.toRadixString(16).substring(2).toUpperCase();
-                      }),
-                    ),
-                    const Text('السطوع'),
-                    Slider(
-                      min: 0, max: 1, value: hsv.value,
-                      onChanged: (value) => setDialogState(() {
-                        hsv = hsv.withValue(value);
-                        controller.text = '#' + hsv.toColor().value.toRadixString(16).substring(2).toUpperCase();
-                      }),
-                    ),
-                    TextField(
-                      controller: controller,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'رمز HEX',
-                        hintText: '#E50914',
-                      ),
-                      onChanged: (value) {
-                        final normalized = AppTheme.normalizeHex(value, '');
-                        if (normalized.isNotEmpty) {
-                          setDialogState(() => hsv = HSVColor.fromColor(
-                            Color(int.parse(normalized.substring(1), radix: 16) | 0xFF000000),
-                          ));
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
+                    child: isSelected
+                        ? Icon(Icons.check, color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white, size: 19)
+                        : null,
+                  ),
+                );
+              }).toList(),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('إلغاء'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(hsv.toColor()),
-                child: const Text('اعتماد اللون'),
-              ),
-            ],
-          );
-        },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('إلغاء'),
+          ),
+        ],
       ),
     );
-    controller.dispose();
     if (selected == null || !mounted) return;
     themeColorControllers[key]?.text =
-        '#' + selected.value.toRadixString(16).substring(2).toUpperCase();
+        '#${selected.value.toRadixString(16).substring(2).toUpperCase()}';
     previewThemePalette();
   }
 
   Widget themePaletteSection() {
     final sections = <String, String>{'global': 'الألوان العامة', ...AppTheme.sectionLabels};
     final prefix = selectedThemeSection == 'global' ? '' : '${selectedThemeSection}_';
-    final sectionName = sections[selectedThemeSection] ?? 'القسم';
-    final previewColor = (String role) => AppTheme.color('${prefix}${role}');
-    final previewTitle = selectedThemeSection == 'global' ? 'SHAM FLIX' : sectionName;
     return Card(
       color: adminPanel,
       child: Padding(
@@ -547,145 +498,110 @@ class _AdminPageState extends State<AdminPage> {
           children: [
             Text('تخصيص ألوان التطبيق', style: TextStyle(color: adminGold, fontSize: 17, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            Text('اختر القسم، شاهد معاينة شكلية له، ثم اختر اسم العنصر من القائمة أسفل المعاينة لتغيير لونه.',
-              style: TextStyle(color: adminDescription, fontSize: 12, height: 1.5)),
+            Text('اختر القسم ثم عدّل ألوان عناصره بشكل مستقل. التغيير يظهر مباشرة قبل الحفظ.', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: selectedThemeSection,
-              dropdownColor: adminDropdownBackground,
-              style: TextStyle(color: adminDropdownText),
+              dropdownColor: adminPanel,
+              style: TextStyle(color: AppTheme.text),
               decoration: InputDecoration(
                 labelText: 'القسم المراد تخصيص ألوانه',
-                labelStyle: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
+                labelStyle: TextStyle(color: AppTheme.secondaryText),
                 enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                 focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: adminGold)),
-              ),
-              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
+              ),              items: sections.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
               onChanged: (value) { if (value != null) setState(() => selectedThemeSection = value); },
             ),
             const SizedBox(height: 14),
-            Text('معاينة القسم', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: previewColor('background'), borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: previewColor('border'))),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(previewTitle, style: TextStyle(color: previewColor('primary'), fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: previewColor('panel'), borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: previewColor('border'))),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('أحدث الأفلام', style: TextStyle(color: previewColor('latestMoviesText'), fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 5),
-                    Text('أحدث المسلسلات', style: TextStyle(color: previewColor('latestSeriesText'), fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 7),
-                    Text('نص توضيحي يظهر ضمن عناصر القسم', style: TextStyle(color: previewColor('secondaryText'), fontSize: 11)),
-                    const SizedBox(height: 10),
-                    Wrap(spacing: 7, runSpacing: 7, children: [
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                        decoration: BoxDecoration(color: previewColor('badge'), borderRadius: BorderRadius.circular(20)),
-                        child: Text('جديد', style: TextStyle(color: previewColor('text'), fontSize: 11))),
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                        decoration: BoxDecoration(border: Border.all(color: previewColor('packageBorder')), borderRadius: BorderRadius.circular(20)),
-                        child: Text('باقة مميزة', style: TextStyle(color: previewColor('text'), fontSize: 11))),
-                    ]),
-                  ]),
-                ),
-                const SizedBox(height: 10),
-                Container(alignment: Alignment.center, padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(color: previewColor('button'), borderRadius: BorderRadius.circular(8)),
-                  child: Text('زر تجريبي', style: TextStyle(color: previewColor('text'), fontWeight: FontWeight.bold))),
-                const SizedBox(height: 10),
-                Row(children: [
-                  Icon(Icons.movie_filter_outlined, color: previewColor('icon')),
-                  const SizedBox(width: 7),
-                  Expanded(child: Text('وصف توضيحي للعنصر', style: TextStyle(color: previewColor('description'), fontSize: 11))),
-                  Container(width: 38, height: 20, padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(color: previewColor('switchActive'), borderRadius: BorderRadius.circular(20)),
-                    alignment: Alignment.centerRight,
-                    child: Container(width: 16, height: 16, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle))),
-                ]),
-                const SizedBox(height: 8),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-                  decoration: BoxDecoration(color: previewColor('dropdownBackground'), borderRadius: BorderRadius.circular(7),
-                    border: Border.all(color: previewColor('divider'))),
-                  child: Row(children: [
-                    Expanded(child: Text('قائمة منسدلة تجريبية', style: TextStyle(color: previewColor('dropdownText'), fontSize: 11))),
-                    Icon(Icons.expand_more, color: previewColor('icon')),
-                  ])),
-                const SizedBox(height: 8),
-                Container(padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: previewColor('dialogBackground'), borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: previewColor('divider'))),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('عنوان نافذة منبثقة', style: TextStyle(color: previewColor('dialogTitle'), fontWeight: FontWeight.bold, fontSize: 12)),
-                    const SizedBox(height: 5),
-                    Text('نص توضيحي داخل النافذة', style: TextStyle(color: previewColor('description'), fontSize: 10)),
-                    const SizedBox(height: 7),
-                    Container(padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(color: previewColor('inputBackground'), borderRadius: BorderRadius.circular(5)),
-                      child: Text('حقل إدخال تجريبي', style: TextStyle(color: previewColor('inputHint'), fontSize: 10))),
-                  ])),
-                Row(children: [
-                  Expanded(child: LinearProgressIndicator(value: 0.65, color: previewColor('progress'), backgroundColor: previewColor('divider'))),
-                  const SizedBox(width: 8),
-                  Icon(Icons.check_circle, color: previewColor('success'), size: 17),
-                  Icon(Icons.error_outline, color: previewColor('error'), size: 17),
-                ]),
-              ]),
-            ),
-            const SizedBox(height: 14),
-            Text('اختر العنصر الذي تريد تغيير لونه', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
             for (final entry in AppTheme.colorLabels.entries)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  decoration: BoxDecoration(color: previewColor('panel'), borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: previewColor('border'))),
-                  child: Row(children: [
-                    Expanded(child: ListTile(
-                      dense: true,
-                      leading: Container(width: 34, height: 34,
-                        decoration: BoxDecoration(color: previewColor(entry.key), borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white54)),
-                        child: const Icon(Icons.palette_outlined, color: Colors.white, size: 18)),
-                      title: Text(entry.value, style: TextStyle(color: previewColor('text'), fontWeight: FontWeight.w600)),
-                      subtitle: Text(themeColorControllers['${prefix}${entry.key}']?.text ?? AppTheme.defaults['${prefix}${entry.key}'] ?? '',
-                        style: TextStyle(color: previewColor('secondaryText'), fontSize: 11)),
-                      onTap: themeSaving ? null : () => pickThemeColor('${prefix}${entry.key}', entry.value),
-                    )),
-                    IconButton(tooltip: 'استعادة اللون الافتراضي لهذا العنصر',
-                      onPressed: themeSaving ? null : () {
-                        final key = '${prefix}${entry.key}';
-                        final fallback = AppTheme.defaults[key];
-                        if (fallback == null) return;
-                        themeColorControllers[key]?.text = fallback;
-                        previewThemePalette();
-                      },
-                      icon: Icon(Icons.restart_alt, color: previewColor('secondaryText'))),
-                  ]),
+                padding: const EdgeInsets.only(bottom: 10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: themeSaving
+                      ? null
+                      : () => pickThemeColor('${prefix}${entry.key}', entry.value),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.color('${prefix}panel'),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.color('${prefix}border')),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(entry.value, style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 3),
+                              Text('اضغط لاختيار لون من القائمة', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: AppTheme.color('${prefix}${entry.key}'),
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: Colors.white54, width: 1.2),
+                          ),
+                          child: const Icon(Icons.palette_outlined, color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.chevron_left, color: AppTheme.secondaryText),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            const SizedBox(height: 8),
-            FilledButton.icon(onPressed: themeSaving ? null : saveThemePalette, icon: const Icon(Icons.save),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.color('${prefix}background'),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.color('${prefix}primary')),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text('معاينة SHAM FLIX', style: TextStyle(color: AppTheme.color('${prefix}primary'), fontWeight: FontWeight.bold, fontSize: 17)),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppTheme.color('${prefix}panel'), borderRadius: BorderRadius.circular(9)),
+                  child: Text('هذا مثال للنص داخل بطاقة', style: TextStyle(color: AppTheme.color('${prefix}text'))),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: null,
+                  style: FilledButton.styleFrom(backgroundColor: AppTheme.color('${prefix}button')),
+                  child: Text('زر تجريبي', style: TextStyle(color: AppTheme.color('${prefix}text'))),
+                ),
+                Text('نص ثانوي للمعاينة', style: TextStyle(color: AppTheme.color('${prefix}secondaryText'))),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: themeSaving ? null : saveThemePalette,
+              icon: const Icon(Icons.save),
               label: Text(themeSaving ? 'جارٍ الحفظ...' : 'حفظ الألوان'),
-              style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text'))),
+              style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
+            ),
             TextButton.icon(
               onPressed: themeSaving ? null : () async {
-                for (final key in AppTheme.colorLabels.keys) {
-                  final fullKey = '${prefix}${key}';
-                  final fallback = AppTheme.defaults[fullKey];
-                  if (fallback != null) themeColorControllers[fullKey]?.text = fallback;
+                final keys = selectedThemeSection == 'global'
+                    ? AppTheme.colorLabels.keys
+                    : AppTheme.colorLabels.keys.map((key) => '${selectedThemeSection}_$key');
+                for (final key in keys) {
+                  themeColorControllers[key]?.text = AppTheme.defaults[key]!;
                 }
                 previewThemePalette();
                 await saveThemePalette();
               },
               icon: const Icon(Icons.restart_alt),
-              label: Text('استعادة ألوان القسم بالكامل', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')))),
+              label: Text('استعادة ألوان هذا القسم', style: TextStyle(color: AppTheme.secondaryText)),
+            ),
           ],
         ),
       ),
@@ -699,7 +615,7 @@ class _AdminPageState extends State<AdminPage> {
       children: [
         Text(title, style: TextStyle(color: adminGold, fontSize: 15, fontWeight: FontWeight.bold)),
         const SizedBox(height: 3),
-        Text(subtitle, style: TextStyle(color: adminDescription, fontSize: 11)),
+        Text(subtitle, style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
       ],
     ),
   );
@@ -728,11 +644,11 @@ class _AdminPageState extends State<AdminPage> {
           child: ListTile(
             leading: Icon(Icons.downloading_outlined, color: adminGold, size: 28),
             title: Text('حالات الاستيراد', style: TextStyle(
-              color: AppTheme.sectionColor('admin', 'text'),
+              color: AppTheme.text,
               fontWeight: FontWeight.bold,
             )),
             subtitle: Text('عرض تقدم كل عملية وإلغاء أي عملية بشكل مستقل',
-              style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+              style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
             trailing: Icon(Icons.chevron_left, color: adminGold),
             onTap: () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => const BackgroundImportStatusPage(),
@@ -748,12 +664,11 @@ class _AdminPageState extends State<AdminPage> {
             onChanged: badgeSettingSaving
                 ? null
                 : saveCategoryBadgeSetting,
-            activeColor: adminSwitchActive,
-            inactiveThumbColor: adminSwitchInactive,
+            activeColor: adminGold,
             title: Text(
               'إظهار تصنيف البوستر',
               style: TextStyle(
-                color: AppTheme.sectionColor('admin', 'text'),
+                color: AppTheme.text,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -761,9 +676,9 @@ class _AdminPageState extends State<AdminPage> {
               showCategoryBadge
                   ? 'الليبل الأساسي ظاهر على بوسترات الأفلام والمسلسلات والقنوات'
                   : 'الليبل مخفي عن جميع المستخدمين',
-              style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
+              style: TextStyle(color: AppTheme.secondaryText),
             ),
-            secondary: Icon(Icons.local_offer_outlined, color: adminIcon),
+            secondary: Icon(Icons.local_offer_outlined, color: adminGold),
           ),
         ),
         if (badgeSettingSaving)
@@ -788,7 +703,7 @@ class _AdminPageState extends State<AdminPage> {
                       child: Text(
                         'عدد البوسترات في كل صف',
                         style: TextStyle(
-                          color: AppTheme.sectionColor('admin', 'text'),
+                          color: AppTheme.text,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -798,7 +713,7 @@ class _AdminPageState extends State<AdminPage> {
                 const SizedBox(height: 8),
                 Text(
                   'إعداد موحّد يطبّق على جميع باقات الأفلام والمسلسلات وقنوات البث المباشر. كلما زاد العدد صغر حجم البوستر أو بطاقة القناة مع الحفاظ على التناسب.',
-                  style: TextStyle(color: adminDescription, fontSize: 12, height: 1.5),
+                  style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5),
                 ),
                 const SizedBox(height: 12),
                 if (catalogGridColumnsLoading)
@@ -807,10 +722,10 @@ class _AdminPageState extends State<AdminPage> {
                   DropdownButtonFormField<int>(
                     value: catalogGridColumns,
                     dropdownColor: adminPanel,
-                    style: TextStyle(color: adminDropdownText),
+                    style: TextStyle(color: AppTheme.text),
                     decoration: InputDecoration(
                       labelText: 'اختر عدد الأعمدة',
-                      labelStyle: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
+                      labelStyle: TextStyle(color: AppTheme.secondaryText),
                       enabledBorder: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.white24),
                       ),
@@ -841,7 +756,7 @@ class _AdminPageState extends State<AdminPage> {
           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Text(
             'هذا إعداد عام يُحفظ في قاعدة البيانات ويُطبّق على كل مستخدمي ShamFlix.',
-            style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12),
+            style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
           ),
         ),
         _settingsGroupTitle('روابط التطبيق والتحديثات', 'إدارة رابط الدعوة ومعلومات إصدار التطبيق'),
@@ -859,8 +774,8 @@ class _AdminPageState extends State<AdminPage> {
                   controller: inviteLinkController,
                   keyboardType: TextInputType.url,
                   textDirection: TextDirection.ltr,
-                  style: TextStyle(color: adminInputText),
-                  decoration: InputDecoration(filled: true, fillColor: adminInputBackground, hintText: 'https://...', hintStyle: TextStyle(color: adminInputHint)),
+                  style: TextStyle(color: AppTheme.text),
+                  decoration: InputDecoration(hintText: 'https://...', hintStyle: TextStyle(color: AppTheme.secondaryText)),
                 ),
                 const SizedBox(height: 18),
                 Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
@@ -871,10 +786,10 @@ class _AdminPageState extends State<AdminPage> {
                 adminField(updateNotesController, 'ملاحظات التحديث', maxLines: 3, required: false),
                 const SizedBox(height: 8),
                 Text('قبل رفع APK جديد، ارفع رقم versionCode في pubspec.yaml (مثلاً 1.0.1+2) ليكون أكبر من الإصدار المثبت. بعد حفظ الرابط والإصدار والبناء يستطيع الزائر تنزيل APK وتثبيته من داخل التطبيق.',
-                    style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12, height: 1.5)),
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
                 FilledButton.icon(
                   onPressed: appSettingsSaving ? null : saveAppLinksAndUpdateSettings,
-                  style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text')),
+                  style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                   icon: appSettingsSaving
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                       : const Icon(Icons.save),
@@ -948,9 +863,9 @@ class _AdminPageState extends State<AdminPage> {
         onRefresh: loadPresence,
         child: ListView(children: [
           SizedBox(height: 120),
-          Center(child: Icon(Icons.wifi_off, color: AppTheme.sectionColor('admin', 'secondaryText'), size: 48)),
+          Center(child: Icon(Icons.wifi_off, color: AppTheme.secondaryText, size: 48)),
           SizedBox(height: 12),
-          Center(child: Text('لا يوجد زوار أو مستخدمون متصلون حالياً', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')))),
+          Center(child: Text('لا يوجد زوار أو مستخدمون متصلون حالياً', style: TextStyle(color: AppTheme.secondaryText))),
         ]),
       );
     }
@@ -964,7 +879,7 @@ class _AdminPageState extends State<AdminPage> {
             color: adminPanel,
             child: ListTile(
               leading: Icon(Icons.people_alt_outlined, color: adminGold, size: 32),
-              title: Text('المتصلون خلال آخر دقيقتين', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+              title: Text('المتصلون خلال آخر دقيقتين', style: TextStyle(color: AppTheme.text)),
               trailing: Text('${activeSessions.length}', style: TextStyle(color: adminGold, fontSize: 24, fontWeight: FontWeight.bold)),
             ),
           ),
@@ -983,10 +898,10 @@ class _AdminPageState extends State<AdminPage> {
                 ),
                 title: Text(
                   isGuest ? 'زائر بدون حساب' : (session['display_name']?.toString().isNotEmpty == true ? session['display_name'].toString() : 'مستخدم مسجل'),
-                  style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(isGuest ? 'دخل التطبيق دون تسجيل حساب' : 'حساب مسجل',
-                    style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                 trailing: Text(time, style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
               ),
             );
@@ -1773,7 +1688,7 @@ class _AdminPageState extends State<AdminPage> {
                                     const SizedBox(height: 5),
                                     Text('تم جلب بيانات المسلسل بنجاح', style: const TextStyle(color: Colors.green, fontSize: 12)),
                                     if ((tmdbPreview!['director']?.toString() ?? '').isNotEmpty)
-                                      Text('المخرج: ${tmdbPreview!['director']}', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+                                      Text('المخرج: ${tmdbPreview!['director']}', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                                   ],
                                 ),
                               ),
@@ -1794,7 +1709,7 @@ class _AdminPageState extends State<AdminPage> {
                       SwitchListTile(
                         value: isLive,
                         activeColor: adminGold,
-                        title: Text('قناة بث مباشر', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+                        title: Text('قناة بث مباشر', style: TextStyle(color: AppTheme.text)),
                         onChanged: (value) => setDialogState(() => isLive = value),
                       ),
                     ],
@@ -1803,11 +1718,11 @@ class _AdminPageState extends State<AdminPage> {
                       title: Text('الباقات التي يظهر فيها هذا المحتوى',
                           style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
                       subtitle: Text('تم اختيار ${selectedPackageIds.length} باقة',
-                          style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+                          style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                       children: packageOptions.isEmpty
                           ? [Padding(padding: EdgeInsets.all(12),
                               child: Text('لا توجد باقات لهذا القسم. أنشئ باقة أولاً من صفحة إدارة الباقات.',
-                                  style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))))]
+                                  style: TextStyle(color: AppTheme.secondaryText)))]
                           : packageOptions.map((package) {
                               final packageId = package['id'].toString();
                               return CheckboxListTile(
@@ -1816,7 +1731,7 @@ class _AdminPageState extends State<AdminPage> {
                                 activeColor: adminGold,
                                 checkColor: Colors.black,
                                 title: Text(package['name']?.toString() ?? 'باقة',
-                                    style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+                                    style: TextStyle(color: AppTheme.text)),
                                 onChanged: (checked) => setDialogState(() {
                                   if (checked == true) {
                                     if (!selectedPackageIds.contains(packageId)) selectedPackageIds.add(packageId);
@@ -1834,10 +1749,10 @@ class _AdminPageState extends State<AdminPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: Text('إلغاء', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText)),
               ),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text')),
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () {
                   if (titleController.text.trim().isEmpty) {
                     showMessage(isSeries ? 'أدخل اسم المسلسل' : 'أدخل اسم القناة', isError: true);
@@ -1926,9 +1841,9 @@ class _AdminPageState extends State<AdminPage> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: adminPanel,
         title: Text('حذف ${isSeries ? 'المسلسل' : 'القناة'}', style: TextStyle(color: adminGold)),
-        content: Text('هل تريد حذف "$label" نهائياً؟', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+        content: Text('هل تريد حذف "$label" نهائياً؟', style: TextStyle(color: AppTheme.text)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text('إلغاء', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText))),
           TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف', style: TextStyle(color: Colors.red))),
         ],
       ),
@@ -1952,11 +1867,11 @@ class _AdminPageState extends State<AdminPage> {
     final ok=await showDialog<bool>(context:context,builder:(ctx)=>StatefulBuilder(builder:(ctx,dlg)=>Directionality(textDirection:TextDirection.rtl,child:AlertDialog(
       backgroundColor:adminPanel,title:Text('دمج مسلسلين',style:TextStyle(color:adminGold)),
       content:Column(mainAxisSize:MainAxisSize.min,children:[
-        Text('اختر المسلسل الأساسي الذي سيبقى باسمه وبوستره:',style:TextStyle(color:AppTheme.sectionColor('admin', 'text'))),
+        Text('اختر المسلسل الأساسي الذي سيبقى باسمه وبوستره:',style:TextStyle(color:AppTheme.text)),
         DropdownButton<String>(isExpanded:true,value:primary,items:[DropdownMenuItem(value:ids[0],child:Text(a['title']?.toString()??'الأول')),DropdownMenuItem(value:ids[1],child:Text(b['title']?.toString()??'الثاني'))],onChanged:(v){if(v!=null)dlg(()=>primary=v);}),
         DropdownButton<int>(isExpanded:true,value:aStart,items:List.generate(30,(i)=>i+1).map((v)=>DropdownMenuItem(value:v,child:Text('المسلسل الأول يبدأ من الموسم $v'))).toList(),onChanged:(v){if(v!=null)dlg(()=>aStart=v);}),
         DropdownButton<int>(isExpanded:true,value:bStart,items:List.generate(30,(i)=>i+1).map((v)=>DropdownMenuItem(value:v,child:Text('المسلسل الثاني يبدأ من الموسم $v'))).toList(),onChanged:(v){if(v!=null)dlg(()=>bStart=v);}),
-        Text('سيتم نقل المواسم والحلقات وسيرفراتها مع الاحتفاظ ببيانات المسلسل الأساسي.',style:TextStyle(color:AppTheme.sectionColor('admin', 'secondaryText'),fontSize:12)),
+        Text('سيتم نقل المواسم والحلقات وسيرفراتها مع الاحتفاظ ببيانات المسلسل الأساسي.',style:TextStyle(color:AppTheme.secondaryText,fontSize:12)),
       ]),
       actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('إلغاء')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('تأكيد الدمج'))],
     ))));
@@ -2005,7 +1920,7 @@ class _AdminPageState extends State<AdminPage> {
   Widget _sidebarSettingsCard()=>Card(color:adminPanel,child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Text('إعدادات زر القائمة العلوية وقائمة الباقات',style:TextStyle(color:adminGold,fontWeight:FontWeight.bold)),
     const SizedBox(height: 6),
-    Text('تُطبّق هذه القيم على زر فتح القائمة المنسدلة وقائمة الباقات في الأفلام والمسلسلات والبث المباشر. التغيير يظهر مباشرة.',style:TextStyle(color:AppTheme.sectionColor('admin', 'secondaryText'),fontSize:11,height:1.5)),
+    Text('تُطبّق هذه القيم على زر فتح القائمة المنسدلة وقائمة الباقات في الأفلام والمسلسلات والبث المباشر. التغيير يظهر مباشرة.',style:TextStyle(color:AppTheme.secondaryText,fontSize:11,height:1.5)),
     for(final item in <List<dynamic>>[
       ['عرض القائمة','shamflix_catalog_sidebar_width',sidebarWidth,90.0,160.0],
       ['حجم الزر العائم','shamflix_catalog_sidebar_button',sidebarButtonSize,34.0,56.0],
@@ -2014,7 +1929,7 @@ class _AdminPageState extends State<AdminPage> {
       ['حجم الأيقونات','shamflix_catalog_package_icon',packageIconSize,12.0,22.0],
       ['ارتفاع الباقة','shamflix_catalog_package_height',packageItemHeight,30.0,60.0],
     ]) Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      Text('${item[0]}: ${(item[2] as double).toStringAsFixed(0)}',style:TextStyle(color:AppTheme.sectionColor('admin', 'text'))),
+      Text('${item[0]}: ${(item[2] as double).toStringAsFixed(0)}',style:TextStyle(color:AppTheme.text)),
       Slider(value:item[2] as double,min:item[3] as double,max:item[4] as double,activeColor:adminGold,onChanged:(v)async{
         final key = item[1] as String;
         setState(() {
@@ -2076,7 +1991,7 @@ class _AdminPageState extends State<AdminPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.bold)),
+                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   Text(published ? 'منشور' : 'مسودة', style: TextStyle(color: published ? Colors.green : Colors.orange, fontWeight: FontWeight.bold)),
                   if (!isSeries && item['is_live'] == true)
@@ -2149,7 +2064,7 @@ class _AdminPageState extends State<AdminPage> {
                   onRefresh: () => loadCatalog(section),
                   child: ListView(children: [
                     const SizedBox(height: 120),
-                    Center(child: Text(searchQuery.isNotEmpty ? 'لا توجد نتائج مطابقة' : (isSeries ? 'لا توجد مسلسلات حالياً\nاضغط إضافة مسلسل للبدء' : 'لا توجد قنوات حالياً\nاضغط إضافة قناة للبدء'), textAlign: TextAlign.center, style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), height: 1.8))),
+                    Center(child: Text(searchQuery.isNotEmpty ? 'لا توجد نتائج مطابقة' : (isSeries ? 'لا توجد مسلسلات حالياً\nاضغط إضافة مسلسل للبدء' : 'لا توجد قنوات حالياً\nاضغط إضافة قناة للبدء'), textAlign: TextAlign.center, style: TextStyle(color: AppTheme.secondaryText, height: 1.8))),
                   ]),
                 )
               : RefreshIndicator(
@@ -2473,7 +2388,7 @@ class _AdminPageState extends State<AdminPage> {
                   SwitchListTile(
                     value: active,
                     activeColor: adminGold,
-                    title: Text('السيرفر فعال', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+                    title: Text('السيرفر فعال', style: TextStyle(color: AppTheme.text)),
                     onChanged: (v) => setDialogState(() => active = v),
                   ),
                 ],
@@ -2482,10 +2397,10 @@ class _AdminPageState extends State<AdminPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: Text('إلغاء', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText)),
               ),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text')),
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () {
                   if (name.text.trim().isEmpty || url.text.trim().isEmpty) {
                     showMessage('أدخل اسم السيرفر ورابط التشغيل', isError: true);
@@ -2571,23 +2486,23 @@ class _AdminPageState extends State<AdminPage> {
                             padding: EdgeInsets.only(bottom: 10),
                             child: Text(
                               'يوجد رابط قديم محفوظ مع المحتوى وسيبقى كما هو.',
-                              style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12),
+                              style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
                             ),
                           ),
                         if (servers.isEmpty)
                           Padding(
                             padding: EdgeInsets.all(15),
-                            child: Text('لا توجد سيرفرات إضافية بعد', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                            child: Text('لا توجد سيرفرات إضافية بعد', style: TextStyle(color: AppTheme.secondaryText)),
                           ),
                         ...servers.map((server) => Card(
                               color: adminBg,
                               child: ListTile(
-                                title: Text(server['server_name']?.toString() ?? 'سيرفر', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+                                title: Text(server['server_name']?.toString() ?? 'سيرفر', style: TextStyle(color: AppTheme.text)),
                                 subtitle: Text(
                                   server['stream_url']?.toString() ?? '',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 11),
+                                  style: TextStyle(color: AppTheme.secondaryText, fontSize: 11),
                                 ),
                                 leading: Icon(
                                   server['is_active'] == true ? Icons.check_circle : Icons.pause_circle,
@@ -2613,7 +2528,7 @@ class _AdminPageState extends State<AdminPage> {
                                           builder: (ctx) => AlertDialog(
                                             backgroundColor: adminPanel,
                                             title: Text('حذف السيرفر', style: TextStyle(color: adminGold)),
-                                            content: Text('هل تريد حذف هذا السيرفر؟', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+                                            content: Text('هل تريد حذف هذا السيرفر؟', style: TextStyle(color: AppTheme.text)),
                                             actions: [
                                               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
                                               TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف', style: TextStyle(color: Colors.red))),
@@ -2640,10 +2555,10 @@ class _AdminPageState extends State<AdminPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: Text('إغلاق', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                child: Text('إغلاق', style: TextStyle(color: AppTheme.secondaryText)),
               ),
               FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text')),
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () async {
                   await _editPlaybackServer(type: type, contentId: contentId);
                   setDialogState(() {});
@@ -2689,13 +2604,13 @@ class _AdminPageState extends State<AdminPage> {
                         if (seasons.isEmpty)
                           Padding(
                             padding: EdgeInsets.all(15),
-                            child: Text('لم تتم إضافة مواسم بعد', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                            child: Text('لم تتم إضافة مواسم بعد', style: TextStyle(color: AppTheme.secondaryText)),
                           ),
                         ...seasons.map((season) => Card(
                               color: adminBg,
                               child: ListTile(
-                                title: Text(season['name']?.toString() ?? ('الموسم ' + season['season_number'].toString()), style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
-                                subtitle: Text('رقم الموسم: ' + season['season_number'].toString(), style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                                title: Text(season['name']?.toString() ?? ('الموسم ' + season['season_number'].toString()), style: TextStyle(color: AppTheme.text)),
+                                subtitle: Text('رقم الموسم: ' + season['season_number'].toString(), style: TextStyle(color: AppTheme.secondaryText)),
                                 onTap: () => _openSeasonEpisodes(season),
                                 trailing: Wrap(
                                   children: [
@@ -2717,7 +2632,7 @@ class _AdminPageState extends State<AdminPage> {
                                           builder: (ctx) => AlertDialog(
                                             backgroundColor: adminPanel,
                                             title: Text('حذف الموسم', style: TextStyle(color: adminGold)),
-                                            content: Text('سيتم حذف حلقات الموسم أيضاً. هل تريد المتابعة؟', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+                                            content: Text('سيتم حذف حلقات الموسم أيضاً. هل تريد المتابعة؟', style: TextStyle(color: AppTheme.text)),
                                             actions: [
                                               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
                                               TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف', style: TextStyle(color: Colors.red))),
@@ -2746,9 +2661,9 @@ class _AdminPageState extends State<AdminPage> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('إغلاق', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')))),
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('إغلاق', style: TextStyle(color: AppTheme.secondaryText))),
               FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text')),
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () => _editSeason(seriesId, onSaved: () => setDialogState(() {})),
                 icon: const Icon(Icons.add),
                 label: const Text('إضافة موسم'),
@@ -2839,12 +2754,12 @@ class _AdminPageState extends State<AdminPage> {
                         if (episodes.isEmpty)
                           Padding(
                             padding: EdgeInsets.all(15),
-                            child: Text('لا توجد حلقات في هذا الموسم', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                            child: Text('لا توجد حلقات في هذا الموسم', style: TextStyle(color: AppTheme.secondaryText)),
                           ),
                         ...episodes.map((episode) => Card(
                               color: adminBg,
                               child: ListTile(
-                                title: Text(episode['episode_number'].toString() + '. ' + (episode['title']?.toString() ?? 'حلقة'), style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+                                title: Text(episode['episode_number'].toString() + '. ' + (episode['title']?.toString() ?? 'حلقة'), style: TextStyle(color: AppTheme.text)),
                                 subtitle: Text(episode['is_published'] == true ? 'منشورة' : 'مسودة', style: TextStyle(color: episode['is_published'] == true ? Colors.green : Colors.orange)),
                                 trailing: Wrap(
                                   children: [
@@ -2880,9 +2795,9 @@ class _AdminPageState extends State<AdminPage> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('إغلاق', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')))),
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('إغلاق', style: TextStyle(color: AppTheme.secondaryText))),
               FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text')),
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () => _editEpisode(seasonId, onSaved: () => setDialogState(() {})),
                 icon: const Icon(Icons.add),
                 label: const Text('إضافة حلقة'),
@@ -2937,7 +2852,7 @@ class _AdminPageState extends State<AdminPage> {
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.sectionColor('admin', 'text')),
+                style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () {
                   final n = int.tryParse(number.text.trim());
                   if (n == null || n < 1 || title.text.trim().isEmpty) {
@@ -3126,7 +3041,7 @@ class _AdminPageState extends State<AdminPage> {
             ban
                 ? 'هل تريد حظر الحساب التالي؟\n$email'
                 : 'هل تريد فك الحظر عن الحساب التالي؟\n$email',
-            style: TextStyle(color: AppTheme.sectionColor('admin', 'text')),
+            style: TextStyle(color: AppTheme.text),
           ),
           actions: [
             TextButton(
@@ -3134,7 +3049,7 @@ class _AdminPageState extends State<AdminPage> {
                   Navigator.pop(dialogContext, false),
               child: Text(
                 'إلغاء',
-                style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
+                style: TextStyle(color: AppTheme.secondaryText),
               ),
             ),
             FilledButton(
@@ -3206,7 +3121,7 @@ class _AdminPageState extends State<AdminPage> {
             makeAdmin
                 ? 'هل تريد منح هذا الحساب صلاحية المدير؟\n$email'
                 : 'هل تريد إزالة صلاحية المدير من هذا الحساب؟\n$email',
-            style: TextStyle(color: AppTheme.sectionColor('admin', 'text')),
+            style: TextStyle(color: AppTheme.text),
           ),
           actions: [
             TextButton(
@@ -3214,13 +3129,13 @@ class _AdminPageState extends State<AdminPage> {
                   Navigator.pop(dialogContext, false),
               child: Text(
                 'إلغاء',
-                style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
+                style: TextStyle(color: AppTheme.secondaryText),
               ),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: adminGold,
-                foregroundColor: AppTheme.sectionColor('admin', 'text'),
+                foregroundColor: AppTheme.text,
               ),
               onPressed: () =>
                   Navigator.pop(dialogContext, true),
@@ -3277,14 +3192,14 @@ class _AdminPageState extends State<AdminPage> {
         ),
         content: Text(
           'هل أنت متأكد من حذف الحساب نهائياً؟\\n$email\\n\\nلا يمكن التراجع عن هذا الإجراء.',
-          style: TextStyle(color: AppTheme.sectionColor('admin', 'text')),
+          style: TextStyle(color: AppTheme.text),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
             child: Text(
               'إلغاء',
-              style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
+              style: TextStyle(color: AppTheme.secondaryText),
             ),
           ),
           FilledButton(
@@ -3428,7 +3343,7 @@ class _AdminPageState extends State<AdminPage> {
                   child: Text(
                     email,
                     style: TextStyle(
-                      color: AppTheme.sectionColor('admin', 'text'),
+                      color: AppTheme.text,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -3457,7 +3372,7 @@ class _AdminPageState extends State<AdminPage> {
               Text(
                 'تاريخ التسجيل: ${createdAt.split('T').first}',
                 style: TextStyle(
-                  color: AppTheme.sectionColor('admin', 'secondaryText'),
+                  color: AppTheme.secondaryText,
                   fontSize: 12,
                 ),
               ),
@@ -3582,7 +3497,7 @@ class _AdminPageState extends State<AdminPage> {
       child: TextField(
         controller: searchController,
         textDirection: TextDirection.rtl,
-        style: TextStyle(color: AppTheme.sectionColor('admin', 'text')),
+        style: TextStyle(color: AppTheme.text),
         onChanged: (value) {
           setState(() {
             searchQuery = value;
@@ -3591,7 +3506,7 @@ class _AdminPageState extends State<AdminPage> {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
-            color: AppTheme.sectionColor('admin', 'secondaryText'),
+            color: AppTheme.secondaryText,
           ),
           prefixIcon: Icon(
             Icons.search,
@@ -3607,7 +3522,7 @@ class _AdminPageState extends State<AdminPage> {
                   },
                   icon: Icon(
                     Icons.close,
-                    color: AppTheme.sectionColor('admin', 'secondaryText'),
+                    color: AppTheme.secondaryText,
                   ),
                 )
               : null,
@@ -3732,7 +3647,7 @@ class _AdminPageState extends State<AdminPage> {
                     Text(
                       title,
                       style: TextStyle(
-                        color: AppTheme.sectionColor('admin', 'text'),
+                        color: AppTheme.text,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -3741,7 +3656,7 @@ class _AdminPageState extends State<AdminPage> {
                     Text(
                       subtitle,
                       style: TextStyle(
-                        color: AppTheme.sectionColor('admin', 'secondaryText'),
+                        color: AppTheme.secondaryText,
                         fontSize: 12,
                       ),
                     ),
@@ -3760,7 +3675,7 @@ class _AdminPageState extends State<AdminPage> {
                   ),
                   Icon(
                     Icons.chevron_left,
-                    color: AppTheme.sectionColor('admin', 'secondaryText'),
+                    color: AppTheme.secondaryText,
                   ),
                 ],
               ),
@@ -3797,7 +3712,7 @@ class _AdminPageState extends State<AdminPage> {
                 usersError!,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: AppTheme.sectionColor('admin', 'secondaryText'),
+                  color: AppTheme.secondaryText,
                 ),
               ),
               const SizedBox(height: 15),
@@ -3838,7 +3753,7 @@ class _AdminPageState extends State<AdminPage> {
                                       ? 'لا يوجد مدراء حالياً'
                                       : 'لا يوجد مستخدمون لعرضهم',
                           style: TextStyle(
-                            color: AppTheme.sectionColor('admin', 'secondaryText'),
+                            color: AppTheme.secondaryText,
                           ),
                         ),
                       ),
@@ -4236,15 +4151,15 @@ class _AdminPageState extends State<AdminPage> {
                                     children: [
                                       const Text('تم جلب البيانات بنجاح', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                                       const SizedBox(height: 5),
-                                      Text(tmdbPreview!['title']?.toString() ?? '', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.bold)),
+                                      Text(tmdbPreview!['title']?.toString() ?? '', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
                                       if ((tmdbPreview!['title_en']?.toString() ?? '').isNotEmpty)
-                                        Text(tmdbPreview!['title_en'].toString(), style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+                                        Text(tmdbPreview!['title_en'].toString(), style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                                       const SizedBox(height: 5),
-                                      Text('السنة: ${tmdbPreview!['release_year'] ?? '-'}  •  التقييم: ${tmdbPreview!['rating'] ?? '-'}', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+                                      Text('السنة: ${tmdbPreview!['release_year'] ?? '-'}  •  التقييم: ${tmdbPreview!['rating'] ?? '-'}', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                                       if ((tmdbPreview!['director']?.toString() ?? '').isNotEmpty)
-                                        Text('المخرج: ${tmdbPreview!['director']}', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+                                        Text('المخرج: ${tmdbPreview!['director']}', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                                       if ((tmdbPreview!['cast'] as List? ?? []).isNotEmpty)
-                                        Text('الممثلون: ${(tmdbPreview!['cast'] as List).take(4).map((person) => person['name']).join('، ')}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+                                        Text('الممثلون: ${(tmdbPreview!['cast'] as List).take(4).map((person) => person['name']).join('، ')}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                                     ],
                                   ),
                                 ),
@@ -4288,11 +4203,11 @@ class _AdminPageState extends State<AdminPage> {
                           title: Text('الباقات التي يظهر فيها الفيلم',
                               style: TextStyle(color: adminGold, fontWeight: FontWeight.bold)),
                           subtitle: Text('تم اختيار ${selectedPackageIds.length} باقة',
-                              style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+                              style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
                           children: packageOptions.isEmpty
                               ? [Padding(padding: EdgeInsets.all(12),
                                   child: Text('لا توجد باقات للأفلام. أنشئ باقة أولاً من إدارة الباقات.',
-                                      style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))))]
+                                      style: TextStyle(color: AppTheme.secondaryText)))]
                               : packageOptions.map((package) {
                                   final packageId = package['id'].toString();
                                   return CheckboxListTile(
@@ -4301,7 +4216,7 @@ class _AdminPageState extends State<AdminPage> {
                                     activeColor: adminGold,
                                     checkColor: Colors.black,
                                     title: Text(package['name']?.toString() ?? 'باقة',
-                                        style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+                                        style: TextStyle(color: AppTheme.text)),
                                     onChanged: (checked) => setDialogState(() {
                                       if (checked == true) {
                                         if (!selectedPackageIds.contains(packageId)) selectedPackageIds.add(packageId);
@@ -4324,14 +4239,14 @@ class _AdminPageState extends State<AdminPage> {
                     child: Text(
                       'إلغاء',
                       style: TextStyle(
-                        color: AppTheme.sectionColor('admin', 'secondaryText'),
+                        color: AppTheme.secondaryText,
                       ),
                     ),
                   ),
                   FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: adminGold,
-                      foregroundColor: AppTheme.sectionColor('admin', 'text'),
+                      foregroundColor: AppTheme.text,
                     ),
                     onPressed: () {
                       final title =
@@ -4439,12 +4354,12 @@ class _AdminPageState extends State<AdminPage> {
         keyboardType: keyboard,
         textDirection: TextDirection.rtl,
         style: TextStyle(
-          color: AppTheme.sectionColor('admin', 'text'),
+          color: AppTheme.text,
         ),
         decoration: InputDecoration(
           labelText: required ? '$label *' : label,
           labelStyle: TextStyle(
-            color: AppTheme.sectionColor('admin', 'secondaryText'),
+            color: AppTheme.secondaryText,
           ),
           filled: true,
           fillColor: adminBg,
@@ -4483,7 +4398,7 @@ class _AdminPageState extends State<AdminPage> {
           content: Text(
             'هل تريد حذف فيلم "${movie['title']}" نهائياً؟',
             style: TextStyle(
-              color: AppTheme.sectionColor('admin', 'text'),
+              color: AppTheme.text,
             ),
           ),
           actions: [
@@ -4493,7 +4408,7 @@ class _AdminPageState extends State<AdminPage> {
               child: Text(
                 'إلغاء',
                 style: TextStyle(
-                  color: AppTheme.sectionColor('admin', 'secondaryText'),
+                  color: AppTheme.secondaryText,
                 ),
               ),
             ),
@@ -4531,11 +4446,11 @@ class _AdminPageState extends State<AdminPage> {
           builder: (dialogContext) => AlertDialog(
             backgroundColor: adminPanel,
             title: Text(title, style: TextStyle(color: adminGold)),
-            content: Text(message, style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+            content: Text(message, style: TextStyle(color: AppTheme.text)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text('إلغاء', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText)),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
@@ -4725,7 +4640,7 @@ class _AdminPageState extends State<AdminPage> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: AppTheme.sectionColor('admin', 'text'),
+                      color: AppTheme.text,
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
                     ),
@@ -4735,7 +4650,7 @@ class _AdminPageState extends State<AdminPage> {
                     movie['release_year']?.toString() ??
                         'سنة غير محددة',
                     style: TextStyle(
-                      color: AppTheme.sectionColor('admin', 'secondaryText'),
+                      color: AppTheme.secondaryText,
                     ),
                   ),
                   const SizedBox(height: 7),
@@ -4864,8 +4779,8 @@ class _AdminPageState extends State<AdminPage> {
           margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           child: ListTile(
             leading: Icon(Icons.playlist_add_check_circle_outlined, color: adminGold, size: 30),
-            title: Text('مصادر قنوات IPTV', style: TextStyle(color: AppTheme.sectionColor('admin', 'text'), fontWeight: FontWeight.bold)),
-            subtitle: Text('إضافة وإدارة روابط قوائم M3U وM3U8 ودمج قنواتها تلقائياً', style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+            title: Text('مصادر قنوات IPTV', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+            subtitle: Text('إضافة وإدارة روابط قوائم M3U وM3U8 ودمج قنواتها تلقائياً', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
             trailing: Icon(Icons.chevron_left, color: adminGold),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TvSourcesSettingsPage())),
           ),
@@ -4933,7 +4848,7 @@ class _AdminPageState extends State<AdminPage> {
                     Text(
                       title,
                       style: TextStyle(
-                        color: AppTheme.sectionColor('admin', 'text'),
+                        color: AppTheme.text,
                         fontWeight: FontWeight.bold,
                         fontSize: 17,
                       ),
@@ -4942,7 +4857,7 @@ class _AdminPageState extends State<AdminPage> {
                     Text(
                       subtitle,
                       style: TextStyle(
-                        color: AppTheme.sectionColor('admin', 'secondaryText'),
+                        color: AppTheme.secondaryText,
                         fontSize: 12,
                       ),
                     ),
@@ -4995,7 +4910,7 @@ class _AdminPageState extends State<AdminPage> {
         body: Center(
           child: Text(
             'هذه الصفحة مخصصة للمديرين فقط',
-            style: TextStyle(color: AppTheme.sectionColor('admin', 'text')),
+            style: TextStyle(color: AppTheme.text),
           ),
         ),
       );
@@ -5052,7 +4967,7 @@ class _AdminPageState extends State<AdminPage> {
         floatingActionButton: isMovies || isCatalog
             ? FloatingActionButton.extended(
                 backgroundColor: adminGold,
-                foregroundColor: AppTheme.sectionColor('admin', 'text'),
+                foregroundColor: AppTheme.text,
                 onPressed: () => isMovies
                     ? openMovieForm()
                     : openCatalogForm(currentSection),
@@ -5095,7 +5010,7 @@ class _AdminPageState extends State<AdminPage> {
                       child: Text(
                         pageTitle,
                         style: TextStyle(
-                          color: AppTheme.sectionColor('admin', 'text'),
+                          color: AppTheme.text,
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
@@ -5212,7 +5127,7 @@ class _AdminPageState extends State<AdminPage> {
                               : 'لا توجد أفلام حالياً\nاضغط إضافة فيلم للبدء',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: AppTheme.sectionColor('admin', 'secondaryText'),
+                            color: AppTheme.secondaryText,
                             height: 1.8,
                           ),
                         ),
@@ -5262,7 +5177,7 @@ class _AdminPageState extends State<AdminPage> {
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppTheme.sectionColor('admin', 'secondaryText'),
+                color: AppTheme.secondaryText,
               ),
             ),
             const SizedBox(height: 15),
