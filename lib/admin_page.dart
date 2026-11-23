@@ -16,9 +16,9 @@ import 'series_monitor_page.dart';
 import 'movie_monitor_page.dart';
 import 'tv_sources_settings_page.dart';
 
-Color get adminBg => AppTheme.background;
-Color get adminGold => AppTheme.primary;
-Color get adminPanel => AppTheme.panel;
+Color get adminBg => AppTheme.sectionColor('admin', 'background');
+Color get adminGold => AppTheme.sectionColor('admin', 'primary');
+Color get adminPanel => AppTheme.sectionColor('admin', 'panel');
 
 const String ownerUserId =
     'dda16adb-3b6e-4244-a028-83df88b7801d';
@@ -421,67 +421,96 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> pickThemeColor(String key, String label) async {
-    const options = <Color>[
-      Color(0xFF090909), Color(0xFF191919), Color(0xFF303030),
-      Color(0xFF555555), Color(0xFF808080), Color(0xFFB3B3B3),
-      Color(0xFFFFFFFF), Color(0xFFE50914), Color(0xFFB20710),
-      Color(0xFFFF1744), Color(0xFFFF5252), Color(0xFFFF8A80),
-      Color(0xFFFF5722), Color(0xFFFF9800), Color(0xFFFFC107),
-      Color(0xFFFFEB3B), Color(0xFF8BC34A), Color(0xFF4CAF50),
-      Color(0xFF00C853), Color(0xFF009688), Color(0xFF00BCD4),
-      Color(0xFF03A9F4), Color(0xFF2196F3), Color(0xFF3F51B5),
-      Color(0xFF673AB7), Color(0xFF9C27B0), Color(0xFFE91E63),
-      Color(0xFF795548), Color(0xFF607D8B), Color(0xFF263238),
-    ];
+    final controller = TextEditingController(
+      text: '#' + AppTheme.color(key).value.toRadixString(16).substring(2).toUpperCase(),
+    );
+    var hsv = HSVColor.fromColor(AppTheme.color(key));
     final selected = await showDialog<Color>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: adminPanel,
-        title: Text('اختيار لون: $label', style: TextStyle(color: AppTheme.text)),
-        content: SizedBox(
-          width: 320,
-          child: SingleChildScrollView(
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 11,
-              runSpacing: 13,
-              children: options.map((color) {
-                final current = AppTheme.color(key);
-                final isSelected = current.value == color.value;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(30),
-                  onTap: () => Navigator.of(dialogContext).pop(color),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isSelected ? adminGold : Colors.white38,
-                        width: isSelected ? 3 : 1,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final color = hsv.toColor();
+          return AlertDialog(
+            backgroundColor: adminPanel,
+            title: Text('اختيار لون: ' + label, style: TextStyle(color: AppTheme.text)),
+            content: SizedBox(
+              width: 340,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      height: 74,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white54),
                       ),
                     ),
-                    child: isSelected
-                        ? Icon(Icons.check, color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white, size: 19)
-                        : null,
-                  ),
-                );
-              }).toList(),
+                    const SizedBox(height: 18),
+                    const Text('درجة اللون'),
+                    Slider(
+                      min: 0, max: 360, value: hsv.hue.clamp(0, 360),
+                      onChanged: (value) => setDialogState(() {
+                        hsv = hsv.withHue(value);
+                        controller.text = '#' + hsv.toColor().value.toRadixString(16).substring(2).toUpperCase();
+                      }),
+                    ),
+                    const Text('التشبع'),
+                    Slider(
+                      min: 0, max: 1, value: hsv.saturation,
+                      onChanged: (value) => setDialogState(() {
+                        hsv = hsv.withSaturation(value);
+                        controller.text = '#' + hsv.toColor().value.toRadixString(16).substring(2).toUpperCase();
+                      }),
+                    ),
+                    const Text('السطوع'),
+                    Slider(
+                      min: 0, max: 1, value: hsv.value,
+                      onChanged: (value) => setDialogState(() {
+                        hsv = hsv.withValue(value);
+                        controller.text = '#' + hsv.toColor().value.toRadixString(16).substring(2).toUpperCase();
+                      }),
+                    ),
+                    TextField(
+                      controller: controller,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'رمز HEX',
+                        hintText: '#E50914',
+                      ),
+                      onChanged: (value) {
+                        final normalized = AppTheme.normalizeHex(value, '');
+                        if (normalized.isNotEmpty) {
+                          setDialogState(() => hsv = HSVColor.fromColor(
+                            Color(int.parse(normalized.substring(1), radix: 16) | 0xFF000000),
+                          ));
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('إلغاء'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(hsv.toColor()),
+                child: const Text('اعتماد اللون'),
+              ),
+            ],
+          );
+        },
       ),
     );
+    controller.dispose();
     if (selected == null || !mounted) return;
     themeColorControllers[key]?.text =
-        '#${selected.value.toRadixString(16).substring(2).toUpperCase()}';
+        '#' + selected.value.toRadixString(16).substring(2).toUpperCase();
     previewThemePalette();
   }
 
