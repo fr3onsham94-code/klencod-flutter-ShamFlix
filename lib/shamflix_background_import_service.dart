@@ -253,6 +253,11 @@ class ShamFlixBackgroundImportService {
         job['failed'] = (job['failed'] as int) + 1;
         job['last_error'] = e.toString();
       }
+      // لا تسمح لنسخة المهمة المحلية بالكتابة فوق طلب إلغاء وصل أثناء معالجة العنصر.
+      final latestAfterItem = await currentJob();
+      if (latestAfterItem?['status'] == 'cancelled') {
+        return;
+      }
       job['processed'] = (job['processed'] as int) + 1;
       job['message'] = 'تمت معالجة ' + job['processed'].toString() + ' من ' + job['total'].toString();
       job['updated_at'] = DateTime.now().toIso8601String();
