@@ -146,7 +146,9 @@ class ShamFlixBackgroundImportService {
     final rows = await AuthService.client.from(table).select('id,title,release_year');
     final known = rows.map((v) => Map<String, dynamic>.from(v)).toList();
 
-    for (final item in items) {
+    final resumeAt = ((job['processed'] as num?) ?? 0).toInt().clamp(0, items.length);
+    for (var itemIndex = resumeAt; itemIndex < items.length; itemIndex++) {
+      final item = items[itemIndex];
       final latest = await currentJob();
       if (latest?['status'] == 'cancelled') return;
       try {
