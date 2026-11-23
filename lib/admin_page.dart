@@ -19,6 +19,23 @@ import 'tv_sources_settings_page.dart';
 Color get adminBg => AppTheme.sectionColor('admin', 'background');
 Color get adminGold => AppTheme.sectionColor('admin', 'primary');
 Color get adminPanel => AppTheme.sectionColor('admin', 'panel');
+Color get adminIcon => AppTheme.sectionColor('admin', 'icon');
+Color get adminDescription => AppTheme.sectionColor('admin', 'description');
+Color get adminSwitchActive => AppTheme.sectionColor('admin', 'switchActive');
+Color get adminSwitchInactive => AppTheme.sectionColor('admin', 'switchInactive');
+Color get adminDropdownBackground => AppTheme.sectionColor('admin', 'dropdownBackground');
+Color get adminDropdownText => AppTheme.sectionColor('admin', 'dropdownText');
+Color get adminDialogBackground => AppTheme.sectionColor('admin', 'dialogBackground');
+Color get adminDialogTitle => AppTheme.sectionColor('admin', 'dialogTitle');
+Color get adminInputBackground => AppTheme.sectionColor('admin', 'inputBackground');
+Color get adminInputText => AppTheme.sectionColor('admin', 'inputText');
+Color get adminInputHint => AppTheme.sectionColor('admin', 'inputHint');
+Color get adminDivider => AppTheme.sectionColor('admin', 'divider');
+Color get adminSelected => AppTheme.sectionColor('admin', 'selected');
+Color get adminDisabled => AppTheme.sectionColor('admin', 'disabled');
+Color get adminProgress => AppTheme.sectionColor('admin', 'progress');
+Color get adminError => AppTheme.sectionColor('admin', 'error');
+Color get adminSuccess => AppTheme.sectionColor('admin', 'success');
 
 const String ownerUserId =
     'dda16adb-3b6e-4244-a028-83df88b7801d';
@@ -431,8 +448,8 @@ class _AdminPageState extends State<AdminPage> {
         builder: (context, setDialogState) {
           final color = hsv.toColor();
           return AlertDialog(
-            backgroundColor: adminPanel,
-            title: Text('اختيار لون: ' + label, style: TextStyle(color: AppTheme.sectionColor('admin', 'text'))),
+            backgroundColor: adminDialogBackground,
+            title: Text('اختيار لون: ' + label, style: TextStyle(color: adminDialogTitle)),
             content: SizedBox(
               width: 340,
               child: SingleChildScrollView(
@@ -530,12 +547,12 @@ class _AdminPageState extends State<AdminPage> {
             Text('تخصيص ألوان التطبيق', style: TextStyle(color: adminGold, fontSize: 17, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Text('اختر القسم، شاهد معاينة شكلية له، ثم اختر اسم العنصر من القائمة أسفل المعاينة لتغيير لونه.',
-              style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12, height: 1.5)),
+              style: TextStyle(color: adminDescription, fontSize: 12, height: 1.5)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: selectedThemeSection,
-              dropdownColor: adminPanel,
-              style: TextStyle(color: AppTheme.sectionColor('admin', 'text')),
+              dropdownColor: adminDropdownBackground,
+              style: TextStyle(color: adminDropdownText),
               decoration: InputDecoration(
                 labelText: 'القسم المراد تخصيص ألوانه',
                 labelStyle: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
@@ -644,7 +661,7 @@ class _AdminPageState extends State<AdminPage> {
       children: [
         Text(title, style: TextStyle(color: adminGold, fontSize: 15, fontWeight: FontWeight.bold)),
         const SizedBox(height: 3),
-        Text(subtitle, style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 11)),
+        Text(subtitle, style: TextStyle(color: adminDescription, fontSize: 11)),
       ],
     ),
   );
@@ -676,7 +693,8 @@ class _AdminPageState extends State<AdminPage> {
             onChanged: badgeSettingSaving
                 ? null
                 : saveCategoryBadgeSetting,
-            activeColor: adminGold,
+            activeColor: adminSwitchActive,
+            inactiveThumbColor: adminSwitchInactive,
             title: Text(
               'إظهار تصنيف البوستر',
               style: TextStyle(
@@ -690,7 +708,7 @@ class _AdminPageState extends State<AdminPage> {
                   : 'الليبل مخفي عن جميع المستخدمين',
               style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
             ),
-            secondary: Icon(Icons.local_offer_outlined, color: adminGold),
+            secondary: Icon(Icons.local_offer_outlined, color: adminIcon),
           ),
         ),
         if (badgeSettingSaving)
@@ -725,7 +743,7 @@ class _AdminPageState extends State<AdminPage> {
                 const SizedBox(height: 8),
                 Text(
                   'إعداد موحّد يطبّق على جميع باقات الأفلام والمسلسلات وقنوات البث المباشر. كلما زاد العدد صغر حجم البوستر أو بطاقة القناة مع الحفاظ على التناسب.',
-                  style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12, height: 1.5),
+                  style: TextStyle(color: adminDescription, fontSize: 12, height: 1.5),
                 ),
                 const SizedBox(height: 12),
                 if (catalogGridColumnsLoading)
@@ -734,7 +752,7 @@ class _AdminPageState extends State<AdminPage> {
                   DropdownButtonFormField<int>(
                     value: catalogGridColumns,
                     dropdownColor: adminPanel,
-                    style: TextStyle(color: AppTheme.sectionColor('admin', 'text')),
+                    style: TextStyle(color: adminDropdownText),
                     decoration: InputDecoration(
                       labelText: 'اختر عدد الأعمدة',
                       labelStyle: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText')),
@@ -786,8 +804,8 @@ class _AdminPageState extends State<AdminPage> {
                   controller: inviteLinkController,
                   keyboardType: TextInputType.url,
                   textDirection: TextDirection.ltr,
-                  style: TextStyle(color: AppTheme.sectionColor('admin', 'text')),
-                  decoration: InputDecoration(hintText: 'https://...', hintStyle: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'))),
+                  style: TextStyle(color: adminInputText),
+                  decoration: InputDecoration(filled: true, fillColor: adminInputBackground, hintText: 'https://...', hintStyle: TextStyle(color: adminInputHint)),
                 ),
                 const SizedBox(height: 18),
                 Text('التحديث الداخلي للتطبيق', style: TextStyle(color: adminGold, fontWeight: FontWeight.bold, fontSize: 16)),
