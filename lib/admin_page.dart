@@ -451,7 +451,7 @@ class _AdminPageState extends State<AdminPage> {
                     const SizedBox(height: 18),
                     const Text('درجة اللون'),
                     Slider(
-                      min: 0, max: 360, value: hsv.hue.clamp(0, 360),
+                      min: 0, max: 360, value: hsv.hue.clamp(0.0, 360.0).toDouble(),
                       onChanged: (value) => setDialogState(() {
                         hsv = hsv.withHue(value);
                         controller.text = '#' + hsv.toColor().value.toRadixString(16).substring(2).toUpperCase();
