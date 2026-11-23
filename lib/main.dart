@@ -2377,8 +2377,30 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   double packageIconSize = 15;
   double packageItemHeight = 38;
 
+  Color get settingsBackground => AppTheme.sectionColor('settings', 'background');
+  Color get settingsPrimary => AppTheme.sectionColor('settings', 'primary');
+  Color get settingsPanel => AppTheme.sectionColor('settings', 'panel');
+  Color get settingsText => AppTheme.sectionColor('settings', 'text');
+  Color get settingsSecondaryText => AppTheme.sectionColor('settings', 'secondaryText');
+  Color get settingsButton => AppTheme.sectionColor('settings', 'button');
+  Color get settingsBorder => AppTheme.sectionColor('settings', 'border');
+
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    AppTheme.revision.addListener(_onThemeChanged);
+    _load();
+  }
+
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AppTheme.revision.removeListener(_onThemeChanged);
+    super.dispose();
+  }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -2458,8 +2480,8 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: panel,
-        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: gold)),
-        content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: Colors.white70)),
+        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: settingsPrimary)),
+        content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: settingsSecondaryText)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('مسح السجل', style: TextStyle(color: Colors.redAccent))),
@@ -2569,18 +2591,18 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: panel,
-          title: Text('يتوفر تحديث جديد', style: TextStyle(color: gold)),
+          title: Text('يتوفر تحديث جديد', style: TextStyle(color: settingsPrimary)),
           content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('الإصدار الحالي: ${packageInfo.version}', style: TextStyle(color: Colors.white70)),
-              Text('الإصدار الجديد: $latest', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              Text('الإصدار الحالي: ${packageInfo.version}', style: TextStyle(color: settingsSecondaryText)),
+              Text('الإصدار الجديد: $latest', style: TextStyle(color: settingsText, fontWeight: FontWeight.bold)),
               if ((value['release_notes']?.toString() ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text('ما الجديد؟', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                Text('ما الجديد؟', style: TextStyle(color: settingsPrimary, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 5),
-                Text(value['release_notes'].toString(), style: TextStyle(color: Colors.white70)),
+                Text(value['release_notes'].toString(), style: TextStyle(color: settingsSecondaryText)),
               ],
             ],
           )),
@@ -2621,15 +2643,15 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Expanded(child: Text(title, style: TextStyle(color: Colors.white70, fontSize: 12))),
-            Text('${value.round()}$unit', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+            Expanded(child: Text(title, style: TextStyle(color: settingsSecondaryText, fontSize: 12))),
+            Text('${value.round()}$unit', style: TextStyle(color: settingsPrimary, fontWeight: FontWeight.bold)),
           ]),
           Slider(
             value: value.clamp(min, max).toDouble(),
             min: min,
             max: max,
             divisions: (max - min).round(),
-            activeColor: gold,
+            activeColor: settingsPrimary,
             inactiveColor: Colors.white24,
             onChanged: onChanged,
           ),
@@ -2639,39 +2661,39 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   }
 
   Widget _tile(IconData icon, String title, String subtitle, VoidCallback onTap) => Card(
-    color: panel,
+    color: settingsPanel,
     child: ListTile(
-      leading: Icon(icon, color: gold),
-      title: Text(title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: TextStyle(color: Colors.white70, fontSize: 12)),
-      trailing: Icon(Icons.chevron_left, color: gold),
+      leading: Icon(icon, color: settingsPrimary),
+      title: Text(title, style: TextStyle(color: settingsText, fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: TextStyle(color: settingsSecondaryText, fontSize: 12)),
+      trailing: Icon(Icons.chevron_left, color: settingsPrimary),
       onTap: busy ? null : onTap,
     ),
   );
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return Scaffold(backgroundColor: bg, body: Center(child: CircularProgressIndicator(color: gold)));
+    if (loading) return Scaffold(backgroundColor: settingsBackground, body: Center(child: CircularProgressIndicator(color: settingsPrimary)));
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        backgroundColor: bg,
-        appBar: AppBar(backgroundColor: bg, title: Text(appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'))),
+        backgroundColor: settingsBackground,
+        appBar: AppBar(backgroundColor: settingsBackground, title: Text(appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'))),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           _tile(Icons.tune, appText('إعدادات ضبط المشغل', 'Player Settings', 'Oynatıcı Ayarları'), 'اختيار المشغل الداخلي أو VLC أو MX Player', () {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage()));
           }),
           Card(
-            color: panel,
+            color: settingsPanel,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(children: [
-                Icon(Icons.language, color: gold),
+                Icon(Icons.language, color: settingsPrimary),
                 const SizedBox(width: 12),
-                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: settingsText, fontWeight: FontWeight.w600))),
                 DropdownButton<String>(
                   value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: settingsText),
                   items: const [
                     DropdownMenuItem(value: 'ar', child: Text('العربية')),
                     DropdownMenuItem(value: 'en', child: Text('English')),
@@ -2683,33 +2705,33 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             ),
           ),
           Card(
-            color: panel,
+            color: settingsPanel,
             child: SwitchListTile(
               value: swipeSidebarEnabled,
-              activeColor: gold,
-              secondary: Icon(Icons.swipe, color: gold),
-              title: Text(appText('فتح وإغلاق قائمة الباقات بالسحب', 'Swipe to open/close package menu', 'Paket menüsünü kaydırarak aç/kapat'), style: TextStyle(color: Colors.white)),
-              subtitle: Text(appText('اسحب يميناً أو يساراً لإظهار القائمة الجانبية أو إخفائها في الأفلام والمسلسلات والبث المباشر', 'Swipe horizontally to show or hide the package sidebar in Movies, Series and Live TV', 'Film, Dizi ve Canlı TV sayfalarında paket kenar çubuğunu yatay kaydırarak açıp kapatın'), style: TextStyle(color: Colors.white70, fontSize: 12)),
+              activeColor: settingsPrimary,
+              secondary: Icon(Icons.swipe, color: settingsPrimary),
+              title: Text(appText('فتح وإغلاق قائمة الباقات بالسحب', 'Swipe to open/close package menu', 'Paket menüsünü kaydırarak aç/kapat'), style: TextStyle(color: settingsText)),
+              subtitle: Text(appText('اسحب يميناً أو يساراً لإظهار القائمة الجانبية أو إخفائها في الأفلام والمسلسلات والبث المباشر', 'Swipe horizontally to show or hide the package sidebar in Movies, Series and Live TV', 'Film, Dizi ve Canlı TV sayfalarında paket kenar çubuğunu yatay kaydırarak açıp kapatın'), style: TextStyle(color: settingsSecondaryText, fontSize: 12)),
               onChanged: _setSwipeSidebar,
             ),
           ),
           Card(
-            color: panel,
+            color: settingsPanel,
             child: SwitchListTile(
-              value: wifiOnly, activeColor: gold, secondary: Icon(Icons.wifi, color: gold),
-              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: Colors.white)),
-              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: Colors.white70, fontSize: 12)),
+              value: wifiOnly, activeColor: settingsPrimary, secondary: Icon(Icons.wifi, color: settingsPrimary),
+              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: settingsText)),
+              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: settingsSecondaryText, fontSize: 12)),
               onChanged: _setWifiOnly,
             ),
           ),
           Card(
-            color: panel,
+            color: settingsPanel,
             child: SwitchListTile(
               value: forceLandscape,
-              activeColor: gold,
-              secondary: Icon(Icons.screen_rotation, color: gold),
-              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: Colors.white)),
-              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: Colors.white70, fontSize: 12)),
+              activeColor: settingsPrimary,
+              secondary: Icon(Icons.screen_rotation, color: settingsPrimary),
+              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: settingsText)),
+              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: settingsSecondaryText, fontSize: 12)),
               onChanged: _setForceLandscape,
             ),
           ),
@@ -2717,7 +2739,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           _tile(Icons.history, appText('مسح السجل بالكامل', 'Clear Watch History', 'İzleme Geçmişini Temizle'), appText('حذف سجل المشاهدة من الجهاز والحساب', 'Delete watch history from this device and account', 'İzleme geçmişini cihazdan ve hesaptan sil'), _clearHistory),
           _tile(Icons.refresh, appText('تحديث قائمة القنوات', 'Refresh Channel List', 'Kanal Listesini Yenile'), appText('جلب أحدث القنوات المنشورة', 'Fetch the latest published channels', 'En yeni yayınlanan kanalları getir'), _refreshChannels),
           _tile(Icons.system_update_alt, appText('البحث عن تحديث للتطبيق', 'Check for App Updates', 'Uygulama Güncellemelerini Kontrol Et'), appText('التحقق من وجود إصدار جديد', 'Check whether a new version is available', 'Yeni sürüm olup olmadığını kontrol et'), _checkForUpdate),
-          if (busy) Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: gold))),
+          if (busy) Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: settingsPrimary))),
         ]),
       ),
     );
