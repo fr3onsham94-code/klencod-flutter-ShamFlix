@@ -423,7 +423,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
     if (category.text.trim().isNotEmpty) _addCategoriesFromInput();
     final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
     if (chosen.isEmpty || packageIds.isEmpty) return;
-    setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; movieMonitorCreated = 0; movieMonitorFailures = 0; });
+    if (mounted) setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; movieMonitorCreated = 0; movieMonitorFailures = 0; });
     try {
       final table = type == 'movie' ? 'movies' : 'series';
       final rows = await AuthService.client.from(table).select();
@@ -434,9 +434,9 @@ class _ContentImportPageState extends State<ContentImportPage> {
       var episodeImportFailures = 0;
       var episodesWithoutServers = 0;
       for (final item in chosen) {
-        if (!mounted) break;
+        // تستمر المهمة حتى لو غادر المدير صفحة الاستيراد.
         final title = (item['title']?.toString() ?? '').trim();
-        if (title.isEmpty) { setState(() => failed++); continue; }
+        if (title.isEmpty) { if (mounted) setState(() => failed++); continue; }
         final year = int.tryParse(item['release_year']?.toString() ?? '');
         final similarMatches = existingRecords.map((record) {
           final titleVariants = [record['title'], record['title_en'], record['original_title']]
@@ -456,10 +456,10 @@ class _ContentImportPageState extends State<ContentImportPage> {
           ..sort((a, b) => (b['_match_score'] as double).compareTo(a['_match_score'] as double));
 
         if (similarMatches.isNotEmpty) {
-          final choice = await _askDuplicateAction(title, similarMatches, type == 'series');
+          final choice = mounted ? await _askDuplicateAction(title, similarMatches, type == 'series') : {'action': 'skip'};
           final action = choice?['action']?.toString() ?? 'skip';
           if (action == 'skip') {
-            setState(() => duplicates++);
+            if (mounted) setState(() => duplicates++);
             continue;
           }
           if (action == 'merge' && type == 'series') {
@@ -495,7 +495,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
             } catch (_) {
               episodeImportFailures++;
             }
-            setState(() => duplicates++);
+            if (mounted) setState(() => duplicates++);
             continue;
           }
           // action == 'new': intentionally continue to the normal insert path.
@@ -575,8 +575,8 @@ class _ContentImportPageState extends State<ContentImportPage> {
             await AuthService.client.from('playback_servers').insert(serverRows);
           }
           existingRecords.add({'id': id, 'title': title, 'release_year': year});
-          setState(() => imported++);
-        } catch (_) { setState(() => failed++); }
+          if (mounted) setState(() => imported++);
+        } catch (_) { if (mounted) setState(() => failed++); }
       }
       if (type == 'movie' && monitorMovies) {
         final sourceUri = Uri.tryParse(url.text.trim());
@@ -640,7 +640,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
         .split(RegExp(r'[,،|;؛\n]+'))
         .map((value) => value.trim())
         .where((value) => value.isNotEmpty);
-    setState(() {
+    if (mounted) setState(() {
       selectedCategories.addAll(values);
       category.clear();
     });
