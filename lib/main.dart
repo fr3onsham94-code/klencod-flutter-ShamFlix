@@ -2870,38 +2870,45 @@ class FavoritesPage extends StatefulWidget {
   State<FavoritesPage> createState() => _FavoritesPageState();
 }
 class _FavoritesPageState extends State<FavoritesPage> {
+  Color get favoritesBackground => AppTheme.sectionColor('favorites', 'background');
+  Color get favoritesPrimary => AppTheme.sectionColor('favorites', 'primary');
+  Color get favoritesPanel => AppTheme.sectionColor('favorites', 'favoritesPanel');
+  Color get favoritesText => AppTheme.sectionColor('favorites', 'text');
+  Color get favoritesSecondaryText => AppTheme.sectionColor('favorites', 'secondaryText');
+  void _onFavoritesThemeChanged() { if (mounted) setState(() {}); }
+
   late Future<List<Map<String, dynamic>>> favorites;
   @override
-  void initState() { super.initState(); favorites = ShamFlixLocalStore.getFavorites(); localProfileRefreshNotifier.addListener(reload); }
+  void initState() { super.initState(); AppTheme.revision.addListener(_onFavoritesThemeChanged); favorites = ShamFlixLocalStore.getFavorites(); localProfileRefreshNotifier.addListener(reload); }
   void reload() { if (mounted) setState(() => favorites = ShamFlixLocalStore.getFavorites()); }
   @override
-  void dispose() { localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
+  void dispose() { AppTheme.revision.removeListener(_onFavoritesThemeChanged); localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => Directionality(
     textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
-      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
+      backgroundColor: favoritesBackground, appBar: AppBar(backgroundColor: favoritesBackground, title: Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: gold));
+        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: favoritesPrimary));
         final items = snapshot.data ?? [];
         if (items.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.favorite_border, color: gold, size: 64), const SizedBox(height: 12),
-          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: TextStyle(color: Colors.white70)),
-          const SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: TextStyle(color: Colors.white70)),
+          Icon(Icons.favorite_border, color: favoritesPrimary, size: 64), const SizedBox(height: 12),
+          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: TextStyle(color: favoritesSecondaryText)),
+          const SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: TextStyle(color: favoritesSecondaryText)),
         ]));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index];
           final item = Map<String, dynamic>.from(record['item'] is Map ? record['item'] as Map : <String, dynamic>{});
           final poster = valueOf(record['poster_url']);
-          return Card(color: panel, child: ListTile(
-            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.movie, color: gold) :
+          return Card(color: favoritesPanel, child: ListTile(
+            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.movie, color: favoritesPrimary) :
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Icon(Icons.movie, color: gold)))),
-            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: Colors.white)),
+                errorBuilder: (_, __, ___) => Icon(Icons.movie, color: favoritesPrimary)))),
+            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: favoritesText)),
             subtitle: Text(record['isSeries'] == true ? appText('مسلسل', 'Series', 'Dizi') : record['isChannel'] == true ? appText('قناة', 'Channel', 'Kanal') : appText('فيلم', 'Movie', 'Film'),
-              style: TextStyle(color: gold)),
-            trailing: IconButton(icon: Icon(Icons.favorite, color: gold), tooltip: 'إزالة من المفضلة',
+              style: TextStyle(color: favoritesPrimary)),
+            trailing: IconButton(icon: Icon(Icons.favorite, color: favoritesPrimary), tooltip: 'إزالة من المفضلة',
               onPressed: () async => ShamFlixLocalStore.removeFavorite(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(
               item: item, isSeries: record['isSeries'] == true, isChannel: record['isChannel'] == true))),
@@ -2918,34 +2925,41 @@ class WatchHistoryPage extends StatefulWidget {
   State<WatchHistoryPage> createState() => _WatchHistoryPageState();
 }
 class _WatchHistoryPageState extends State<WatchHistoryPage> {
+  Color get historyBackground => AppTheme.sectionColor('history', 'background');
+  Color get historyPrimary => AppTheme.sectionColor('history', 'primary');
+  Color get historyPanel => AppTheme.sectionColor('history', 'historyPanel');
+  Color get historyText => AppTheme.sectionColor('history', 'text');
+  Color get historySecondaryText => AppTheme.sectionColor('history', 'secondaryText');
+  void _onHistoryThemeChanged() { if (mounted) setState(() {}); }
+
   late Future<List<Map<String, dynamic>>> history;
   @override
-  void initState() { super.initState(); history = ShamFlixLocalStore.getHistory(); localProfileRefreshNotifier.addListener(reload); }
+  void initState() { super.initState(); AppTheme.revision.addListener(_onHistoryThemeChanged); history = ShamFlixLocalStore.getHistory(); localProfileRefreshNotifier.addListener(reload); }
   void reload() { if (mounted) setState(() => history = ShamFlixLocalStore.getHistory()); }
   @override
-  void dispose() { localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
+  void dispose() { AppTheme.revision.removeListener(_onHistoryThemeChanged); localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => Directionality(
     textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(backgroundColor: bg, title: Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
-        actions: [IconButton(tooltip: 'مسح السجل', icon: Icon(Icons.delete_sweep_outlined, color: gold),
+      backgroundColor: historyBackground,
+      appBar: AppBar(backgroundColor: historyBackground, title: Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
+        actions: [IconButton(tooltip: 'مسح السجل', icon: Icon(Icons.delete_sweep_outlined, color: historyPrimary),
           onPressed: () async => ShamFlixLocalStore.clearHistory())]),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: gold));
+        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: historyPrimary));
         final items = snapshot.data ?? [];
-        if (items.isEmpty) return Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: Colors.white70)));
+        if (items.isEmpty) return Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: historySecondaryText)));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index]; final poster = valueOf(record['poster_url']);
-          return Card(color: panel, child: ListTile(
-            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.play_circle, color: gold) :
+          return Card(color: historyPanel, child: ListTile(
+            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.play_circle, color: historyPrimary) :
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Icon(Icons.play_circle, color: gold)))),
-            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: Colors.white)),
-            subtitle: Text('${appText('آخر مشاهدة:', 'Last watched:', 'Son izleme:')} ${formatWatchPosition(record['position'])}', style: TextStyle(color: Colors.white70)),
-            trailing: IconButton(icon: Icon(Icons.close, color: Colors.white70),
+                errorBuilder: (_, __, ___) => Icon(Icons.play_circle, color: historyPrimary)))),
+            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: historyText)),
+            subtitle: Text('${appText('آخر مشاهدة:', 'Last watched:', 'Son izleme:')} ${formatWatchPosition(record['position'])}', style: TextStyle(color: historySecondaryText)),
+            trailing: IconButton(icon: Icon(Icons.close, color: historySecondaryText),
               onPressed: () async => ShamFlixLocalStore.removeHistory(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => openWatchRecord(context, record),
           ));
