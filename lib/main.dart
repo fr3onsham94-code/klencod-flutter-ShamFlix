@@ -26,6 +26,7 @@ import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
 import 'shamflix_presence_service.dart';
 import 'stream_source_detector.dart';
+import 'shamflix_background_import_service.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -55,6 +56,11 @@ Future<void> main() async {
   PaintingBinding.instance.imageCache.maximumSize = 300;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
   MediaKit.ensureInitialized();
+  try {
+    await ShamFlixBackgroundImportService.initialize();
+  } catch (_) {
+    // يبقى التطبيق قابلاً للاستخدام حتى إذا تعذرت تهيئة مهام الخلفية.
+  }
 
   // لا نمنع فتح التطبيق إذا تعذر تهيئة خدمة السحابة؛ تبقى البيانات المحلية متاحة.
   try {
