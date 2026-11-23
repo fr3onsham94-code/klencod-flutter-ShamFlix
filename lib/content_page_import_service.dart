@@ -216,16 +216,11 @@ class ContentPageImportService {
           episodeNumberPattern.firstMatch(linkTitle);
       final resolvedEpisodeNumber = int.tryParse(pageNumberMatch?.group(1) ?? '') ??
           int.parse(entry.value['number']!);
-      final descriptivePageTitle = episodePageTitle.isNotEmpty &&
-              !RegExp(r'^\d+$').hasMatch(episodePageTitle)
-          ? episodePageTitle
-          : '';
       final resolvedEpisodeTitle = 'الحلقة $resolvedEpisodeNumber';
       final watchUrl = _findPublicWatchUrl(episodeHtml, episodeUri);
       final servers = <Map<String, dynamic>>[];
       if (watchUrl != null) {
         final watchUri = _validatedUri(watchUrl);
-        // Keep the public watch page as a fallback if reading its HTML fails.
         try {
           final watchHtml = await _fetchPublicHtml(watchUri);
           servers.addAll(_extractStreamSources(watchHtml, watchUri));
