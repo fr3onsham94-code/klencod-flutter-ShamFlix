@@ -1210,6 +1210,7 @@ class _HomePageState extends State<HomePage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
             child: Row(
+              textDirection: TextDirection.ltr,
               children: [
                 Text(
                   'SHAM',
@@ -1363,6 +1364,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
 
   bool loading = true;
   bool sidebarOpen = false;
+  bool swipeSidebarEnabled = true;
   String? error;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -1376,6 +1378,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   double packageItemHeight = 38;
   List<Map<String, dynamic>> packages = [];
   final Map<String, List<Map<String, dynamic>>> packageContents = {};
+  List<Map<String, dynamic>> allCatalogItems = [];
 
   String get tableName => widget.contentType == 'movie' ? 'movies' : 'series';
 
@@ -1406,6 +1409,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
       sectionFontSize = (prefs.getDouble('shamflix_catalog_section_font') ?? 12).clamp(10, 16).toDouble();
       packageIconSize = (prefs.getDouble('shamflix_catalog_package_icon') ?? 15).clamp(12, 22).toDouble();
       packageItemHeight = (prefs.getDouble('shamflix_catalog_package_height') ?? 38).clamp(30, 60).toDouble();
+      swipeSidebarEnabled = prefs.getBool('shamflix_swipe_packages_sidebar') ?? true;
     });
   }
 
@@ -1450,6 +1454,12 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
 
       final loadedPackages =
           rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      final allRows = await AuthService.client
+          .from(tableName)
+          .select()
+          .eq('is_published', true)
+          .order('created_at', ascending: false);
+      allCatalogItems = allRows.map((row) => Map<String, dynamic>.from(row)).toList();
       packageContents.clear();
 
       await Future.wait(loadedPackages.map((package) async {
@@ -1498,8 +1508,10 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
     }).toList();
   }
 
-  List<Map<String, dynamic>> get selectedItems =>
-      selectedPackageId == null ? [] : _filterCatalogItems(packageContents[selectedPackageId!] ?? []);
+  List<Map<String, dynamic>> get selectedItems {
+    if (_searchQuery.trim().isNotEmpty) return _filterCatalogItems(allCatalogItems);
+    return selectedPackageId == null ? [] : _filterCatalogItems(packageContents[selectedPackageId!] ?? []);
+  }
 
   void _openPackage(String id) {
     setState(() {
@@ -1886,7 +1898,16 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             clipBehavior: Clip.hardEdge,
                             children: [
                               Positioned.fill(
-                                child: _packageDetails(),
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onHorizontalDragEnd: (details) {
+                                    if (!swipeSidebarEnabled) return;
+                                    final velocity = details.primaryVelocity ?? 0;
+                                    if (velocity > 250 && !sidebarOpen) setState(() => sidebarOpen = true);
+                                    if (velocity < -250 && sidebarOpen) setState(() => sidebarOpen = false);
+                                  },
+                                  child: _packageDetails(),
+                                ),
                               ),
                               if (sidebarOpen)
                                 Positioned.fill(
@@ -2337,6 +2358,7 @@ class AppSettingsPage extends StatefulWidget {
 
 class _AppSettingsPageState extends State<AppSettingsPage> {
   bool loading = true, wifiOnly = false, forceLandscape = false, busy = false;
+  bool swipeSidebarEnabled = true;
   String language = 'ar';
   double sidebarWidth = 110;
   double sidebarButtonSize = 42;
@@ -2361,8 +2383,16 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       sectionFontSize = (prefs.getDouble('shamflix_catalog_section_font') ?? 12).clamp(10, 16).toDouble();
       packageIconSize = (prefs.getDouble('shamflix_catalog_package_icon') ?? 15).clamp(12, 22).toDouble();
       packageItemHeight = (prefs.getDouble('shamflix_catalog_package_height') ?? 38).clamp(30, 60).toDouble();
+      swipeSidebarEnabled = prefs.getBool('shamflix_swipe_packages_sidebar') ?? true;
       loading = false;
     });
+  }
+
+  Future<void> _setSwipeSidebar(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('shamflix_swipe_packages_sidebar', value);
+    if (mounted) setState(() => swipeSidebarEnabled = value);
+    appSettingsRefreshNotifier.value++;
   }
 
   Future<void> _saveSidebarSetting(String key, double value) async {
@@ -2640,6 +2670,17 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
                   onChanged: _setLanguage,
                 ),
               ]),
+            ),
+          ),
+          Card(
+            color: panel,
+            child: SwitchListTile(
+              value: swipeSidebarEnabled,
+              activeColor: gold,
+              secondary: Icon(Icons.swipe, color: gold),
+              title: Text(appText('فتح وإغلاق قائمة الباقات بالسحب', 'Swipe to open/close package menu', 'Paket menüsünü kaydırarak aç/kapat'), style: TextStyle(color: Colors.white)),
+              subtitle: Text(appText('اسحب يميناً أو يساراً لإظهار القائمة الجانبية أو إخفائها في الأفلام والمسلسلات والبث المباشر', 'Swipe horizontally to show or hide the package sidebar in Movies, Series and Live TV', 'Film, Dizi ve Canlı TV sayfalarında paket kenar çubuğunu yatay kaydırarak açıp kapatın'), style: TextStyle(color: Colors.white70, fontSize: 12)),
+              onChanged: _setSwipeSidebar,
             ),
           ),
           Card(
@@ -3620,12 +3661,15 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   String? error;
   List<Map<String, dynamic>> packages = [];
   List<Map<String, dynamic>> channels = [];
+  List<Map<String, dynamic>> allChannels = [];
+  final Map<String, int> packageChannelCounts = {};
   String? selectedPackageId;
   int gridColumns = 5;
   bool starting = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool sidebarOpen=false;
+  bool swipeSidebarEnabled = true;
   double sidebarWidth=110,sidebarButtonSize=42,packageFontSize=11,sectionFontSize=12,packageIconSize=15,packageItemHeight=38;
 
   @override
@@ -3660,6 +3704,14 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       packageIconSize = (prefs.getDouble('shamflix_catalog_package_icon') ?? 15).clamp(12, 22).toDouble();
       packageItemHeight = (prefs.getDouble('shamflix_catalog_package_height') ?? 38).clamp(30, 60).toDouble();
     });
+  }
+
+  String _livePackageLabel(Map<String, dynamic> package) {
+    final rawName = package['name']?.toString() ?? 'باقة';
+    final cleanName = rawName.replaceAll(RegExp(r'قنوات\\s*تلقائية\\s*[-:|]?\\s*', caseSensitive: false), '').trim();
+    final name = cleanName.isEmpty ? rawName : cleanName;
+    final count = packageChannelCounts[package['id'].toString()] ?? 0;
+    return '*$name* $count';
   }
 
   Widget _liveFloatingMenu() {
@@ -3698,7 +3750,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                           Icon(Icons.live_tv, color: Colors.white, size: packageIconSize),
                           const SizedBox(width: 6),
                           Expanded(child: Text(
-                            package['name']?.toString() ?? 'باقة',
+                            _livePackageLabel(package),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: Colors.white, fontSize: packageFontSize),
@@ -3739,6 +3791,14 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
           .eq('content_type', 'channel')
           .order('sort_order');
       packages = packageRows.map((row) => Map<String, dynamic>.from(row)).toList();
+      packageChannelCounts.clear();
+      final allPackageLinks = await AuthService.client.from('content_package_items')
+          .select('package_id,content_id')
+          .eq('content_type', 'channel');
+      for (final link in allPackageLinks) {
+        final id = link['package_id']?.toString() ?? '';
+        if (id.isNotEmpty) packageChannelCounts[id] = (packageChannelCounts[id] ?? 0) + 1;
+      }
       selectedPackageId = packages.isEmpty ? null : packages.first['id'].toString();
       await _loadChannels();
     } catch (e) {
@@ -3748,8 +3808,11 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   }
 
   Future<void> _loadChannels() async {
+    final allRows = await AuthService.client.from('channels')
+        .select().eq('is_published', true).order('name');
+    allChannels = allRows.map((row) => Map<String, dynamic>.from(row)).toList();
     if (selectedPackageId == null) {
-      channels = await SupabaseService.getChannels();
+      channels = allChannels;
       return;
     }
     final links = await AuthService.client
@@ -3771,8 +3834,9 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
 
   List<Map<String, dynamic>> get _filteredChannels {
     final q = _searchQuery.trim().toLowerCase();
-    if (q.isEmpty) return channels;
-    return channels.where((channel) => [channel['name'], channel['name_en'], channel['group_title'], channel['country']]
+    final source = q.isEmpty ? channels : allChannels;
+    if (q.isEmpty) return source;
+    return source.where((channel) => [channel['name'], channel['name_en'], channel['group_title'], channel['country']]
         .map((v) => v?.toString() ?? '').join(' ').toLowerCase().contains(q)).toList();
   }
 
@@ -3992,7 +4056,15 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                 clipBehavior: Clip.hardEdge,
                 children: [
                   Positioned.fill(
-                    child: Row(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragEnd: (details) {
+                        if (!swipeSidebarEnabled) return;
+                        final velocity = details.primaryVelocity ?? 0;
+                        if (velocity > 250 && !sidebarOpen) setState(() => sidebarOpen = true);
+                        if (velocity < -250 && sidebarOpen) setState(() => sidebarOpen = false);
+                      },
+                      child: Row(
                       textDirection: TextDirection.ltr,
                       children: [
                         Expanded(
@@ -4006,7 +4078,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                     alignment: Alignment.centerRight,
                                     child: Text(
                                       packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
-                                        orElse: () => <String, dynamic>{'name': ''})['name']?.toString() ?? '',
+                                        orElse: () => <String, dynamic>{'name': ''})['name']?.toString().replaceAll(RegExp(r'قنوات\\s*تلقائية\\s*[-:|]?\\s*', caseSensitive: false), '').trim() ?? '',
                                       style: TextStyle(color: liveText, fontSize: 14, fontWeight: FontWeight.bold),
                                     ),
                                   ),
@@ -4040,6 +4112,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                           ),
                         ),
                       ],
+                    ),
                     ),
                   ),
                   if (sidebarOpen)
