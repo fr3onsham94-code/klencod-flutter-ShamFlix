@@ -170,6 +170,15 @@ class _ContentImportPageState extends State<ContentImportPage> {
     return host == 'akwam.ss' || host.endsWith('.akwam.ss');
   }
 
+  bool _isAkwamPlaybackPage(dynamic value) {
+    final raw = value?.toString().trim() ?? '';
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !_isAkwamPage(raw)) return false;
+    // نسمح بملفات الوسائط المباشرة فقط، ونرفض صفحات الموقع مثل /watch و/episode.
+    return !RegExp(r'\.(m3u8|mp4|m4v|mov|webm|avi|mpd)(?:$)', caseSensitive: false)
+        .hasMatch(uri.path);
+  }
+
   // Import visible Akwam episode pages and their public playback-page links.
   // Existing episodes/servers are updated or deduplicated, so rerunning a
   // category import can also backfill episodes for series imported earlier.
@@ -340,15 +349,14 @@ class _ContentImportPageState extends State<ContentImportPage> {
             .whereType<Map>()
             .map((server) => Map<String, dynamic>.from(server))
             .where((server) =>
-                (server['url']?.toString() ?? '').trim().isNotEmpty)
+                (server['url']?.toString() ?? '').trim().isNotEmpty &&
+                !_isAkwamPlaybackPage(server['url']))
             .toList();
         final firstUrl = servers.isEmpty ? '' : servers.first['url'].toString();
         final existing = existingByNumber[number];
         String episodeId;
         final episodeData = <String, dynamic>{
-          'title': (episode['title']?.toString().trim().isNotEmpty == true)
-              ? episode['title'].toString().trim()
-              : 'الحلقة $number',
+          'title': 'الحلقة $number',
           'stream_url': firstUrl,
           'is_published': publish,
         };
