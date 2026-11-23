@@ -111,14 +111,14 @@ class ShamFlixBackgroundImportService {
 
   static Future<bool> _saveIfCurrent(Map<String, dynamic> job, String expectedJobId) async {
     final latest = await currentJob();
-    if (latest == null || latest['id']?.toString() != expectedJobId || latest['status'] == 'cancelled') return false;
+    if (latest == null || latest['id']?.toString() != expectedJobId || !['queued', 'running'].contains(latest['status'])) return false;
     await _save(job);
     return true;
   }
 
   static Future<void> _status(String value, {String? error, String? message, String? expectedJobId}) async {
     final job = await currentJob();
-    if (job == null || (expectedJobId != null && job['id']?.toString() != expectedJobId)) return;
+    if (job == null || (expectedJobId != null && job['id']?.toString() != expectedJobId) || (job['status'] == 'cancelled' && value != 'cancelled')) return;
     job['status'] = value;
     if (error != null) job['error'] = error;
     if (message != null) job['message'] = message;
