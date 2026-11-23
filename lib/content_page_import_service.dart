@@ -381,10 +381,11 @@ class ContentPageImportService {
       }
       final url = uri.toString();
       final direct = StreamSourceDetector.isDirectMediaUrl(url);
+      if (!direct) return;
       found[url] = {
         'url': url,
         'name': StreamSourceDetector.sourceName(url),
-        'kind': direct ? 'media' : kind,
+        'kind': 'media',
       };
     }
 
