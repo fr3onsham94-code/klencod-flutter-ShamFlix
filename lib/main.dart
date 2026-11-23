@@ -2539,7 +2539,6 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(backgroundColor: settingsDialogBackground,
-        backgroundColor: panel,
         title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: settingsDialogTitle)),
         content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: settingsDescription)),
         actions: [
@@ -2650,7 +2649,6 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(backgroundColor: settingsDialogBackground,
-          backgroundColor: panel,
           title: Text('يتوفر تحديث جديد', style: TextStyle(color: settingsDialogTitle)),
           content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2712,8 +2710,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             max: max,
             divisions: (max - min).round(),
             activeColor: settingsSwitchActive,
-            inactiveThumbColor: settingsSwitchInactive,
-            inactiveColor: Colors.white24,
+            inactiveColor: settingsSwitchInactive,
             onChanged: onChanged,
           ),
         ],
