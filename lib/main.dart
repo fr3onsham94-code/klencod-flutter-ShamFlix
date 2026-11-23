@@ -26,7 +26,6 @@ import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
 import 'shamflix_presence_service.dart';
 import 'stream_source_detector.dart';
-import 'shamflix_background_import_service.dart';
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -56,11 +55,6 @@ Future<void> main() async {
   PaintingBinding.instance.imageCache.maximumSize = 300;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20;
   MediaKit.ensureInitialized();
-  try {
-    await ShamFlixBackgroundImportService.initialize();
-  } catch (_) {
-    // يبقى التطبيق قابلاً للاستخدام حتى إذا تعذرت تهيئة مهام الخلفية.
-  }
 
   // لا نمنع فتح التطبيق إذا تعذر تهيئة خدمة السحابة؛ تبقى البيانات المحلية متاحة.
   try {
@@ -573,17 +567,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  Color get homeBackground => AppTheme.sectionColor('home', 'background');
-  Color get homePrimary => AppTheme.sectionColor('home', 'primary');
-  Color get homePanel => AppTheme.sectionColor('home', 'panel');
-  Color get homeText => AppTheme.sectionColor('home', 'text');
-  Color get homeSecondaryText => AppTheme.sectionColor('home', 'secondaryText');
-  Color get homeButton => AppTheme.sectionColor('home', 'button');
-  Color get homeBorder => AppTheme.sectionColor('home', 'border');
-  Color get homeIcon => AppTheme.sectionColor('home', 'icon');
-  Color get homeDescription => AppTheme.sectionColor('home', 'description');
-  Color get homeProgress => AppTheme.sectionColor('home', 'progress');
-  Color get homeSelected => AppTheme.sectionColor('home', 'selected');
   int selectedTab = 0;
   int selectedCategory = 0;
 
@@ -612,7 +595,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    AppTheme.revision.addListener(_onHomeThemeChanged);
     loadData();
     recentHistory = ShamFlixLocalStore.getHistory();
     loadCategoryBadgeSetting();
@@ -658,13 +640,8 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  void _onHomeThemeChanged() {
-    if (mounted) setState(() {});
-  }
-
   @override
   void dispose() {
-    AppTheme.revision.removeListener(_onHomeThemeChanged);
     authRefreshNotifier.removeListener(onAuthChanged);
     localProfileRefreshNotifier.removeListener(onProfileChanged);
     channelRefreshNotifier.removeListener(onChannelsChanged);
@@ -742,17 +719,17 @@ class _HomePageState extends State<HomePage> {
     }).toList();
   }
 
-  Widget sectionTitle(String title, {Color? color}) {
+  Widget sectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
       child: Row(
         children: [
-          Container(width: 4, height: 22, color: homePrimary),
+          Container(width: 4, height: 22, color: gold),
           const SizedBox(width: 9),
           Text(
             title,
             style: TextStyle(
-              color: color ?? homeText,
+              color: AppTheme.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -766,9 +743,9 @@ class _HomePageState extends State<HomePage> {
     if (url == null || url.isEmpty) {
       return Container(
         height: height,
-        color: homePanel,
+        color: panel,
         child: Center(
-          child: Icon(Icons.movie, color: homeIcon, size: 48),
+          child: Icon(Icons.movie, color: gold, size: 48),
         ),
       );
     }
@@ -781,9 +758,9 @@ class _HomePageState extends State<HomePage> {
       errorBuilder: (_, __, ___) {
         return Container(
           height: height,
-          color: homePanel,
+          color: panel,
           child: Center(
-            child: Icon(Icons.movie, color: homeIcon, size: 48),
+            child: Icon(Icons.movie, color: gold, size: 48),
           ),
         );
       },
@@ -842,13 +819,13 @@ class _HomePageState extends State<HomePage> {
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: homePrimary,
+                            color: gold,
                             borderRadius: BorderRadius.circular(7),
                           ),
                           child: Text(
                             category,
                             style: TextStyle(
-                              color: homeText,
+                              color: AppTheme.text,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
@@ -865,14 +842,14 @@ class _HomePageState extends State<HomePage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: homeText,
+                color: AppTheme.text,
                 fontWeight: FontWeight.bold,
               ),
             ),
             Text(
               valueOf(item['release_year'], 'ShamFlix'),
               style: TextStyle(
-                color: homeSecondaryText,
+                color: AppTheme.secondaryText,
                 fontSize: 11,
               ),
             ),
@@ -886,12 +863,11 @@ class _HomePageState extends State<HomePage> {
     String title,
     Future<List<Map<String, dynamic>>> future, {
     required bool isSeries,
-    Color? headingColor,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        sectionTitle(title, color: headingColor),
+        sectionTitle(title),
         SizedBox(
           height: 188,
           child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -899,7 +875,7 @@ class _HomePageState extends State<HomePage> {
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Center(
-                  child: CircularProgressIndicator(color: homeProgress),
+                  child: CircularProgressIndicator(color: gold),
                 );
               }
 
@@ -907,7 +883,7 @@ class _HomePageState extends State<HomePage> {
                 return Center(
                   child: Text(
                     'تعذر تحميل البيانات',
-                    style: TextStyle(color: homeDescription),
+                    style: TextStyle(color: AppTheme.secondaryText),
                   ),
                 );
               }
@@ -924,7 +900,7 @@ class _HomePageState extends State<HomePage> {
                 return Center(
                   child: Text(
                     'لا يوجد محتوى منشور حالياً',
-                    style: TextStyle(color: homeDescription),
+                    style: TextStyle(color: AppTheme.secondaryText),
                   ),
                 );
               }
@@ -967,9 +943,9 @@ class _HomePageState extends State<HomePage> {
             SizedBox(
               height: 112,
               child: snapshot.connectionState == ConnectionState.waiting
-                  ? Center(child: CircularProgressIndicator(color: homeProgress))
+                  ? Center(child: CircularProgressIndicator(color: gold))
                   : records.isEmpty
-                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: homeDescription)))
+                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: AppTheme.secondaryText)))
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
                           reverse: true,
@@ -987,22 +963,22 @@ class _HomePageState extends State<HomePage> {
                                 width: 150,
                                 margin: const EdgeInsets.only(left: 10),
                                 padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(color: homePanel, borderRadius: BorderRadius.circular(12)),
+                                decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(12)),
                                 child: Row(children: [
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(30),
                                     child: SizedBox(
                                       width: 48, height: 48,
                                       child: logo.isEmpty
-                                          ? ColoredBox(color: homeBackground, child: Icon(Icons.live_tv, color: homeIcon))
+                                          ? ColoredBox(color: bg, child: Icon(Icons.live_tv, color: gold))
                                           : Image.network(logo, fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => ColoredBox(color: homeBackground, child: Icon(Icons.live_tv, color: homeIcon))),
+                                              errorBuilder: (_, __, ___) => ColoredBox(color: bg, child: Icon(Icons.live_tv, color: gold))),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(child: Text(valueOf(record['title'], appText('قناة', 'Channel', 'Kanal')), maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: homeText, fontWeight: FontWeight.bold))),
+                                    style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold))),
                                 ]),
                               ),
                             );
@@ -1034,13 +1010,13 @@ class _HomePageState extends State<HomePage> {
                 child: Container(width: 145, margin: const EdgeInsets.only(left: 12),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     ClipRRect(borderRadius: BorderRadius.circular(10), child: SizedBox(width: 145, height: 145,
-                      child: poster.isEmpty ? Container(color: homePanel, child: Icon(Icons.play_circle, color: homeIcon, size: 42)) :
+                      child: poster.isEmpty ? Container(color: panel, child: Icon(Icons.play_circle, color: gold, size: 42)) :
                         Image.network(poster, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
-                          Container(color: homePanel, child: Icon(Icons.play_circle, color: homeIcon, size: 42))))),
+                          Container(color: panel, child: Icon(Icons.play_circle, color: gold, size: 42))))),
                     const SizedBox(height: 7),
                     Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: homeText, fontWeight: FontWeight.bold)),
-                    Text('متابعة من ${formatWatchPosition(record['position'])}', style: TextStyle(color: homePrimary, fontSize: 11)),
+                      style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+                    Text('متابعة من ${formatWatchPosition(record['position'])}', style: TextStyle(color: gold, fontSize: 11)),
                   ]),
                 ),
               );
@@ -1060,19 +1036,19 @@ class _HomePageState extends State<HomePage> {
           return Container(
             height: 365,
             margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-            decoration: BoxDecoration(color: homePanel, borderRadius: BorderRadius.circular(16)),
-            child: Center(child: CircularProgressIndicator(color: homeProgress)),
+            decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16)),
+            child: Center(child: CircularProgressIndicator(color: gold)),
           );
         }
         if (items.isEmpty) {
           return Container(
             height: 365,
             margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-            decoration: BoxDecoration(color: homePanel, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(16)),
             child: Center(
               child: Text(
                 appText('لا يوجد محتوى مضاف حديثاً', 'No recent additions', 'Yeni eklenen içerik yok'),
-                style: TextStyle(color: homeDescription),
+                style: TextStyle(color: AppTheme.secondaryText),
               ),
             ),
           );
@@ -1133,12 +1109,12 @@ class _HomePageState extends State<HomePage> {
                         right: 14,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(color: homePrimary, borderRadius: BorderRadius.circular(5)),
+                          decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(5)),
                           child: Text(
                             isSeries
                                 ? appText('مسلسل جديد', 'NEW SERIES', 'YENİ DİZİ')
                                 : appText('فيلم جديد', 'NEW MOVIE', 'YENİ FİLM'),
-                            style: TextStyle(color: homeText, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                            style: TextStyle(color: AppTheme.text, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
                           ),
                         ),
                       ),
@@ -1158,7 +1134,7 @@ class _HomePageState extends State<HomePage> {
                               title,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(color: homeText, fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
+                              style: TextStyle(color: AppTheme.text, fontSize: 27, fontWeight: FontWeight.w900, height: 1.1),
                             ),
                             const SizedBox(height: 14),
                             Row(
@@ -1166,8 +1142,8 @@ class _HomePageState extends State<HomePage> {
                                 ElevatedButton.icon(
                                   onPressed: () => openDetails(featured, isSeries: isSeries),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: homePrimary,
-                                    foregroundColor: homeText,
+                                    backgroundColor: gold,
+                                    foregroundColor: AppTheme.text,
                                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                                   ),
@@ -1178,8 +1154,8 @@ class _HomePageState extends State<HomePage> {
                                 OutlinedButton.icon(
                                   onPressed: () => openDetails(featured, isSeries: isSeries),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: homeText,
-                                    side: BorderSide(color: homeSecondaryText),
+                                    foregroundColor: AppTheme.text,
+                                    side: BorderSide(color: AppTheme.secondaryText),
                                     padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                                   ),
@@ -1210,7 +1186,7 @@ class _HomePageState extends State<HomePage> {
                         height: 6,
                         margin: const EdgeInsets.symmetric(horizontal: 3),
                         decoration: BoxDecoration(
-                          color: active ? homePrimary : Colors.white54,
+                          color: active ? gold : Colors.white54,
                           borderRadius: BorderRadius.circular(6),
                         ),
                       );
@@ -1226,8 +1202,8 @@ class _HomePageState extends State<HomePage> {
 
   Widget homeContent() {
     return RefreshIndicator(
-      color: homePrimary,
-      backgroundColor: homePanel,
+      color: gold,
+      backgroundColor: panel,
       onRefresh: refreshData,
       child: ListView(
         children: [
@@ -1238,41 +1214,31 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(
                   'SHAM',
-                  style: TextStyle(color: homeText, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  style: TextStyle(color: AppTheme.text, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 Text(
                   'FLIX',
-                  style: TextStyle(color: homePrimary, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  style: TextStyle(color: gold, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1),
                 ),
                 const Spacer(),
                 IconButton(
                   onPressed: () {
                     showSearch(context: context, delegate: ShamFlixSearch());
                   },
-                  icon: Icon(Icons.search, color: homeText),
+                  icon: Icon(Icons.search, color: AppTheme.text),
                 ),
                 IconButton(
                   tooltip: appText('الإشعارات', 'Notifications', 'Bildirimler'),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixNotificationsPage())),
-                  icon: Icon(Icons.notifications_none, color: homeText),
+                  icon: Icon(Icons.notifications_none, color: AppTheme.text),
                 ),
               ],
             ),
           ),
           featuredHero(),
           continueWatchingSection(),
-          mediaSection(
-            appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'),
-            movies,
-            isSeries: false,
-            headingColor: AppTheme.sectionColor('home', 'latestMoviesText'),
-          ),
-          mediaSection(
-            appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'),
-            series,
-            isSeries: true,
-            headingColor: AppTheme.sectionColor('home', 'latestSeriesText'),
-          ),
+          mediaSection(appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'), movies, isSeries: false),
+          mediaSection(appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'), series, isSeries: true),
           mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), anime, isSeries: false),
           recentChannelsSection(),
           const SizedBox(height: 30),
@@ -1314,7 +1280,6 @@ class _HomePageState extends State<HomePage> {
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        backgroundColor: homeBackground,
         body: SafeArea(
           child: IndexedStack(
             index: selectedTab,
@@ -1322,13 +1287,13 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         bottomNavigationBar: NavigationBar(
-          backgroundColor: homeBackground,
-          indicatorColor: homePrimary.withOpacity(0.20),
+          backgroundColor: const Color(0xFF151515),
+          indicatorColor: const Color(0x33E50914),
           height: 62,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
             return TextStyle(
-              color: states.contains(WidgetState.selected) ? homeText : homeSecondaryText,
+              color: states.contains(WidgetState.selected) ? AppTheme.text : AppTheme.secondaryText,
               fontSize: states.contains(WidgetState.selected) ? 10 : 9,
               fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.normal,
             );
@@ -1341,25 +1306,25 @@ class _HomePageState extends State<HomePage> {
           },
           destinations: [
             NavigationDestination(
-              icon: Icon(Icons.home_outlined, color: homeSecondaryText, size: 19),
-              selectedIcon: Icon(Icons.home, color: homeSelected, size: 19),
+              icon: Icon(Icons.home_outlined, color: AppTheme.secondaryText, size: 19),
+              selectedIcon: Icon(Icons.home, color: gold, size: 19),
               label: appText('الرئيسية', 'Home', 'Ana Sayfa'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.movie_outlined, color: homeSecondaryText, size: 19),
+              icon: Icon(Icons.movie_outlined, color: AppTheme.secondaryText, size: 19),
               label: appText('الأفلام', 'Movies', 'Filmler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.video_library_outlined, color: homeSecondaryText, size: 19),
+              icon: Icon(Icons.video_library_outlined, color: AppTheme.secondaryText, size: 19),
               label: appText('المسلسلات', 'Series', 'Diziler'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.live_tv_outlined, color: homeSecondaryText, size: 19),
+              icon: Icon(Icons.live_tv_outlined, color: AppTheme.secondaryText, size: 19),
               label: appText('مباشر', 'Live TV', 'Canlı TV'),
             ),
             NavigationDestination(
-              icon: Icon(Icons.person_outline, color: homeSecondaryText, size: 19),
-              selectedIcon: Icon(Icons.person, color: homeSelected, size: 19),
+              icon: Icon(Icons.person_outline, color: AppTheme.secondaryText, size: 19),
+              selectedIcon: Icon(Icons.person, color: gold, size: 19),
               label: appText('حسابي', 'My Account', 'Hesabım'),
             ),
           ],
@@ -1386,7 +1351,7 @@ class PackageCatalogPage extends StatefulWidget {
 }
 
 class _PackageCatalogPageState extends State<PackageCatalogPage> {
-  String get themeSection => widget.contentType == 'movie' ? 'movies' : 'series';
+  String get themeSection => 'live';
   Color get sectionBackground => AppTheme.sectionColor(themeSection, 'background');
   Color get sectionPrimary => AppTheme.sectionColor(themeSection, 'primary');
   Color get sectionPanel => AppTheme.sectionColor(themeSection, 'panel');
@@ -1396,11 +1361,6 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   Color get sectionBorder => AppTheme.sectionColor(themeSection, 'border');
   Color get sectionPackageBorder => AppTheme.sectionColor(themeSection, 'packageBorder');
   Color get sectionBadge => AppTheme.sectionColor(themeSection, 'badge');
-  Color get sectionIcon => AppTheme.sectionColor(themeSection, 'icon');
-  Color get sectionDescription => AppTheme.sectionColor(themeSection, 'description');
-  Color get sectionProgress => AppTheme.sectionColor(themeSection, 'progress');
-  Color get sectionDropdownBackground => AppTheme.sectionColor(themeSection, 'dropdownBackground');
-  Color get sectionDropdownText => AppTheme.sectionColor(themeSection, 'dropdownText');
 
   bool loading = true;
   bool sidebarOpen = false;
@@ -1571,14 +1531,14 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           child: url.isEmpty
               ? Container(
                   color: sectionPanel,
-                  child: Icon(Icons.movie, color: sectionIcon, size: 28),
+                  child: Icon(Icons.movie, color: sectionPrimary, size: 28),
                 )
               : Image.network(
                   url,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
                     color: sectionPanel,
-                    child: Icon(Icons.movie, color: sectionIcon, size: 28),
+                    child: Icon(Icons.movie, color: sectionPrimary, size: 28),
                   ),
                 ),
         ),
@@ -1612,7 +1572,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
               Text(
                 '${contents.length} ${appText('عنصر', 'items', 'içerik')}',
-                style: TextStyle(color: sectionDescription, fontSize: 10),
+                style: TextStyle(color: sectionSecondaryText, fontSize: 10),
               ),
               TextButton(
                 style: TextButton.styleFrom(foregroundColor: sectionButton),
@@ -1636,7 +1596,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 appText('لا يوجد محتوى في هذه الباقة حالياً',
                     'No content in this package yet',
                     'Bu pakette henüz içerik yok'),
-                style: TextStyle(color: sectionDescription, fontSize: 11),
+                style: TextStyle(color: sectionSecondaryText, fontSize: 11),
               ),
             )
           else
@@ -1804,7 +1764,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
               Text(
                 '${contents.length}',
-                style: TextStyle(color: sectionDescription, fontSize: 12),
+                style: TextStyle(color: sectionSecondaryText, fontSize: 12),
               ),
             ],
           ),
@@ -1816,7 +1776,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                     appText('لا يوجد محتوى في هذه الباقة حالياً',
                         'No content in this package yet',
                         'Bu pakette henüz içerik yok'),
-                    style: TextStyle(color: sectionDescription),
+                    style: TextStyle(color: sectionSecondaryText),
                   ),
                 )
               : GridView.builder(
@@ -1893,7 +1853,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 const Spacer(),
                 IconButton(
                   onPressed: _loadPackages,
-                  icon: Icon(Icons.refresh, color: sectionIcon),
+                  icon: Icon(Icons.refresh, color: sectionPrimary),
                 ),
               ],
             ),
@@ -1903,11 +1863,11 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
             child: TextField(
               controller: _searchController,
               textDirection: TextDirection.rtl,
-              style: TextStyle(color: sectionDropdownText),
+              style: TextStyle(color: sectionText),
               onChanged: (value) => setState(() => _searchQuery = value),
               decoration: InputDecoration(
                 hintText: widget.contentType == 'movie' ? appText('ابحث عن فيلم...', 'Search movies...', 'Film ara...') : appText('ابحث عن مسلسل...', 'Search series...', 'Dizi ara...'),
-                prefixIcon: Icon(Icons.search, color: sectionIcon),
+                prefixIcon: Icon(Icons.search, color: sectionPrimary),
                 suffixIcon: _searchQuery.isEmpty ? null : IconButton(onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); }, icon: Icon(Icons.close, color: sectionSecondaryText)),
                 filled: true, fillColor: sectionPanel,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -1917,7 +1877,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           Expanded(
             child: loading
                 ? Center(
-                    child: CircularProgressIndicator(color: sectionProgress),
+                    child: CircularProgressIndicator(color: sectionPrimary),
                   )
                 : error != null
                     ? Center(
@@ -1931,7 +1891,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             child: Text(
                               appText('لا توجد باقات حالياً',
                                   'No packages yet', 'Henüz paket yok'),
-                              style: TextStyle(color: sectionDescription),
+                              style: TextStyle(color: sectionSecondaryText),
                             ),
                           )
                         : Stack(
@@ -2015,15 +1975,6 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
-  Color get accountBackground => AppTheme.sectionColor('account', 'background');
-  Color get accountPrimary => AppTheme.sectionColor('account', 'primary');
-  Color get accountPanel => AppTheme.sectionColor('account', 'panel');
-  Color get accountText => AppTheme.sectionColor('account', 'text');
-  Color get accountSecondaryText => AppTheme.sectionColor('account', 'secondaryText');
-  Color get accountIcon => AppTheme.sectionColor('account', 'icon');
-  Color get accountDescription => AppTheme.sectionColor('account', 'description');
-  Color get accountProgress => AppTheme.sectionColor('account', 'progress');
-  Color get accountButton => AppTheme.sectionColor('account', 'button');
   bool loading = false;
   bool linkingGoogle = false;
   StreamSubscription<AuthState>? _accountAuthSubscription;
@@ -2031,7 +1982,6 @@ class _AccountPageState extends State<AccountPage> {
   @override
   void initState() {
     super.initState();
-    AppTheme.revision.addListener(_onAccountThemeChanged);
     authRefreshNotifier.addListener(onAuthChanged);
     _accountAuthSubscription =
         AuthService.client.auth.onAuthStateChange.listen((_) {
@@ -2039,13 +1989,8 @@ class _AccountPageState extends State<AccountPage> {
     });
   }
 
-  void _onAccountThemeChanged() {
-    if (mounted) setState(() {});
-  }
-
   @override
   void dispose() {
-    AppTheme.revision.removeListener(_onAccountThemeChanged);
     authRefreshNotifier.removeListener(onAuthChanged);
     _accountAuthSubscription?.cancel();
     super.dispose();
@@ -2162,23 +2107,23 @@ class _AccountPageState extends State<AccountPage> {
     VoidCallback? onTap,
   }) {
     return Card(
-      color: accountPanel,
+      color: panel,
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
-        leading: Icon(icon, color: accountIcon),
+        leading: Icon(icon, color: gold),
         title: Text(
           title,
-          style: TextStyle(color: accountText),
+          style: TextStyle(color: Colors.white),
         ),
         subtitle: subtitle == null
             ? null
             : Text(
                 subtitle,
-                style: TextStyle(color: accountDescription),
+                style: TextStyle(color: Colors.white70),
               ),
         trailing: Icon(
           Icons.chevron_left,
-          color: accountPrimary,
+          color: gold,
         ),
         onTap: onTap,
       ),
@@ -2189,23 +2134,23 @@ class _AccountPageState extends State<AccountPage> {
     final linked = isGoogleLinked;
 
     return Card(
-      color: accountPanel,
+      color: panel,
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
         leading: Icon(
           Icons.g_mobiledata,
-          color: accountPrimary,
+          color: gold,
           size: 32,
         ),
         title: Text(
           linked ? 'حساب Google مربوط' : 'ربط حساب Google',
-          style: TextStyle(color: accountText),
+          style: TextStyle(color: Colors.white),
         ),
         subtitle: Text(
           linked
               ? 'يمكنك تسجيل الدخول باستخدام Google'
               : 'اربط Gmail بحسابك الحالي دون إنشاء حساب جديد',
-          style: TextStyle(color: accountDescription),
+          style: TextStyle(color: Colors.white70),
         ),
         trailing: linked
             ? const Icon(
@@ -2217,13 +2162,13 @@ class _AccountPageState extends State<AccountPage> {
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                      color: accountPrimary,
+                      color: gold,
                       strokeWidth: 2,
                     ),
                   )
                 : Icon(
                     Icons.link,
-                    color: accountPrimary,
+                    color: gold,
                   ),
         onTap: linked || linkingGoogle
             ? null
@@ -2236,15 +2181,13 @@ class _AccountPageState extends State<AccountPage> {
   Widget build(BuildContext context) {
     final loggedIn = AuthService.isLoggedIn;
 
-    return Container(
-      color: accountBackground,
-      child: ListView(
-        padding: const EdgeInsets.all(18),
+    return ListView(
+      padding: const EdgeInsets.all(18),
       children: [
         const SizedBox(height: 25),
         Icon(
           Icons.account_circle,
-          color: accountPrimary,
+          color: gold,
           size: 85,
         ),
         const SizedBox(height: 12),
@@ -2252,7 +2195,7 @@ class _AccountPageState extends State<AccountPage> {
           child: Text(
             appText('حسابي', 'My Account', 'Hesabım'),
             style: TextStyle(
-              color: accountText,
+              color: Colors.white,
               fontSize: 25,
               fontWeight: FontWeight.bold,
             ),
@@ -2265,7 +2208,7 @@ class _AccountPageState extends State<AccountPage> {
             child: Text(
               appText('أهلاً بك في ShamFlix', 'Welcome to ShamFlix', 'ShamFlix\'e hoş geldiniz'),
               style: TextStyle(
-                color: accountSecondaryText,
+                color: Colors.white70,
                 fontSize: 16,
               ),
             ),
@@ -2275,8 +2218,8 @@ class _AccountPageState extends State<AccountPage> {
             height: 52,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor: accountButton,
-                foregroundColor: accountText,
+                backgroundColor: gold,
+                foregroundColor: Colors.white,
               ),
               onPressed: openLogin,
               icon: const Icon(Icons.login),
@@ -2299,14 +2242,14 @@ class _AccountPageState extends State<AccountPage> {
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPage()))),
         ] else ...[
           Card(
-            color: accountPanel,
+            color: panel,
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Column(
                 children: [
                   Icon(
                     Icons.account_circle,
-                    color: accountPrimary,
+                    color: gold,
                     size: 55,
                   ),
                   const SizedBox(height: 10),
@@ -2314,7 +2257,7 @@ class _AccountPageState extends State<AccountPage> {
                     AuthService.userEmail ?? 'مستخدم ShamFlix',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: accountText,
+                      color: Colors.white,
                       fontSize: 16,
                     ),
                   ),
@@ -2331,7 +2274,7 @@ class _AccountPageState extends State<AccountPage> {
                     child: Text(
                       AuthService.isAdmin ? appText('مدير', 'Admin', 'Yönetici') : appText('مستخدم', 'User', 'Kullanıcı'),
                       style: TextStyle(
-                        color: accountPrimary,
+                        color: gold,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -2388,15 +2331,15 @@ class _AccountPageState extends State<AccountPage> {
             child: OutlinedButton.icon(
               onPressed: loading ? null : logout,
               style: OutlinedButton.styleFrom(
-                foregroundColor: accountButton,
-                side: BorderSide(color: accountButton),
+                foregroundColor: gold,
+                side: BorderSide(color: gold),
               ),
               icon: loading
                   ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                        color: accountPrimary,
+                        color: gold,
                         strokeWidth: 2,
                       ),
                     )
@@ -2405,8 +2348,7 @@ class _AccountPageState extends State<AccountPage> {
             ),
           ),
         ],
-        ],
-      ),
+      ],
     );
   }
 }
@@ -2419,14 +2361,6 @@ class AppSettingsPage extends StatefulWidget {
 }
 
 class _AppSettingsPageState extends State<AppSettingsPage> {
-  Color get settingsIcon => AppTheme.sectionColor('settings', 'icon');
-  Color get settingsDescription => AppTheme.sectionColor('settings', 'description');
-  Color get settingsProgress => AppTheme.sectionColor('settings', 'progress');
-  Color get settingsSwitchActive => AppTheme.sectionColor('settings', 'switchActive');
-  Color get settingsSwitchInactive => AppTheme.sectionColor('settings', 'switchInactive');
-  Color get settingsDialogBackground => AppTheme.sectionColor('settings', 'dialogBackground');
-  Color get settingsDialogTitle => AppTheme.sectionColor('settings', 'dialogTitle');
-
   bool loading = true, wifiOnly = false, forceLandscape = false, busy = false;
   bool swipeSidebarEnabled = true;
   String language = 'ar';
@@ -2437,30 +2371,8 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   double packageIconSize = 15;
   double packageItemHeight = 38;
 
-  Color get settingsBackground => AppTheme.sectionColor('settings', 'background');
-  Color get settingsPrimary => AppTheme.sectionColor('settings', 'primary');
-  Color get settingsPanel => AppTheme.sectionColor('settings', 'panel');
-  Color get settingsText => AppTheme.sectionColor('settings', 'text');
-  Color get settingsSecondaryText => AppTheme.sectionColor('settings', 'secondaryText');
-  Color get settingsButton => AppTheme.sectionColor('settings', 'button');
-  Color get settingsBorder => AppTheme.sectionColor('settings', 'border');
-
   @override
-  void initState() {
-    super.initState();
-    AppTheme.revision.addListener(_onThemeChanged);
-    _load();
-  }
-
-  void _onThemeChanged() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    AppTheme.revision.removeListener(_onThemeChanged);
-    super.dispose();
-  }
+  void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -2538,9 +2450,10 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   Future<void> _clearHistory() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(backgroundColor: settingsDialogBackground,
-        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: settingsDialogTitle)),
-        content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: settingsDescription)),
+      builder: (context) => AlertDialog(
+        backgroundColor: panel,
+        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: gold)),
+        content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('مسح السجل', style: TextStyle(color: Colors.redAccent))),
@@ -2648,19 +2561,20 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       var installAfterDialog = false;
       await showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(backgroundColor: settingsDialogBackground,
-          title: Text('يتوفر تحديث جديد', style: TextStyle(color: settingsDialogTitle)),
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: panel,
+          title: Text('يتوفر تحديث جديد', style: TextStyle(color: gold)),
           content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('الإصدار الحالي: ${packageInfo.version}', style: TextStyle(color: settingsDescription)),
-              Text('الإصدار الجديد: $latest', style: TextStyle(color: settingsText, fontWeight: FontWeight.bold)),
+              Text('الإصدار الحالي: ${packageInfo.version}', style: TextStyle(color: Colors.white70)),
+              Text('الإصدار الجديد: $latest', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               if ((value['release_notes']?.toString() ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text('ما الجديد؟', style: TextStyle(color: settingsPrimary, fontWeight: FontWeight.bold)),
+                Text('ما الجديد؟', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 5),
-                Text(value['release_notes'].toString(), style: TextStyle(color: settingsDescription)),
+                Text(value['release_notes'].toString(), style: TextStyle(color: Colors.white70)),
               ],
             ],
           )),
@@ -2701,16 +2615,16 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Expanded(child: Text(title, style: TextStyle(color: settingsDescription, fontSize: 12))),
-            Text('${value.round()}$unit', style: TextStyle(color: settingsPrimary, fontWeight: FontWeight.bold)),
+            Expanded(child: Text(title, style: TextStyle(color: Colors.white70, fontSize: 12))),
+            Text('${value.round()}$unit', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
           ]),
           Slider(
             value: value.clamp(min, max).toDouble(),
             min: min,
             max: max,
             divisions: (max - min).round(),
-            activeColor: settingsSwitchActive,
-            inactiveColor: settingsSwitchInactive,
+            activeColor: gold,
+            inactiveColor: Colors.white24,
             onChanged: onChanged,
           ),
         ],
@@ -2719,39 +2633,39 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   }
 
   Widget _tile(IconData icon, String title, String subtitle, VoidCallback onTap) => Card(
-    color: settingsPanel,
+    color: panel,
     child: ListTile(
-      leading: Icon(icon, color: settingsIcon),
-      title: Text(title, style: TextStyle(color: settingsText, fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: TextStyle(color: settingsDescription, fontSize: 12)),
-      trailing: Icon(Icons.chevron_left, color: settingsIcon),
+      leading: Icon(icon, color: gold),
+      title: Text(title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: TextStyle(color: Colors.white70, fontSize: 12)),
+      trailing: Icon(Icons.chevron_left, color: gold),
       onTap: busy ? null : onTap,
     ),
   );
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return Scaffold(backgroundColor: settingsBackground, body: Center(child: CircularProgressIndicator(color: settingsProgress)));
+    if (loading) return Scaffold(backgroundColor: bg, body: Center(child: CircularProgressIndicator(color: gold)));
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        backgroundColor: settingsBackground,
-        appBar: AppBar(backgroundColor: settingsBackground, title: Text(appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'))),
+        backgroundColor: bg,
+        appBar: AppBar(backgroundColor: bg, title: Text(appText('إعدادات التطبيق', 'App Settings', 'Uygulama Ayarları'))),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           _tile(Icons.tune, appText('إعدادات ضبط المشغل', 'Player Settings', 'Oynatıcı Ayarları'), 'اختيار المشغل الداخلي أو VLC أو MX Player', () {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const ShamFlixPlayerSettingsPage()));
           }),
           Card(
-            color: settingsPanel,
+            color: panel,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(children: [
-                Icon(Icons.language, color: settingsIcon),
+                Icon(Icons.language, color: gold),
                 const SizedBox(width: 12),
-                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: settingsText, fontWeight: FontWeight.w600))),
+                Expanded(child: Text(appText('لغة التطبيق', 'App Language', 'Uygulama Dili'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
                 DropdownButton<String>(
                   value: language, dropdownColor: panel, underline: const SizedBox.shrink(),
-                  style: TextStyle(color: settingsText),
+                  style: TextStyle(color: Colors.white),
                   items: const [
                     DropdownMenuItem(value: 'ar', child: Text('العربية')),
                     DropdownMenuItem(value: 'en', child: Text('English')),
@@ -2763,35 +2677,33 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             ),
           ),
           Card(
-            color: settingsPanel,
+            color: panel,
             child: SwitchListTile(
               value: swipeSidebarEnabled,
-              activeColor: settingsSwitchActive,
-            inactiveThumbColor: settingsSwitchInactive,
-              secondary: Icon(Icons.swipe, color: settingsIcon),
-              title: Text(appText('فتح وإغلاق قائمة الباقات بالسحب', 'Swipe to open/close package menu', 'Paket menüsünü kaydırarak aç/kapat'), style: TextStyle(color: settingsText)),
-              subtitle: Text(appText('اسحب يميناً أو يساراً لإظهار القائمة الجانبية أو إخفائها في الأفلام والمسلسلات والبث المباشر', 'Swipe horizontally to show or hide the package sidebar in Movies, Series and Live TV', 'Film, Dizi ve Canlı TV sayfalarında paket kenar çubuğunu yatay kaydırarak açıp kapatın'), style: TextStyle(color: settingsDescription, fontSize: 12)),
+              activeColor: gold,
+              secondary: Icon(Icons.swipe, color: gold),
+              title: Text(appText('فتح وإغلاق قائمة الباقات بالسحب', 'Swipe to open/close package menu', 'Paket menüsünü kaydırarak aç/kapat'), style: TextStyle(color: Colors.white)),
+              subtitle: Text(appText('اسحب يميناً أو يساراً لإظهار القائمة الجانبية أو إخفائها في الأفلام والمسلسلات والبث المباشر', 'Swipe horizontally to show or hide the package sidebar in Movies, Series and Live TV', 'Film, Dizi ve Canlı TV sayfalarında paket kenar çubuğunu yatay kaydırarak açıp kapatın'), style: TextStyle(color: Colors.white70, fontSize: 12)),
               onChanged: _setSwipeSidebar,
             ),
           ),
           Card(
-            color: settingsPanel,
+            color: panel,
             child: SwitchListTile(
-              value: wifiOnly, activeColor: settingsPrimary, secondary: Icon(Icons.wifi, color: settingsIcon),
-              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: settingsText)),
-              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: settingsDescription, fontSize: 12)),
+              value: wifiOnly, activeColor: gold, secondary: Icon(Icons.wifi, color: gold),
+              title: Text(appText('التشغيل عبر Wi-Fi فقط', 'Wi-Fi Only Playback', 'Yalnızca Wi-Fi ile oynat'), style: TextStyle(color: Colors.white)),
+              subtitle: Text(appText('منع تشغيل الفيديو باستخدام بيانات الهاتف', 'Prevent video playback over mobile data', 'Mobil veriyle video oynatımını engelle'), style: TextStyle(color: Colors.white70, fontSize: 12)),
               onChanged: _setWifiOnly,
             ),
           ),
           Card(
-            color: settingsPanel,
+            color: panel,
             child: SwitchListTile(
               value: forceLandscape,
-              activeColor: settingsSwitchActive,
-            inactiveThumbColor: settingsSwitchInactive,
-              secondary: Icon(Icons.screen_rotation, color: settingsIcon),
-              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: settingsText)),
-              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: settingsDescription, fontSize: 12)),
+              activeColor: gold,
+              secondary: Icon(Icons.screen_rotation, color: gold),
+              title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: Colors.white)),
+              subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: Colors.white70, fontSize: 12)),
               onChanged: _setForceLandscape,
             ),
           ),
@@ -2799,7 +2711,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
           _tile(Icons.history, appText('مسح السجل بالكامل', 'Clear Watch History', 'İzleme Geçmişini Temizle'), appText('حذف سجل المشاهدة من الجهاز والحساب', 'Delete watch history from this device and account', 'İzleme geçmişini cihazdan ve hesaptan sil'), _clearHistory),
           _tile(Icons.refresh, appText('تحديث قائمة القنوات', 'Refresh Channel List', 'Kanal Listesini Yenile'), appText('جلب أحدث القنوات المنشورة', 'Fetch the latest published channels', 'En yeni yayınlanan kanalları getir'), _refreshChannels),
           _tile(Icons.system_update_alt, appText('البحث عن تحديث للتطبيق', 'Check for App Updates', 'Uygulama Güncellemelerini Kontrol Et'), appText('التحقق من وجود إصدار جديد', 'Check whether a new version is available', 'Yeni sürüm olup olmadığını kontrol et'), _checkForUpdate),
-          if (busy) Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: settingsProgress))),
+          if (busy) Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: gold))),
         ]),
       ),
     );
@@ -2894,49 +2806,38 @@ class FavoritesPage extends StatefulWidget {
   State<FavoritesPage> createState() => _FavoritesPageState();
 }
 class _FavoritesPageState extends State<FavoritesPage> {
-  Color get favoritesIcon => AppTheme.sectionColor('favorites', 'icon');
-  Color get favoritesDescription => AppTheme.sectionColor('favorites', 'description');
-  Color get favoritesProgress => AppTheme.sectionColor('favorites', 'progress');
-
-  Color get favoritesBackground => AppTheme.sectionColor('favorites', 'background');
-  Color get favoritesPrimary => AppTheme.sectionColor('favorites', 'primary');
-  Color get favoritesPanel => AppTheme.sectionColor('favorites', 'panel');
-  Color get favoritesText => AppTheme.sectionColor('favorites', 'text');
-  Color get favoritesSecondaryText => AppTheme.sectionColor('favorites', 'secondaryText');
-  void _onFavoritesThemeChanged() { if (mounted) setState(() {}); }
-
   late Future<List<Map<String, dynamic>>> favorites;
   @override
-  void initState() { super.initState(); AppTheme.revision.addListener(_onFavoritesThemeChanged); favorites = ShamFlixLocalStore.getFavorites(); localProfileRefreshNotifier.addListener(reload); }
+  void initState() { super.initState(); favorites = ShamFlixLocalStore.getFavorites(); localProfileRefreshNotifier.addListener(reload); }
   void reload() { if (mounted) setState(() => favorites = ShamFlixLocalStore.getFavorites()); }
   @override
-  void dispose() { AppTheme.revision.removeListener(_onFavoritesThemeChanged); localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
+  void dispose() { localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => Directionality(
     textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
-      backgroundColor: favoritesBackground, appBar: AppBar(backgroundColor: favoritesBackground, title: Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
+      backgroundColor: bg, appBar: AppBar(backgroundColor: bg, title: Text(appText('المفضلة', 'Favorites', 'Favoriler'))),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: favorites, builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: favoritesProgress));
+        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
         if (items.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.favorite_border, color: favoritesIcon, size: 64), const SizedBox(height: 12),
-          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: TextStyle(color: favoritesDescription)),
-          const SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: TextStyle(color: favoritesDescription)),
+          Icon(Icons.favorite_border, color: gold, size: 64), const SizedBox(height: 12),
+          Text(appText('قائمتك فارغة حالياً', 'Your list is empty', 'Listeniz şu anda boş'), style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 5), Text(appText('أضف الأفلام والمسلسلات من صفحة التفاصيل', 'Add movies and series from their details pages', 'Film ve dizileri detay sayfalarından ekleyin'), style: TextStyle(color: Colors.white70)),
         ]));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index];
           final item = Map<String, dynamic>.from(record['item'] is Map ? record['item'] as Map : <String, dynamic>{});
           final poster = valueOf(record['poster_url']);
-          return Card(color: favoritesPanel, child: ListTile(
-            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.movie, color: favoritesIcon) :
+          return Card(color: panel, child: ListTile(
+            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.movie, color: gold) :
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Icon(Icons.movie, color: favoritesIcon)))),
-            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: favoritesText)),
+                errorBuilder: (_, __, ___) => Icon(Icons.movie, color: gold)))),
+            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: Colors.white)),
             subtitle: Text(record['isSeries'] == true ? appText('مسلسل', 'Series', 'Dizi') : record['isChannel'] == true ? appText('قناة', 'Channel', 'Kanal') : appText('فيلم', 'Movie', 'Film'),
-              style: TextStyle(color: favoritesPrimary)),
-            trailing: IconButton(icon: Icon(Icons.favorite, color: favoritesIcon), tooltip: 'إزالة من المفضلة',
+              style: TextStyle(color: gold)),
+            trailing: IconButton(icon: Icon(Icons.favorite, color: gold), tooltip: 'إزالة من المفضلة',
               onPressed: () async => ShamFlixLocalStore.removeFavorite(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(
               item: item, isSeries: record['isSeries'] == true, isChannel: record['isChannel'] == true))),
@@ -2953,45 +2854,34 @@ class WatchHistoryPage extends StatefulWidget {
   State<WatchHistoryPage> createState() => _WatchHistoryPageState();
 }
 class _WatchHistoryPageState extends State<WatchHistoryPage> {
-  Color get historyIcon => AppTheme.sectionColor('history', 'icon');
-  Color get historyDescription => AppTheme.sectionColor('history', 'description');
-  Color get historyProgress => AppTheme.sectionColor('history', 'progress');
-
-  Color get historyBackground => AppTheme.sectionColor('history', 'background');
-  Color get historyPrimary => AppTheme.sectionColor('history', 'primary');
-  Color get historyPanel => AppTheme.sectionColor('history', 'panel');
-  Color get historyText => AppTheme.sectionColor('history', 'text');
-  Color get historySecondaryText => AppTheme.sectionColor('history', 'secondaryText');
-  void _onHistoryThemeChanged() { if (mounted) setState(() {}); }
-
   late Future<List<Map<String, dynamic>>> history;
   @override
-  void initState() { super.initState(); AppTheme.revision.addListener(_onHistoryThemeChanged); history = ShamFlixLocalStore.getHistory(); localProfileRefreshNotifier.addListener(reload); }
+  void initState() { super.initState(); history = ShamFlixLocalStore.getHistory(); localProfileRefreshNotifier.addListener(reload); }
   void reload() { if (mounted) setState(() => history = ShamFlixLocalStore.getHistory()); }
   @override
-  void dispose() { AppTheme.revision.removeListener(_onHistoryThemeChanged); localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
+  void dispose() { localProfileRefreshNotifier.removeListener(reload); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => Directionality(
     textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
     child: Scaffold(
-      backgroundColor: historyBackground,
-      appBar: AppBar(backgroundColor: historyBackground, title: Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
-        actions: [IconButton(tooltip: 'مسح السجل', icon: Icon(Icons.delete_sweep_outlined, color: historyIcon),
+      backgroundColor: bg,
+      appBar: AppBar(backgroundColor: bg, title: Text(appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi')),
+        actions: [IconButton(tooltip: 'مسح السجل', icon: Icon(Icons.delete_sweep_outlined, color: gold),
           onPressed: () async => ShamFlixLocalStore.clearHistory())]),
       body: FutureBuilder<List<Map<String, dynamic>>>(future: history, builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: historyProgress));
+        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: gold));
         final items = snapshot.data ?? [];
-        if (items.isEmpty) return Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: historyDescription)));
+        if (items.isEmpty) return Center(child: Text(appText('لا يوجد سجل مشاهدة بعد', 'No watch history yet', 'Henüz izleme geçmişi yok'), style: TextStyle(color: Colors.white70)));
         return ListView.builder(padding: const EdgeInsets.all(12), itemCount: items.length, itemBuilder: (context, index) {
           final record = items[index]; final poster = valueOf(record['poster_url']);
-          return Card(color: historyPanel, child: ListTile(
-            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.play_circle, color: historyIcon) :
+          return Card(color: panel, child: ListTile(
+            leading: SizedBox(width: 48, height: 64, child: poster.isEmpty ? Icon(Icons.play_circle, color: gold) :
               ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(poster, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Icon(Icons.play_circle, color: historyIcon)))),
-            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: historyText)),
-            subtitle: Text('${appText('آخر مشاهدة:', 'Last watched:', 'Son izleme:')} ${formatWatchPosition(record['position'])}', style: TextStyle(color: historyDescription)),
-            trailing: IconButton(icon: Icon(Icons.close, color: historySecondaryText),
+                errorBuilder: (_, __, ___) => Icon(Icons.play_circle, color: gold)))),
+            title: Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), style: TextStyle(color: Colors.white)),
+            subtitle: Text('${appText('آخر مشاهدة:', 'Last watched:', 'Son izleme:')} ${formatWatchPosition(record['position'])}', style: TextStyle(color: Colors.white70)),
+            trailing: IconButton(icon: Icon(Icons.close, color: Colors.white70),
               onPressed: () async => ShamFlixLocalStore.removeHistory(record['contentType'].toString(), record['contentId'].toString())),
             onTap: () => openWatchRecord(context, record),
           ));
@@ -3018,17 +2908,6 @@ class DetailsPage extends StatefulWidget {
 }
 
 class _DetailsPageState extends State<DetailsPage> {
-  Color get detailsIcon => AppTheme.sectionColor('details', 'icon');
-  Color get detailsDescription => AppTheme.sectionColor('details', 'description');
-  Color get detailsProgress => AppTheme.sectionColor('details', 'progress');
-
-  Color get detailsBackground => AppTheme.sectionColor('details', 'background');
-  Color get detailsPrimary => AppTheme.sectionColor('details', 'primary');
-  Color get detailsPanel => AppTheme.sectionColor('details', 'panel');
-  Color get detailsText => AppTheme.sectionColor('details', 'text');
-  Color get detailsSecondaryText => AppTheme.sectionColor('details', 'secondaryText');
-  Color get detailsButton => AppTheme.sectionColor('details', 'button');
-  void _onDetailsThemeChanged() { if (mounted) setState(() {}); }
   bool isFavorite = false;
   bool seasonsLoading = false;
   double myRating = 0;
@@ -3041,15 +2920,8 @@ class _DetailsPageState extends State<DetailsPage> {
   @override
   void initState() {
     super.initState();
-    AppTheme.revision.addListener(_onDetailsThemeChanged);
     _loadFavoriteState();
     if (widget.isSeries) _loadSeasons();
-  }
-
-  @override
-  void dispose() {
-    AppTheme.revision.removeListener(_onDetailsThemeChanged);
-    super.dispose();
   }
 
   Future<void> _loadFavoriteState() async {
@@ -3117,29 +2989,29 @@ class _DetailsPageState extends State<DetailsPage> {
     final average = (ratingSummary['average'] as num?)?.toDouble() ?? 0;
     final count = ratingSummary['count'] ?? 0;
     return Card(
-      color: detailsPanel,
+      color: panel,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(appText('تقييمك للمحتوى', 'Your Rating', 'Puanınız'), style: TextStyle(color: detailsPrimary, fontSize: 17, fontWeight: FontWeight.bold)),
+          Text(appText('تقييمك للمحتوى', 'Your Rating', 'Puanınız'), style: TextStyle(color: gold, fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Row(children: [
             for (int i = 1; i <= 5; i++)
               IconButton(
                 visualDensity: VisualDensity.compact,
                 onPressed: () => _saveEngagement(rating: i.toDouble()),
-                icon: Icon(i <= myRating ? Icons.star : Icons.star_border, color: detailsIcon),
+                icon: Icon(i <= myRating ? Icons.star : Icons.star_border, color: gold),
               ),
             const Spacer(),
-            Text(average == 0 ? appText('لا يوجد تقييم', 'No rating yet', 'Henüz puan yok') : average.toStringAsFixed(1), style: TextStyle(color: detailsText)),
-            Icon(Icons.star, color: detailsIcon, size: 17),
-            Text(' ($count)', style: TextStyle(color: detailsDescription, fontSize: 12)),
+            Text(average == 0 ? appText('لا يوجد تقييم', 'No rating yet', 'Henüz puan yok') : average.toStringAsFixed(1), style: TextStyle(color: Colors.white)),
+            Icon(Icons.star, color: gold, size: 17),
+            Text(' ($count)', style: TextStyle(color: Colors.white70, fontSize: 12)),
           ]),
           Row(children: [
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'like'),
-              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? detailsPrimary : detailsSecondaryText), label: Text(appText('إعجاب', 'Like', 'Beğen'))),
+              icon: Icon(Icons.thumb_up, color: myReaction == 'like' ? gold : Colors.white70), label: Text(appText('إعجاب', 'Like', 'Beğen'))),
             TextButton.icon(onPressed: () => _saveEngagement(reaction: 'dislike'),
-              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? detailsPrimary : detailsSecondaryText), label: Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
+              icon: Icon(Icons.thumb_down, color: myReaction == 'dislike' ? gold : Colors.white70), label: Text(appText('لا يعجبني', 'Dislike', 'Beğenmedim'))),
           ]),
         ]),
       ),
@@ -3164,7 +3036,7 @@ class _DetailsPageState extends State<DetailsPage> {
         if (items.isEmpty) return const SizedBox.shrink();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const SizedBox(height: 22),
-          Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: detailsPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(appText('قد يعجبك أيضاً', 'You May Also Like', 'Bunları da Beğenebilirsiniz'), style: TextStyle(color: gold, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           SizedBox(height: 195, child: ListView.builder(
             reverse: true, scrollDirection: Axis.horizontal, itemCount: items.length,
@@ -3176,10 +3048,10 @@ class _DetailsPageState extends State<DetailsPage> {
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailsPage(item: relatedItem, isSeries: isSeriesItem))),
                 child: Container(width: 112, margin: const EdgeInsets.only(left: 10), child: Column(children: [
                   Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(9), child: posterUrl.isEmpty
-                    ? Container(color: detailsPanel, child: Icon(Icons.movie, color: detailsIcon))
-                    : Image.network(posterUrl, width: 112, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: detailsPanel, child: Icon(Icons.movie, color: detailsIcon))))),
+                    ? Container(color: panel, child: Icon(Icons.movie, color: gold))
+                    : Image.network(posterUrl, width: 112, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: panel, child: Icon(Icons.movie, color: gold))))),
                   const SizedBox(height: 6),
-                  Text(valueOf(relatedItem['title']), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: detailsText, fontSize: 12)),
+                  Text(valueOf(relatedItem['title']), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 12)),
                 ])),
               );
             },
@@ -3296,7 +3168,7 @@ class _DetailsPageState extends State<DetailsPage> {
                     padding: const EdgeInsets.all(12),
                     children: [
                       Text(appText('اختر سيرفر التشغيل', 'Choose a Server', 'Sunucu Seçin'), textAlign: TextAlign.center,
-                        style: TextStyle(color: detailsPrimary, fontSize: 14, fontWeight: FontWeight.bold)),
+                        style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       ...servers.map((server) => ListTile(
                         dense: true,
@@ -3304,7 +3176,7 @@ class _DetailsPageState extends State<DetailsPage> {
                         contentPadding: EdgeInsets.zero,
                         title: Text('${valueOf(server['server_name'], 'سيرفر')}${valueOf(server['id'] ?? server['server_name']) == preferredServer ? ' • المفضل' : ''}',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: detailsText, fontSize: 12)),
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, server),
                       )),
                     ],
@@ -3456,7 +3328,7 @@ class _DetailsPageState extends State<DetailsPage> {
       future: SupabaseService.getEpisodes(seasonId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: detailsProgress)));
+          return Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator(color: gold)));
         }
         if (snapshot.hasError) {
           return const Padding(padding: EdgeInsets.all(12), child: Text('تعذر تحميل الحلقات', style: TextStyle(color: Colors.redAccent)));
@@ -3465,7 +3337,7 @@ class _DetailsPageState extends State<DetailsPage> {
         if (episodes.isEmpty) {
           return Padding(padding: const EdgeInsets.all(12), child: Text(
             appText('لا توجد حلقات منشورة في هذا الموسم', 'No episodes published in this season', 'Bu sezonda yayınlanmış bölüm yok'),
-            style: TextStyle(color: detailsDescription)));
+            style: TextStyle(color: Colors.white70)));
         }
         return Column(children: episodes.asMap().entries.map((entry) {
           final episode = entry.value;
@@ -3479,13 +3351,13 @@ class _DetailsPageState extends State<DetailsPage> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
               leading: Container(
                 width: 46, height: 46, alignment: Alignment.center,
-                decoration: BoxDecoration(color: detailsPrimary.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
-                child: Text(number, style: TextStyle(color: detailsPrimary, fontWeight: FontWeight.bold, fontSize: 16))),
+                decoration: BoxDecoration(color: gold.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
+                child: Text(number, style: TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 16))),
               title: Text(episodeTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: detailsText, fontWeight: FontWeight.w600, fontSize: 14)),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
               subtitle: Text(duration.isEmpty ? appText('تشغيل الحلقة', 'Play episode', 'Bölümü oynat') : '$duration • ${appText('دقيقة', 'min', 'dk')}',
-                style: TextStyle(color: detailsDescription, fontSize: 12)),
-              trailing: Icon(Icons.play_circle_fill_rounded, color: detailsIcon, size: 30),
+                style: TextStyle(color: Colors.white70, fontSize: 12)),
+              trailing: Icon(Icons.play_circle_fill_rounded, color: gold, size: 30),
               onTap: () async {
                 final episodeRecord = Map<String, dynamic>.from(episode);
                 if (valueOf(episodeRecord['poster_url']).isEmpty) episodeRecord['poster_url'] = valueOf(widget.item['poster_url']);
@@ -3511,8 +3383,8 @@ class _DetailsPageState extends State<DetailsPage> {
       width: double.infinity, height: heroHeight,
       child: Stack(fit: StackFit.expand, children: [
         if (heroImage.isNotEmpty)
-          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: detailsPanel))
-        else ColoredBox(color: detailsPanel),
+          Image.network(heroImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => ColoredBox(color: panel))
+        else ColoredBox(color: panel),
         const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
           colors: [Color(0x22000000), Color(0x55000000), Color(0xFF090909)],
@@ -3524,19 +3396,19 @@ class _DetailsPageState extends State<DetailsPage> {
               borderRadius: BorderRadius.circular(9),
               child: SizedBox(width: posterWidth, height: posterHeight,
                 child: poster.isEmpty
-                  ? Container(color: detailsPanel, child: Icon(Icons.movie, color: detailsIcon, size: 42))
+                  ? Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))
                   : Image.network(poster, width: posterWidth, height: posterHeight, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(color: detailsPanel, child: Icon(Icons.movie, color: detailsIcon, size: 42))))),
+                      errorBuilder: (_, __, ___) => Container(color: panel, child: Icon(Icons.movie, color: gold, size: 42))))),
             if (!isChannel) const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: detailsPrimary, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4)),
                 child: Text(isChannel ? appText('مباشر', 'LIVE', 'CANLI') : 'SHAM FLIX',
-                  style: TextStyle(color: detailsText, fontSize: 9, fontWeight: FontWeight.bold))),
+                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
               const SizedBox(height: 8),
               Text(title, maxLines: isLandscape ? 2 : 3, overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: detailsText, fontSize: 25, fontWeight: FontWeight.bold,
+                style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold,
                   shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
             ])),
           ]),
@@ -3564,21 +3436,21 @@ class _DetailsPageState extends State<DetailsPage> {
         Wrap(spacing: 8, runSpacing: 8, children: category.split(RegExp(r'[,،|]')).map((genre) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
           decoration: BoxDecoration(color: const Color(0xFF292929), borderRadius: BorderRadius.circular(20)),
-          child: Text(genre.trim(), style: TextStyle(color: detailsDescription, fontSize: 12)),
+          child: Text(genre.trim(), style: TextStyle(color: Colors.white70, fontSize: 12)),
         )).toList()),
       ],
       const SizedBox(height: 20),
       Text(appText('القصة والوصف', 'About this title', 'Hikâye ve Açıklama'),
-        style: TextStyle(color: detailsText, fontSize: 18, fontWeight: FontWeight.bold)),
+        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
       const SizedBox(height: 9),
-      Text(description, style: TextStyle(color: detailsDescription, height: 1.7, fontSize: 14)),
+      Text(description, style: TextStyle(color: Colors.white70, height: 1.7, fontSize: 14)),
       if (director.isNotEmpty) ...[
         const SizedBox(height: 14),
-        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: TextStyle(color: detailsDescription, fontSize: 13)),
+        Text('${appText('المخرج', 'Director', 'Yönetmen')}: $director', style: TextStyle(color: Colors.white70, fontSize: 13)),
       ],
       if (cast.isNotEmpty) ...[
         const SizedBox(height: 8),
-        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: TextStyle(color: detailsDescription, fontSize: 13, height: 1.5)),
+        Text('${appText('الممثلون', 'Cast', 'Oyuncular')}: $cast', style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
       ],
       const SizedBox(height: 18),
       _recommendationsSection(),
@@ -3587,7 +3459,7 @@ class _DetailsPageState extends State<DetailsPage> {
 
   Widget _moviePlaySection(Map<String, dynamic> item, String title, {required bool isChannel}) {
     return SizedBox(width: double.infinity, child: FilledButton.icon(
-      style: FilledButton.styleFrom(backgroundColor: detailsPrimary, foregroundColor: detailsText,
+      style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 18),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
       onPressed: () => _chooseAndPlay(contentType: isChannel ? 'channel' : 'movie',
@@ -3602,19 +3474,19 @@ class _DetailsPageState extends State<DetailsPage> {
     final selectedSeason = seasons.isNotEmpty ? seasons[selectedSeasonIndex.clamp(0, seasons.length - 1).toInt()] : null;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Container(width: 4, height: 22, decoration: BoxDecoration(color: detailsPrimary, borderRadius: BorderRadius.circular(4))),
+        Container(width: 4, height: 22, decoration: BoxDecoration(color: gold, borderRadius: BorderRadius.circular(4))),
         const SizedBox(width: 9),
         Text(appText('المواسم والحلقات', 'Seasons & Episodes', 'Sezonlar ve Bölümler'),
-          style: TextStyle(color: detailsText, fontSize: 19, fontWeight: FontWeight.bold)),
+          style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
       ]),
       const SizedBox(height: 14),
       if (seasonsLoading)
-        Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: detailsProgress)))
+        Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: gold)))
       else if (seasonsError != null)
         Text('تعذر تحميل المواسم: $seasonsError', style: const TextStyle(color: Colors.redAccent))
       else if (seasons.isEmpty)
         Text(appText('لا توجد مواسم منشورة حالياً', 'No seasons published yet', 'Henüz sezon yayınlanmadı'),
-          style: TextStyle(color: detailsDescription))
+          style: TextStyle(color: Colors.white70))
       else ...[
         SizedBox(height: 42, child: ListView.separated(
           scrollDirection: Axis.horizontal, reverse: true, itemCount: seasons.length,
@@ -3626,8 +3498,8 @@ class _DetailsPageState extends State<DetailsPage> {
             return ChoiceChip(
               label: Text(label), selected: selected,
               onSelected: (_) => setState(() => selectedSeasonIndex = index),
-              selectedColor: detailsPrimary, backgroundColor: const Color(0xFF292929),
-              labelStyle: TextStyle(color: detailsText, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+              selectedColor: gold, backgroundColor: const Color(0xFF292929),
+              labelStyle: TextStyle(color: Colors.white, fontSize: 12, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
               side: BorderSide.none, showCheckmark: false,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
             );
@@ -3656,11 +3528,11 @@ class _DetailsPageState extends State<DetailsPage> {
     return Directionality(
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        backgroundColor: detailsBackground,
-        appBar: AppBar(backgroundColor: detailsBackground, title: Text(title), actions: [
+        backgroundColor: bg,
+        appBar: AppBar(backgroundColor: bg, title: Text(title), actions: [
           IconButton(tooltip: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة',
             onPressed: _toggleFavorite,
-            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? detailsPrimary : detailsText)),
+            icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? gold : Colors.white)),
         ]),
         body: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -3689,9 +3561,9 @@ class _DetailsPageState extends State<DetailsPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: detailsIcon, size: 16),
+        Icon(icon, color: gold, size: 16),
         const SizedBox(width: 5),
-        Text(text, style: TextStyle(color: detailsDescription)),
+        Text(text, style: TextStyle(color: Colors.white70)),
       ],
     );
   }
@@ -3780,10 +3652,6 @@ class ChannelsPackagesPage extends StatefulWidget {
 }
 
 class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
-  Color get liveIcon => AppTheme.sectionColor('live', 'icon');
-  Color get liveDescription => AppTheme.sectionColor('live', 'description');
-  Color get liveProgress => AppTheme.sectionColor('live', 'progress');
-
   Color get liveBackground => AppTheme.sectionColor('live', 'background');
   Color get livePrimary => AppTheme.sectionColor('live', 'primary');
   Color get livePanel => AppTheme.sectionColor('live', 'panel');
@@ -4072,9 +3940,9 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                       decoration: BoxDecoration(color: liveBackground, borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.all(5),
                       child: logo.isEmpty
-                          ? Icon(Icons.live_tv, color: liveIcon, size: 30)
+                          ? Icon(Icons.live_tv, color: livePrimary, size: 30)
                           : Image.network(logo, fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: liveIcon, size: 30)),
+                              errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: livePrimary, size: 30)),
                     ),
                   ),
                   Positioned(
@@ -4086,7 +3954,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                     ),
                   ),
                   if (active)
-                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: liveIcon, size: 16)),
+                    Positioned(bottom: 4, right: 4, child: Icon(Icons.graphic_eq, color: livePrimary, size: 16)),
                 ],
               ),
             ),
@@ -4167,7 +4035,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                 Text(appText('البث المباشر', 'Live TV', 'Canlı TV'),
                   style: TextStyle(color: liveText, fontSize: 19, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: liveIcon)),
+                IconButton(onPressed: _load, icon: Icon(Icons.refresh, color: livePrimary)),
               ]),
             ),
             Padding(
@@ -4178,7 +4046,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                 onChanged: (value) => setState(() => _searchQuery = value),
                 decoration: InputDecoration(
                   hintText: appText('ابحث عن قناة...', 'Search channels...', 'Kanal ara...'),
-                  prefixIcon: Icon(Icons.search, color: liveIcon),
+                  prefixIcon: Icon(Icons.search, color: livePrimary),
                   suffixIcon: _searchQuery.isEmpty ? null : IconButton(onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); }, icon: Icon(Icons.close, color: liveSecondaryText)),
                   filled: true, fillColor: livePanel,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -4188,7 +4056,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
             if (starting)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: LinearProgressIndicator(color: liveProgress, backgroundColor: livePanel),
+                child: LinearProgressIndicator(color: livePrimary, backgroundColor: livePanel),
               ),
             Expanded(
               child: Stack(
@@ -4224,13 +4092,13 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                 ),
                               Expanded(
                                 child: loading
-                                    ? Center(child: CircularProgressIndicator(color: liveProgress))
+                                    ? Center(child: CircularProgressIndicator(color: livePrimary))
                                     : error != null
                                         ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
                                         : _filteredChannels.isEmpty
                                                 ? Center(child: Text(
                                                     appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
-                                                    style: TextStyle(color: liveDescription)))
+                                                    style: TextStyle(color: liveSecondaryText)))
                                                 : RefreshIndicator(
                                                 color: livePrimary,
                                                 onRefresh: _load,
@@ -4327,17 +4195,6 @@ class ShamFlixPlayerPage extends StatefulWidget {
 }
 
 class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
-  Color get playerIcon => AppTheme.sectionColor('player', 'icon');
-  Color get playerDescription => AppTheme.sectionColor('player', 'description');
-  Color get playerProgress => AppTheme.sectionColor('player', 'progress');
-  Color get playerSwitchActive => AppTheme.sectionColor('player', 'switchActive');
-
-  Color get playerPrimary => AppTheme.sectionColor('player', 'primary');
-  Color get playerPanel => AppTheme.sectionColor('player', 'panel');
-  Color get playerText => AppTheme.sectionColor('player', 'text');
-  Color get playerSecondaryText => AppTheme.sectionColor('player', 'secondaryText');
-  Color get playerButton => AppTheme.sectionColor('player', 'button');
-  void _onPlayerThemeChanged() { if (mounted) setState(() {}); }
   // قائمة سرعات موحدة للوضعين العمودي والأفقي.
   static const List<double> _playbackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
   late final Player player;
@@ -4365,7 +4222,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   @override
   void initState() {
     super.initState();
-    AppTheme.revision.addListener(_onPlayerThemeChanged);
     currentServerIndex = widget.servers.isEmpty
         ? 0
         : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
@@ -4661,7 +4517,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         visualDensity: const VisualDensity(vertical: -3),
                         contentPadding: EdgeInsets.zero,
                         title: Text('${speed}x', textAlign: TextAlign.center,
-                          style: TextStyle(color: player.state.rate == speed ? playerPrimary : playerText, fontSize: 13)),
+                          style: TextStyle(color: player.state.rate == speed ? gold : Colors.white, fontSize: 13)),
                         onTap: () => Navigator.pop(sheetContext, speed),
                       ),
                   ],
@@ -4733,13 +4589,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   shrinkWrap: true,
                   children: [
                     ListTile(title: Text(appText('مسار الصوت', 'Audio Track', 'Ses Parçası'), textAlign: TextAlign.center,
-                      style: TextStyle(color: playerPrimary, fontSize: 14, fontWeight: FontWeight.bold))),
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
                     for (int index = 0; index < tracks.length; index++)
                       ListTile(
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                          style: TextStyle(color: playerText, fontSize: 12)),
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, tracks[index]),
                       ),
                   ],
@@ -4782,28 +4638,28 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   shrinkWrap: true,
                   children: [
                     ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
-                      style: TextStyle(color: playerPrimary, fontSize: 14, fontWeight: FontWeight.bold))),
+                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
-                      leading: Icon(Icons.folder_open_rounded, color: playerIcon, size: 18),
+                      leading: Icon(Icons.folder_open_rounded, color: gold, size: 18),
                       title: Text(appText('تحميل ترجمة من الجهاز', 'Load Subtitle File', 'Cihazdan Altyazı Yükle'), textAlign: TextAlign.center,
-                        style: TextStyle(color: playerText, fontSize: 12)),
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, '__local_subtitle__'),
                     ),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
-                      leading: Icon(Icons.link_rounded, color: playerIcon, size: 18),
+                      leading: Icon(Icons.link_rounded, color: gold, size: 18),
                       title: Text(appText('إضافة ترجمة من رابط', 'Load Subtitle from URL', 'URL ile Altyazı Yükle'), textAlign: TextAlign.center,
-                        style: TextStyle(color: playerText, fontSize: 12)),
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, '__url_subtitle__'),
                     ),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
                       title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
-                        style: TextStyle(color: playerText, fontSize: 12)),
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
                     ),
                     for (int index = 0; index < tracks.length; index++)
@@ -4811,7 +4667,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                          style: TextStyle(color: playerText, fontSize: 12)),
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, tracks[index]),
                       ),
                   ],
@@ -4895,15 +4751,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           backgroundColor: const Color(0xFF202020),
           title: Text(
             appText('رابط ملف الترجمة', 'Subtitle URL', 'Altyazı URL\'si'),
-            style: TextStyle(color: playerText),
+            style: TextStyle(color: Colors.white),
           ),
           content: TextField(
             controller: urlController,
             keyboardType: TextInputType.url,
-            style: TextStyle(color: playerText),
+            style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'https://example.com/subtitle.srt',
-              hintStyle: TextStyle(color: playerText.withOpacity(0.38)),
+              hintStyle: const TextStyle(color: Colors.white38),
             ),
           ),
           actions: [
@@ -4912,7 +4768,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               child: Text(appText('إلغاء', 'Cancel', 'İptal')),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: playerPrimary),
+              style: FilledButton.styleFrom(backgroundColor: gold),
               onPressed: () => Navigator.pop(dialogContext, urlController.text.trim()),
               child: Text(appText('تحميل', 'Load', 'Yükle')),
             ),
@@ -4991,7 +4847,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       child: Tooltip(
         message: name,
         child: Material(
-          color: active ? playerPrimary : Colors.black.withOpacity(0.62),
+          color: active ? gold : Colors.black.withOpacity(0.62),
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
@@ -5002,7 +4858,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               child: Center(
                 child: Text('S${index + 1}',
                   style: TextStyle(
-                    color: active ? Colors.black : playerText,
+                    color: active ? Colors.black : Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -5043,9 +4899,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: playerText, size: 19),
+            Icon(icon, color: Colors.white, size: 19),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(color: playerDescription, fontSize: 9)),
+            Text(label, style: TextStyle(color: Colors.white70, fontSize: 9)),
           ],
         ),
       ),
@@ -5082,7 +4938,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   @override
   void dispose() {
-    AppTheme.revision.removeListener(_onPlayerThemeChanged);
     controlsTimer?.cancel();
     _positionSubscription?.cancel();
     _saveProgressAtPosition(player.state.position);
@@ -5108,14 +4963,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.error_outline, color: playerIcon, size: 48),
+                        Icon(Icons.error_outline, color: gold, size: 48),
                         const SizedBox(height: 14),
                         Text(error!, textAlign: TextAlign.center,
-                            style: TextStyle(color: playerDescription)),
+                            style: TextStyle(color: Colors.white70)),
                         const SizedBox(height: 18),
                         if (_embedFallbackUrl != null) ...[
                           FilledButton.icon(
-                            style: FilledButton.styleFrom(backgroundColor: playerPrimary, foregroundColor: playerText),
+                            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
                             onPressed: _openEmbedFallback,
                             icon: const Icon(Icons.web),
                             label: Text('فتح ${_embedFallbackName ?? 'السيرفر المضمّن'}'),
@@ -5123,7 +4978,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                           const SizedBox(height: 10),
                         ],
                         FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: playerPrimary, foregroundColor: playerText),
+                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
                           onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
                           child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
                         ),
@@ -5145,7 +5000,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         controls: NoVideoControls,
                       ),
                     if (opening)
-                      Center(child: CircularProgressIndicator(color: playerProgress)),
+                      Center(child: CircularProgressIndicator(color: gold)),
                     if (controlsLocked)
                       Positioned(
                         bottom: 20,
@@ -5158,9 +5013,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                               shape: const StadiumBorder(),
                               child: TextButton.icon(
                                 onPressed: _toggleControlsLock,
-                                icon: Icon(Icons.lock_open_rounded, color: playerIcon),
+                                icon: Icon(Icons.lock_open_rounded, color: gold),
                                 label: Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
-                                    style: TextStyle(color: playerText)),
+                                    style: TextStyle(color: Colors.white)),
                               ),
                             ),
                           ),
@@ -5209,7 +5064,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                  color: playerText,
+                                                  color: Colors.white,
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -5217,7 +5072,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                               Text(
                                                 'SHAM FLIX PLAYER',
                                                 style: TextStyle(
-                                                  color: playerPrimary,
+                                                  color: gold,
                                                   fontSize: 9,
                                                   letterSpacing: 2,
                                                   fontWeight: FontWeight.w700,
@@ -5289,14 +5144,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                         height: 12,
                                                         child: CircularProgressIndicator(
                                                           strokeWidth: 2,
-                                                          color: playerPrimary,
+                                                          color: gold,
                                                         ),
                                                       ),
                                                       const SizedBox(width: 6),
                                                       Text(
                                                         appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor'),
-                                                        style: TextStyle(
-                                                          color: playerText,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
                                                           fontSize: 11,
                                                           fontWeight: FontWeight.w600,
                                                         ),
@@ -5349,8 +5204,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                   child: Slider(
                                                     value: current.clamp(0.0, max).toDouble(),
                                                     max: max,
-                                                    activeColor: playerSwitchActive,
-                                                    inactiveColor: playerText.withOpacity(0.24),
+                                                    activeColor: gold,
+                                                    inactiveColor: Colors.white24,
                                                     onChangeStart: duration == Duration.zero
                                                         ? null
                                                         : (value) {
@@ -5375,19 +5230,19 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 Row(
                                                   children: [
                                                     Text(_time(position),
-                                                        style: TextStyle(color: playerDescription, fontSize: 9)),
+                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
                                                     const Spacer(),
                                                     Text(_time(duration),
-                                                        style: TextStyle(color: playerDescription, fontSize: 9)),
+                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
                                                   ],
                                                 ),
                                                 const SizedBox(height: 8),
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                                   decoration: BoxDecoration(
-                                                    color: playerText.withOpacity(0.07),
+                                                    color: Colors.white.withOpacity(0.07),
                                                     borderRadius: BorderRadius.circular(16),
-                                                    border: Border.all(color: playerText.withOpacity(0.12)),
+                                                    border: Border.all(color: Colors.white12),
                                                   ),
                                                   child: Row(
                                                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -5467,7 +5322,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     bool filled = false,
   }) {
     return Material(
-      color: filled ? playerPrimary.withOpacity(0.95) : Colors.black.withOpacity(0.35),
+      color: filled ? gold.withOpacity(0.95) : Colors.black.withOpacity(0.35),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -5475,7 +5330,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: SizedBox(
           width: size + 12,
           height: size + 12,
-          child: Icon(icon, color: filled ? Colors.black : playerText, size: size),
+          child: Icon(icon, color: filled ? Colors.black : Colors.white, size: size),
         ),
       ),
     );
