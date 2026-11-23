@@ -725,7 +725,7 @@ class _HomePageState extends State<HomePage> {
     }).toList();
   }
 
-  Widget sectionTitle(String title) {
+  Widget sectionTitle(String title, {Color? color}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
       child: Row(
@@ -735,7 +735,7 @@ class _HomePageState extends State<HomePage> {
           Text(
             title,
             style: TextStyle(
-              color: AppTheme.text,
+              color: color ?? AppTheme.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -869,11 +869,12 @@ class _HomePageState extends State<HomePage> {
     String title,
     Future<List<Map<String, dynamic>>> future, {
     required bool isSeries,
+    Color? headingColor,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        sectionTitle(title),
+        sectionTitle(title, color: headingColor),
         SizedBox(
           height: 188,
           child: FutureBuilder<List<Map<String, dynamic>>>(
@@ -1243,8 +1244,18 @@ class _HomePageState extends State<HomePage> {
           ),
           featuredHero(),
           continueWatchingSection(),
-          mediaSection(appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'), movies, isSeries: false),
-          mediaSection(appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'), series, isSeries: true),
+          mediaSection(
+            appText('أحدث الأفلام', 'Latest Movies', 'En Yeni Filmler'),
+            movies,
+            isSeries: false,
+            headingColor: AppTheme.sectionColor('home', 'latestMoviesText'),
+          ),
+          mediaSection(
+            appText('أحدث المسلسلات', 'Latest Series', 'En Yeni Diziler'),
+            series,
+            isSeries: true,
+            headingColor: AppTheme.sectionColor('home', 'latestSeriesText'),
+          ),
           mediaSection(appText('أحدث الأنمي', 'Latest Anime', 'En Yeni Animeler'), anime, isSeries: false),
           recentChannelsSection(),
           const SizedBox(height: 30),
