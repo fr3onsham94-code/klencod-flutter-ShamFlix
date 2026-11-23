@@ -15,6 +15,8 @@ class AppTheme {
     'border': '#333333',
     'badge': '#E50914',
     'packageBorder': '#555555',
+    'latestMoviesText': '#FFFFFF',
+    'latestSeriesText': '#FFFFFF',
 
     // ألوان مستقلة لكل قسم: خلفية، أساسي، بطاقات، نص، نص ثانوي، أزرار.
     'home_background': '#090909',
