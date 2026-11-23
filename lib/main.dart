@@ -2005,6 +2005,12 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
+  Color get accountBackground => AppTheme.sectionColor('account', 'background');
+  Color get accountPrimary => AppTheme.sectionColor('account', 'primary');
+  Color get accountPanel => AppTheme.sectionColor('account', 'accountPanel');
+  Color get accountText => AppTheme.sectionColor('account', 'text');
+  Color get accountSecondaryText => AppTheme.sectionColor('account', 'secondaryText');
+  Color get accountButton => AppTheme.sectionColor('account', 'button');
   bool loading = false;
   bool linkingGoogle = false;
   StreamSubscription<AuthState>? _accountAuthSubscription;
@@ -2012,6 +2018,7 @@ class _AccountPageState extends State<AccountPage> {
   @override
   void initState() {
     super.initState();
+    AppTheme.revision.addListener(_onAccountThemeChanged);
     authRefreshNotifier.addListener(onAuthChanged);
     _accountAuthSubscription =
         AuthService.client.auth.onAuthStateChange.listen((_) {
@@ -2019,8 +2026,13 @@ class _AccountPageState extends State<AccountPage> {
     });
   }
 
+  void _onAccountThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    AppTheme.revision.removeListener(_onAccountThemeChanged);
     authRefreshNotifier.removeListener(onAuthChanged);
     _accountAuthSubscription?.cancel();
     super.dispose();
@@ -2137,23 +2149,23 @@ class _AccountPageState extends State<AccountPage> {
     VoidCallback? onTap,
   }) {
     return Card(
-      color: panel,
+      color: accountPanel,
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
-        leading: Icon(icon, color: gold),
+        leading: Icon(icon, color: accountPrimary),
         title: Text(
           title,
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: accountText),
         ),
         subtitle: subtitle == null
             ? null
             : Text(
                 subtitle,
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: accountSecondaryText),
               ),
         trailing: Icon(
           Icons.chevron_left,
-          color: gold,
+          color: accountPrimary,
         ),
         onTap: onTap,
       ),
@@ -2164,23 +2176,23 @@ class _AccountPageState extends State<AccountPage> {
     final linked = isGoogleLinked;
 
     return Card(
-      color: panel,
+      color: accountPanel,
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
         leading: Icon(
           Icons.g_mobiledata,
-          color: gold,
+          color: accountPrimary,
           size: 32,
         ),
         title: Text(
           linked ? 'حساب Google مربوط' : 'ربط حساب Google',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: accountText),
         ),
         subtitle: Text(
           linked
               ? 'يمكنك تسجيل الدخول باستخدام Google'
               : 'اربط Gmail بحسابك الحالي دون إنشاء حساب جديد',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: accountSecondaryText),
         ),
         trailing: linked
             ? const Icon(
@@ -2192,13 +2204,13 @@ class _AccountPageState extends State<AccountPage> {
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                      color: gold,
+                      color: accountPrimary,
                       strokeWidth: 2,
                     ),
                   )
                 : Icon(
                     Icons.link,
-                    color: gold,
+                    color: accountPrimary,
                   ),
         onTap: linked || linkingGoogle
             ? null
@@ -2217,7 +2229,7 @@ class _AccountPageState extends State<AccountPage> {
         const SizedBox(height: 25),
         Icon(
           Icons.account_circle,
-          color: gold,
+          color: accountPrimary,
           size: 85,
         ),
         const SizedBox(height: 12),
@@ -2225,7 +2237,7 @@ class _AccountPageState extends State<AccountPage> {
           child: Text(
             appText('حسابي', 'My Account', 'Hesabım'),
             style: TextStyle(
-              color: Colors.white,
+              color: accountText,
               fontSize: 25,
               fontWeight: FontWeight.bold,
             ),
@@ -2238,7 +2250,7 @@ class _AccountPageState extends State<AccountPage> {
             child: Text(
               appText('أهلاً بك في ShamFlix', 'Welcome to ShamFlix', 'ShamFlix\'e hoş geldiniz'),
               style: TextStyle(
-                color: Colors.white70,
+                color: accountSecondaryText,
                 fontSize: 16,
               ),
             ),
@@ -2248,8 +2260,8 @@ class _AccountPageState extends State<AccountPage> {
             height: 52,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor: gold,
-                foregroundColor: Colors.white,
+                backgroundColor: accountButton,
+                foregroundColor: accountText,
               ),
               onPressed: openLogin,
               icon: const Icon(Icons.login),
@@ -2272,14 +2284,14 @@ class _AccountPageState extends State<AccountPage> {
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPage()))),
         ] else ...[
           Card(
-            color: panel,
+            color: accountPanel,
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Column(
                 children: [
                   Icon(
                     Icons.account_circle,
-                    color: gold,
+                    color: accountPrimary,
                     size: 55,
                   ),
                   const SizedBox(height: 10),
@@ -2287,7 +2299,7 @@ class _AccountPageState extends State<AccountPage> {
                     AuthService.userEmail ?? 'مستخدم ShamFlix',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: accountText,
                       fontSize: 16,
                     ),
                   ),
@@ -2304,7 +2316,7 @@ class _AccountPageState extends State<AccountPage> {
                     child: Text(
                       AuthService.isAdmin ? appText('مدير', 'Admin', 'Yönetici') : appText('مستخدم', 'User', 'Kullanıcı'),
                       style: TextStyle(
-                        color: gold,
+                        color: accountPrimary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -2361,15 +2373,15 @@ class _AccountPageState extends State<AccountPage> {
             child: OutlinedButton.icon(
               onPressed: loading ? null : logout,
               style: OutlinedButton.styleFrom(
-                foregroundColor: gold,
-                side: BorderSide(color: gold),
+                foregroundColor: accountButton,
+                side: BorderSide(color: accountButton),
               ),
               icon: loading
                   ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                        color: gold,
+                        color: accountPrimary,
                         strokeWidth: 2,
                       ),
                     )
