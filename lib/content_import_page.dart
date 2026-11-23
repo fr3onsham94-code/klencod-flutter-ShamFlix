@@ -418,7 +418,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
     setState(() { importing = true; imported = 0; duplicates = 0; failed = 0; monitorsCreated = 0; monitorFailures = 0; movieMonitorCreated = 0; movieMonitorFailures = 0; });
     try {
       final table = type == 'movie' ? 'movies' : 'series';
-      final rows = await AuthService.client.from(table).select('id,title,title_en,original_title,release_year');
+      final rows = await AuthService.client.from(table).select();
       final existingRecords = rows.map((row) => Map<String, dynamic>.from(row)).toList();
       var akwamSeriesCount = 0;
       var episodeCount = 0;
