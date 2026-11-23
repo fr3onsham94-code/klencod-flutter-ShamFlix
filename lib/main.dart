@@ -5250,7 +5250,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                       const SizedBox(width: 6),
                                                       Text(
                                                         appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor'),
-                                                        style: const TextStyle(
+                                                        style: TextStyle(
                                                           color: playerText,
                                                           fontSize: 11,
                                                           fontWeight: FontWeight.w600,
