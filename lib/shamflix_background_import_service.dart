@@ -26,7 +26,7 @@ void shamflixImportCallbackDispatcher() {
       await ShamFlixBackgroundImportService._run(inputData?['job_id']?.toString());
       return true;
     } catch (e) {
-      await ShamFlixBackgroundImportService._status('failed', error: e.toString());
+      await ShamFlixBackgroundImportService._status('failed', error: e.toString(), expectedJobId: inputData?['job_id']?.toString());
       return false;
     }
   });
@@ -109,6 +109,13 @@ class ShamFlixBackgroundImportService {
     await prefs.setString(_jobKey, jsonEncode(job));
   }
 
+  static Future<bool> _saveIfCurrent(Map<String, dynamic> job, String expectedJobId) async {
+    final latest = await currentJob();
+    if (latest == null || latest['id']?.toString() != expectedJobId || latest['status'] == 'cancelled') return false;
+    await _save(job);
+    return true;
+  }
+
   static Future<void> _status(String value, {String? error, String? message, String? expectedJobId}) async {
     final job = await currentJob();
     if (job == null || (expectedJobId != null && job['id']?.toString() != expectedJobId)) return;
@@ -137,7 +144,7 @@ class ShamFlixBackgroundImportService {
     if (job['status'] == 'completed') return;
     job['status'] = 'running';
     job['message'] = 'بدأ استيراد المحتوى';
-    await _save(job);
+    if (!await _saveIfCurrent(job, expectedJobId)) return;
 
     final type = job['content_type'] == 'series' ? 'series' : 'movie';
     final table = type == 'movie' ? 'movies' : 'series';
@@ -263,7 +270,7 @@ class ShamFlixBackgroundImportService {
       job['processed'] = (job['processed'] as int) + 1;
       job['message'] = 'تمت معالجة ' + job['processed'].toString() + ' من ' + job['total'].toString();
       job['updated_at'] = DateTime.now().toIso8601String();
-      await _save(job);
+      if (!await _saveIfCurrent(job, expectedJobId)) return;
       await Workmanager().reportProgress({
         'processed': job['processed'],
         'total': job['total'],
@@ -277,7 +284,7 @@ class ShamFlixBackgroundImportService {
     job['status'] = 'completed';
     job['message'] = 'اكتمل الاستيراد';
     job['completed_at'] = DateTime.now().toIso8601String();
-    await _save(job);
+    if (!await _saveIfCurrent(job, expectedJobId)) return;
   }
 
   static Future<void> _saveAkwamEpisodes(String seriesId, String pageUrl, bool publish) async {
