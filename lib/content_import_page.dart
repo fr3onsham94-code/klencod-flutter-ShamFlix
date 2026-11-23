@@ -86,7 +86,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
       .replaceAll(RegExp(r'[^a-z0-9\u0600-\u06FF]+'), '');
 
   String _comparisonTitle(String value) => normalize(value).replaceAll(
-      RegExp(r'(?:الموسم|موسم|season|الجزء|part)(?:الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\\d+)?'),
+      RegExp(r'(?:الموسم|موسم|season|الجزء|part)(?:الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\d+)?'),
       '');
 
   double _titleSimilarity(String first, String second) {
@@ -430,7 +430,6 @@ class _ContentImportPageState extends State<ContentImportPage> {
         final title = (item['title']?.toString() ?? '').trim();
         if (title.isEmpty) { setState(() => failed++); continue; }
         final year = int.tryParse(item['release_year']?.toString() ?? '');
-        final key = normalize(title) + '|' + (year?.toString() ?? '');
         final similarMatches = existingRecords.map((record) {
           final titleVariants = [record['title'], record['title_en'], record['original_title']]
               .map((value) => value?.toString().trim() ?? '')
