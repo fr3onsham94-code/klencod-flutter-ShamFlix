@@ -588,25 +588,80 @@ class _AdminPageState extends State<AdminPage> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppTheme.color('${prefix}background'),
+                color: AppTheme.color(prefix + 'background'),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.color('${prefix}primary')),
+                border: Border.all(color: AppTheme.color(prefix + 'border')),
               ),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text('معاينة SHAM FLIX', style: TextStyle(color: AppTheme.color('${prefix}primary'), fontWeight: FontWeight.bold, fontSize: 17)),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: AppTheme.color('${prefix}panel'), borderRadius: BorderRadius.circular(9)),
-                  child: Text('هذا مثال للنص داخل بطاقة', style: TextStyle(color: AppTheme.color('${prefix}text'))),
+                InkWell(
+                  onTap: themeSaving ? null : () => pickThemeColor(prefix + 'primary', 'عنوان الصفحة'),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      selectedThemeSection == 'home' ? 'الرئيسية' :
+                      selectedThemeSection == 'movies' ? 'الأفلام' :
+                      selectedThemeSection == 'series' ? 'المسلسلات' :
+                      selectedThemeSection == 'live' ? 'البث المباشر' :
+                      selectedThemeSection == 'settings' ? 'الإعدادات' :
+                      selectedThemeSection == 'admin' ? 'إعدادات المدير' : 'SHAM FLIX',
+                      style: TextStyle(color: AppTheme.color(prefix + 'primary'), fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: null,
-                  style: FilledButton.styleFrom(backgroundColor: AppTheme.color('${prefix}button')),
-                  child: Text('زر تجريبي', style: TextStyle(color: AppTheme.color('${prefix}text'))),
+                InkWell(
+                  onTap: themeSaving ? null : () => pickThemeColor(prefix + 'panel', 'خلفية البطاقة'),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.color(prefix + 'panel'),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.color(prefix + 'border')),
+                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      InkWell(
+                        onTap: themeSaving ? null : () => pickThemeColor(prefix + 'text', 'النص الرئيسي'),
+                        child: Text('أحدث الأفلام والمسلسلات', style: TextStyle(color: AppTheme.color(prefix + 'text'), fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: themeSaving ? null : () => pickThemeColor(prefix + 'secondaryText', 'النص الثانوي'),
+                        child: Text('اضغط على أي عنصر في المعاينة لتغيير لونه مباشرة', style: TextStyle(color: AppTheme.color(prefix + 'secondaryText'), fontSize: 11)),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 6, children: [
+                        InkWell(
+                          onTap: themeSaving ? null : () => pickThemeColor(prefix + 'badge', 'الشارات'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                            decoration: BoxDecoration(color: AppTheme.color(prefix + 'badge'), borderRadius: BorderRadius.circular(20)),
+                            child: Text('جديد', style: TextStyle(color: AppTheme.color(prefix + 'text'), fontSize: 11)),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: themeSaving ? null : () => pickThemeColor(prefix + 'packageBorder', 'حدود الباقات'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                            decoration: BoxDecoration(border: Border.all(color: AppTheme.color(prefix + 'packageBorder')), borderRadius: BorderRadius.circular(20)),
+                            child: Text('باقة مميزة', style: TextStyle(color: AppTheme.color(prefix + 'text'), fontSize: 11)),
+                          ),
+                        ),
+                      ]),
+                    ]),
+                  ),
                 ),
-                Text('نص ثانوي للمعاينة', style: TextStyle(color: AppTheme.color('${prefix}secondaryText'))),
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: themeSaving ? null : () => pickThemeColor(prefix + 'button', 'الأزرار'),
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(color: AppTheme.color(prefix + 'button'), borderRadius: BorderRadius.circular(8)),
+                    child: Text('زر تجريبي', style: TextStyle(color: AppTheme.color(prefix + 'text'), fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text('كل عنصر قابل للاختيار من المعاينة', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.color(prefix + 'secondaryText'), fontSize: 10)),
               ]),
             ),
             const SizedBox(height: 12),
