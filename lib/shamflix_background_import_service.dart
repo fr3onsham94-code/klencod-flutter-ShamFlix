@@ -8,7 +8,9 @@ import 'content_page_import_service.dart';
 import 'stream_source_detector.dart';
 
 const _jobKey = 'shamflix_background_import_job';
-const _workName = 'shamflix_content_import_unique';
+const _workName = 'shamflix_content_import';
+String _jobStorageKey(String id) => '${_jobKey}_${id}';
+String _workUniqueName(String id) => '${_workName}_${id}';
 const _taskName = 'shamflix_content_import';
 
 @pragma('vm:entry-point')
@@ -36,10 +38,31 @@ class ShamFlixBackgroundImportService {
   static Future<void> initialize() =>
       Workmanager().initialize(shamflixImportCallbackDispatcher);
 
-  static Future<Map<String, dynamic>?> currentJob() async {
+  static Future<List<Map<String, dynamic>>> jobs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
-    final raw = prefs.getString(_jobKey);
+    final result = <Map<String, dynamic>>[];
+    for (final key in prefs.getKeys().where((key) => key.startsWith('${_jobKey}_'))) {
+      final raw = prefs.getString(key);
+      if (raw == null) continue;
+      try { result.add(Map<String, dynamic>.from(jsonDecode(raw) as Map)); } catch (_) {}
+    }
+    result.sort((a, b) => (b['started_at'] ?? '').toString().compareTo((a['started_at'] ?? '').toString()));
+    return result;
+  }
+
+  static Future<Map<String, dynamic>?> currentJob() async {
+    final all = await jobs();
+    for (final job in all) {
+      if (['queued', 'running'].contains(job['status'])) return job;
+    }
+    return all.isEmpty ? null : all.first;
+  }
+
+  static Future<Map<String, dynamic>?> job(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final raw = prefs.getString(_jobStorageKey(id));
     if (raw == null) return null;
     try { return Map<String, dynamic>.from(jsonDecode(raw) as Map); } catch (_) { return null; }
   }
@@ -61,10 +84,6 @@ class ShamFlixBackgroundImportService {
     if (!notificationPermission.isGranted) {
       throw Exception('يجب السماح بإشعارات ShamFlix حتى يظهر إشعار الاستيراد أثناء العمل بالخلفية');
     }
-    final old = await currentJob();
-    if (old != null && ['queued', 'running'].contains(old['status'])) {
-      throw Exception('هناك عملية استيراد تعمل حالياً');
-    }
     final job = <String, dynamic>{
       'id': DateTime.now().microsecondsSinceEpoch.toString(),
       'status': 'queued', 'content_type': contentType,
@@ -77,10 +96,10 @@ class ShamFlixBackgroundImportService {
       'started_at': DateTime.now().toIso8601String(),
     };
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_jobKey, jsonEncode(job));
+    await prefs.setString(_jobStorageKey(job['id'].toString()), jsonEncode(job));
     try {
       await Workmanager().registerOneOffTask(
-        _workName, _taskName,
+        _workUniqueName(job['id'].toString()), _taskName,
         inputData: {'job_id': job['id']},
         existingWorkPolicy: ExistingWorkPolicy.keep,
         constraints: Constraints(networkType: NetworkType.connected),
@@ -99,25 +118,32 @@ class ShamFlixBackgroundImportService {
     }
   }
 
+  static Future<void> cancelJob(String id) async {
+    await Workmanager().cancelByUniqueName(_workUniqueName(id));
+    await _status('cancelled', message: 'تم إيقاف الاستيراد', expectedJobId: id);
+  }
+
   static Future<void> cancel() async {
-    await Workmanager().cancelByUniqueName(_workName);
-    await _status('cancelled', message: 'تم إيقاف الاستيراد');
+    final active = await currentJob();
+    if (active != null && ['queued', 'running'].contains(active['status'])) {
+      await cancelJob(active['id'].toString());
+    }
   }
 
   static Future<void> _save(Map<String, dynamic> job) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_jobKey, jsonEncode(job));
+    await prefs.setString(_jobStorageKey(job['id'].toString()), jsonEncode(job));
   }
 
   static Future<bool> _saveIfCurrent(Map<String, dynamic> job, String expectedJobId) async {
-    final latest = await currentJob();
+    final latest = await job(expectedJobId);
     if (latest == null || latest['id']?.toString() != expectedJobId || !['queued', 'running'].contains(latest['status'])) return false;
     await _save(job);
     return true;
   }
 
   static Future<void> _status(String value, {String? error, String? message, String? expectedJobId}) async {
-    final job = await currentJob();
+    final job = expectedJobId == null ? await currentJob() : await this.job(expectedJobId);
     if (job == null || (expectedJobId != null && job['id']?.toString() != expectedJobId) || (job['status'] == 'cancelled' && value != 'cancelled')) return;
     job['status'] = value;
     if (error != null) job['error'] = error;
@@ -137,7 +163,7 @@ class ShamFlixBackgroundImportService {
   }
 
   static Future<void> _run(String? expectedJobId) async {
-    final job = await currentJob();
+    final job = expectedJobId == null ? null : await ShamFlixBackgroundImportService.job(expectedJobId);
     if (job == null) throw Exception('بيانات مهمة الاستيراد غير موجودة');
     if (expectedJobId == null || job['id']?.toString() != expectedJobId) return;
     if (job['status'] == 'cancelled') return;
@@ -158,7 +184,7 @@ class ShamFlixBackgroundImportService {
     final resumeAt = ((job['processed'] as num?) ?? 0).toInt().clamp(0, items.length);
     for (var itemIndex = resumeAt; itemIndex < items.length; itemIndex++) {
       final item = items[itemIndex];
-      final latest = await currentJob();
+      final latest = await ShamFlixBackgroundImportService.job(expectedJobId);
       if (latest == null || latest['id']?.toString() != expectedJobId || latest['status'] == 'cancelled') return;
       try {
         final title = item['title']?.toString().trim() ?? '';
@@ -263,7 +289,7 @@ class ShamFlixBackgroundImportService {
         job['last_error'] = e.toString();
       }
       // لا تسمح لنسخة المهمة المحلية بالكتابة فوق طلب إلغاء وصل أثناء معالجة العنصر.
-      final latestAfterItem = await currentJob();
+      final latestAfterItem = await ShamFlixBackgroundImportService.job(expectedJobId);
       if (latestAfterItem == null || latestAfterItem['id']?.toString() != expectedJobId || latestAfterItem['status'] == 'cancelled') {
         return;
       }
@@ -279,7 +305,7 @@ class ShamFlixBackgroundImportService {
         'failed': job['failed'],
       });
     }
-    final latestBeforeComplete = await currentJob();
+    final latestBeforeComplete = await ShamFlixBackgroundImportService.job(expectedJobId);
     if (latestBeforeComplete == null || latestBeforeComplete['id']?.toString() != expectedJobId || latestBeforeComplete['status'] == 'cancelled') return;
     job['status'] = 'completed';
     job['message'] = 'اكتمل الاستيراد';
