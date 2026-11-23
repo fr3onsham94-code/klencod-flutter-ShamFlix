@@ -1894,8 +1894,20 @@ class _AdminPageState extends State<AdminPage> {
     ]) Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       Text('${item[0]}: ${(item[2] as double).toStringAsFixed(0)}',style:TextStyle(color:AppTheme.text)),
       Slider(value:item[2] as double,min:item[3] as double,max:item[4] as double,activeColor:adminGold,onChanged:(v)async{
-        final p=await SharedPreferences.getInstance();await p.setDouble(item[1] as String,v);
-        await _loadAdminSidebarSettings();appSettingsRefreshNotifier.value++;
+        final key = item[1] as String;
+        setState(() {
+          switch (key) {
+            case 'shamflix_catalog_sidebar_width': sidebarWidth = v; break;
+            case 'shamflix_catalog_sidebar_button': sidebarButtonSize = v; break;
+            case 'shamflix_catalog_package_font': packageFontSize = v; break;
+            case 'shamflix_catalog_section_font': sectionFontSize = v; break;
+            case 'shamflix_catalog_package_icon': packageIconSize = v; break;
+            case 'shamflix_catalog_package_height': packageItemHeight = v; break;
+          }
+        });
+        final p=await SharedPreferences.getInstance();
+        await p.setDouble(key,v);
+        appSettingsRefreshNotifier.value++;
       }),
     ]),
     TextButton(onPressed:()async{final p=await SharedPreferences.getInstance();for(final e in <String,double>{'shamflix_catalog_sidebar_width':110,'shamflix_catalog_sidebar_button':42,'shamflix_catalog_package_font':11,'shamflix_catalog_section_font':12,'shamflix_catalog_package_icon':15,'shamflix_catalog_package_height':38}.entries){await p.setDouble(e.key,e.value);}await _loadAdminSidebarSettings();appSettingsRefreshNotifier.value++;},child:const Text('إعادة ضبط')),
