@@ -89,11 +89,7 @@ class ContentPageImportService {
           final watchUri = _validatedUri(watchUrl);
           final watchHtml = await _fetchPublicHtml(watchUri);
           sources.addAll(_extractStreamSources(watchHtml, watchUri));
-          sources.add({
-            'url': watchUri.toString(),
-            'name': 'مشاهدة الفيلم على أكوام',
-            'kind': 'iframe',
-          });
+          // لا نضيف صفحة المشاهدة على أكوام كسيرفر؛ نحتفظ فقط بمصادر البث المستخرجة من الصفحة العامة.
         }
       }
 
@@ -224,11 +220,7 @@ class ContentPageImportService {
               !RegExp(r'^\d+$').hasMatch(episodePageTitle)
           ? episodePageTitle
           : '';
-      final resolvedEpisodeTitle = descriptivePageTitle.isNotEmpty
-          ? descriptivePageTitle
-          : (linkTitle.isNotEmpty && !RegExp(r'^\d+$').hasMatch(linkTitle)
-              ? linkTitle
-              : 'الحلقة $resolvedEpisodeNumber');
+      final resolvedEpisodeTitle = 'الحلقة $resolvedEpisodeNumber';
       final watchUrl = _findPublicWatchUrl(episodeHtml, episodeUri);
       final servers = <Map<String, dynamic>>[];
       if (watchUrl != null) {
@@ -238,11 +230,7 @@ class ContentPageImportService {
           final watchHtml = await _fetchPublicHtml(watchUri);
           servers.addAll(_extractStreamSources(watchHtml, watchUri));
         } catch (_) {}
-        servers.add({
-          'url': watchUri.toString(),
-          'name': 'مشاهدة الحلقة على أكوام',
-          'kind': 'iframe',
-        });
+        // صفحة /watch/ ليست رابط بث، لذلك لا تُضاف إلى قائمة سيرفرات الحلقة.
       }
       return {
         'episode_number': resolvedEpisodeNumber,
