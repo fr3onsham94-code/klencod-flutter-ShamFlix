@@ -115,8 +115,8 @@ function safeStreamUrl(raw: string): string | null {
 
 function categoryOf(raw: string, name: string): string {
   const v = (raw + " " + name).toLowerCase();
-  if (/\\bmbc\\b|ام بي سي|إم بي سي/.test(v)) return "MBC";
-  if (/\\bbein(?:\\s*[- ]?\\s*sports?)?\\b|بي ?إن ?سبورت/.test(v)) return "beIN SPORTS";
+  if (/\bmbc\b|ام بي سي|إم بي سي/.test(v)) return "MBC";
+  if (/\bbein(?:\s*[- ]?\s*sports?)?\b|بي ?إن ?سبورت/.test(v)) return "beIN SPORTS";
   if (/sport|رياض|football|soccer|كرة|الكأس|ssc|sportklub/.test(v)) return "رياضية";
   if (/news|اخبار|إخبار|خبر|العربية|الجزيرة|سكاي نيوز|bbc news|cnn|france 24|euronews/.test(v)) return "إخبارية";
   if (/movie|film|cinema|سينما|أفلام|افلام|قناة فيلم/.test(v)) return "أفلام";
@@ -509,8 +509,8 @@ async function syncChannels(db: any) {
     const labels = new Set<string>();
     const country = uniqueStreams.map(countryPackageLabel).find(Boolean) || "قنوات عربية متنوعة";
     labels.add(country);
-    if (uniqueStreams.some(e => /\\bmbc\\b|ام بي سي|إم بي سي/i.test(e.name + " " + e.groupTitle))) labels.add("MBC");
-    if (uniqueStreams.some(e => /\\bbein(?:\\s*[- ]?\\s*sports?)?\\b|بي ?إن ?سبورت/i.test(e.name + " " + e.groupTitle))) labels.add("beIN SPORTS");
+    if (uniqueStreams.some(e => /\bmbc\b|ام بي سي|إم بي سي/i.test(e.name + " " + e.groupTitle))) labels.add("MBC");
+    if (uniqueStreams.some(e => /\bbein(?:\s*[- ]?\s*sports?)?\b|بي ?إن ?سبورت/i.test(e.name + " " + e.groupTitle))) labels.add("beIN SPORTS");
     if (category === "رياضية" || category === "beIN SPORTS") labels.add("رياضية");
     if (category !== "رياضية" && category !== "beIN SPORTS" && category !== "MBC") labels.add(category);
     memberships.set(key, labels);
