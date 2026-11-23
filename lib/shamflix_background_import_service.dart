@@ -35,8 +35,13 @@ void shamflixImportCallbackDispatcher() {
 }
 
 class ShamFlixBackgroundImportService {
-  static Future<void> initialize() =>
-      Workmanager().initialize(shamflixImportCallbackDispatcher);
+  static bool _initialized = false;
+
+  static Future<void> initialize() async {
+    if (_initialized) return;
+    await Workmanager().initialize(shamflixImportCallbackDispatcher);
+    _initialized = true;
+  }
 
   static Future<List<Map<String, dynamic>>> jobs() async {
     final prefs = await SharedPreferences.getInstance();
@@ -103,6 +108,7 @@ class ShamFlixBackgroundImportService {
     required String categoryUrl,
   }) async {
     if (items.isEmpty || packageIds.isEmpty) throw Exception('اختر عناصر وباقة واحدة على الأقل');
+    await initialize();
     final notificationPermission = await Permission.notification.request();
     if (!notificationPermission.isGranted) {
       throw Exception('يجب السماح بإشعارات ShamFlix حتى يظهر إشعار الاستيراد أثناء العمل بالخلفية');
