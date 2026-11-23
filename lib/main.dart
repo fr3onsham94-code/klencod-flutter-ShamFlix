@@ -580,6 +580,10 @@ class _HomePageState extends State<HomePage> {
   Color get homeSecondaryText => AppTheme.sectionColor('home', 'secondaryText');
   Color get homeButton => AppTheme.sectionColor('home', 'button');
   Color get homeBorder => AppTheme.sectionColor('home', 'border');
+  Color get homeIcon => AppTheme.sectionColor('home', 'icon');
+  Color get homeDescription => AppTheme.sectionColor('home', 'description');
+  Color get homeProgress => AppTheme.sectionColor('home', 'progress');
+  Color get homeSelected => AppTheme.sectionColor('home', 'selected');
   int selectedTab = 0;
   int selectedCategory = 0;
 
@@ -764,7 +768,7 @@ class _HomePageState extends State<HomePage> {
         height: height,
         color: homePanel,
         child: Center(
-          child: Icon(Icons.movie, color: homePrimary, size: 48),
+          child: Icon(Icons.movie, color: homeIcon, size: 48),
         ),
       );
     }
@@ -779,7 +783,7 @@ class _HomePageState extends State<HomePage> {
           height: height,
           color: homePanel,
           child: Center(
-            child: Icon(Icons.movie, color: homePrimary, size: 48),
+            child: Icon(Icons.movie, color: homeIcon, size: 48),
           ),
         );
       },
@@ -895,7 +899,7 @@ class _HomePageState extends State<HomePage> {
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Center(
-                  child: CircularProgressIndicator(color: homePrimary),
+                  child: CircularProgressIndicator(color: homeProgress),
                 );
               }
 
@@ -903,7 +907,7 @@ class _HomePageState extends State<HomePage> {
                 return Center(
                   child: Text(
                     'تعذر تحميل البيانات',
-                    style: TextStyle(color: homeSecondaryText),
+                    style: TextStyle(color: homeDescription),
                   ),
                 );
               }
@@ -920,7 +924,7 @@ class _HomePageState extends State<HomePage> {
                 return Center(
                   child: Text(
                     'لا يوجد محتوى منشور حالياً',
-                    style: TextStyle(color: homeSecondaryText),
+                    style: TextStyle(color: homeDescription),
                   ),
                 );
               }
@@ -963,9 +967,9 @@ class _HomePageState extends State<HomePage> {
             SizedBox(
               height: 112,
               child: snapshot.connectionState == ConnectionState.waiting
-                  ? Center(child: CircularProgressIndicator(color: homePrimary))
+                  ? Center(child: CircularProgressIndicator(color: homeProgress))
                   : records.isEmpty
-                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: homeSecondaryText)))
+                      ? Center(child: Text(appText('لا توجد قنوات تمت مشاهدتها بعد', 'No channels watched yet', 'Henüz kanal izlenmedi'), style: TextStyle(color: homeDescription)))
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
                           reverse: true,
@@ -990,9 +994,9 @@ class _HomePageState extends State<HomePage> {
                                     child: SizedBox(
                                       width: 48, height: 48,
                                       child: logo.isEmpty
-                                          ? ColoredBox(color: homeBackground, child: Icon(Icons.live_tv, color: homePrimary))
+                                          ? ColoredBox(color: homeBackground, child: Icon(Icons.live_tv, color: homeIcon))
                                           : Image.network(logo, fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => ColoredBox(color: homeBackground, child: Icon(Icons.live_tv, color: homePrimary))),
+                                              errorBuilder: (_, __, ___) => ColoredBox(color: homeBackground, child: Icon(Icons.live_tv, color: homeIcon))),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
@@ -1030,9 +1034,9 @@ class _HomePageState extends State<HomePage> {
                 child: Container(width: 145, margin: const EdgeInsets.only(left: 12),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     ClipRRect(borderRadius: BorderRadius.circular(10), child: SizedBox(width: 145, height: 145,
-                      child: poster.isEmpty ? Container(color: homePanel, child: Icon(Icons.play_circle, color: homePrimary, size: 42)) :
+                      child: poster.isEmpty ? Container(color: homePanel, child: Icon(Icons.play_circle, color: homeIcon, size: 42)) :
                         Image.network(poster, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
-                          Container(color: homePanel, child: Icon(Icons.play_circle, color: homePrimary, size: 42))))),
+                          Container(color: homePanel, child: Icon(Icons.play_circle, color: homeIcon, size: 42))))),
                     const SizedBox(height: 7),
                     Text(valueOf(record['title'], appText('محتوى', 'Content', 'İçerik')), maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: homeText, fontWeight: FontWeight.bold)),
@@ -1057,7 +1061,7 @@ class _HomePageState extends State<HomePage> {
             height: 365,
             margin: const EdgeInsets.fromLTRB(12, 2, 12, 12),
             decoration: BoxDecoration(color: homePanel, borderRadius: BorderRadius.circular(16)),
-            child: Center(child: CircularProgressIndicator(color: homePrimary)),
+            child: Center(child: CircularProgressIndicator(color: homeProgress)),
           );
         }
         if (items.isEmpty) {
@@ -1068,7 +1072,7 @@ class _HomePageState extends State<HomePage> {
             child: Center(
               child: Text(
                 appText('لا يوجد محتوى مضاف حديثاً', 'No recent additions', 'Yeni eklenen içerik yok'),
-                style: TextStyle(color: homeSecondaryText),
+                style: TextStyle(color: homeDescription),
               ),
             ),
           );
@@ -1338,7 +1342,7 @@ class _HomePageState extends State<HomePage> {
           destinations: [
             NavigationDestination(
               icon: Icon(Icons.home_outlined, color: homeSecondaryText, size: 19),
-              selectedIcon: Icon(Icons.home, color: homePrimary, size: 19),
+              selectedIcon: Icon(Icons.home, color: homeSelected, size: 19),
               label: appText('الرئيسية', 'Home', 'Ana Sayfa'),
             ),
             NavigationDestination(
@@ -1355,7 +1359,7 @@ class _HomePageState extends State<HomePage> {
             ),
             NavigationDestination(
               icon: Icon(Icons.person_outline, color: homeSecondaryText, size: 19),
-              selectedIcon: Icon(Icons.person, color: homePrimary, size: 19),
+              selectedIcon: Icon(Icons.person, color: homeSelected, size: 19),
               label: appText('حسابي', 'My Account', 'Hesabım'),
             ),
           ],
@@ -1392,6 +1396,11 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
   Color get sectionBorder => AppTheme.sectionColor(themeSection, 'border');
   Color get sectionPackageBorder => AppTheme.sectionColor(themeSection, 'packageBorder');
   Color get sectionBadge => AppTheme.sectionColor(themeSection, 'badge');
+  Color get sectionIcon => AppTheme.sectionColor(themeSection, 'icon');
+  Color get sectionDescription => AppTheme.sectionColor(themeSection, 'description');
+  Color get sectionProgress => AppTheme.sectionColor(themeSection, 'progress');
+  Color get sectionDropdownBackground => AppTheme.sectionColor(themeSection, 'dropdownBackground');
+  Color get sectionDropdownText => AppTheme.sectionColor(themeSection, 'dropdownText');
 
   bool loading = true;
   bool sidebarOpen = false;
@@ -1562,14 +1571,14 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           child: url.isEmpty
               ? Container(
                   color: sectionPanel,
-                  child: Icon(Icons.movie, color: sectionPrimary, size: 28),
+                  child: Icon(Icons.movie, color: sectionIcon, size: 28),
                 )
               : Image.network(
                   url,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
                     color: sectionPanel,
-                    child: Icon(Icons.movie, color: sectionPrimary, size: 28),
+                    child: Icon(Icons.movie, color: sectionIcon, size: 28),
                   ),
                 ),
         ),
@@ -1603,7 +1612,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
               Text(
                 '${contents.length} ${appText('عنصر', 'items', 'içerik')}',
-                style: TextStyle(color: sectionSecondaryText, fontSize: 10),
+                style: TextStyle(color: sectionDescription, fontSize: 10),
               ),
               TextButton(
                 style: TextButton.styleFrom(foregroundColor: sectionButton),
@@ -1627,7 +1636,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 appText('لا يوجد محتوى في هذه الباقة حالياً',
                     'No content in this package yet',
                     'Bu pakette henüz içerik yok'),
-                style: TextStyle(color: sectionSecondaryText, fontSize: 11),
+                style: TextStyle(color: sectionDescription, fontSize: 11),
               ),
             )
           else
@@ -1795,7 +1804,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
               ),
               Text(
                 '${contents.length}',
-                style: TextStyle(color: sectionSecondaryText, fontSize: 12),
+                style: TextStyle(color: sectionDescription, fontSize: 12),
               ),
             ],
           ),
@@ -1807,7 +1816,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                     appText('لا يوجد محتوى في هذه الباقة حالياً',
                         'No content in this package yet',
                         'Bu pakette henüz içerik yok'),
-                    style: TextStyle(color: sectionSecondaryText),
+                    style: TextStyle(color: sectionDescription),
                   ),
                 )
               : GridView.builder(
@@ -1884,7 +1893,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                 const Spacer(),
                 IconButton(
                   onPressed: _loadPackages,
-                  icon: Icon(Icons.refresh, color: sectionPrimary),
+                  icon: Icon(Icons.refresh, color: sectionIcon),
                 ),
               ],
             ),
@@ -1894,11 +1903,11 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
             child: TextField(
               controller: _searchController,
               textDirection: TextDirection.rtl,
-              style: TextStyle(color: sectionText),
+              style: TextStyle(color: sectionDropdownText),
               onChanged: (value) => setState(() => _searchQuery = value),
               decoration: InputDecoration(
                 hintText: widget.contentType == 'movie' ? appText('ابحث عن فيلم...', 'Search movies...', 'Film ara...') : appText('ابحث عن مسلسل...', 'Search series...', 'Dizi ara...'),
-                prefixIcon: Icon(Icons.search, color: sectionPrimary),
+                prefixIcon: Icon(Icons.search, color: sectionIcon),
                 suffixIcon: _searchQuery.isEmpty ? null : IconButton(onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); }, icon: Icon(Icons.close, color: sectionSecondaryText)),
                 filled: true, fillColor: sectionPanel,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -1908,7 +1917,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           Expanded(
             child: loading
                 ? Center(
-                    child: CircularProgressIndicator(color: sectionPrimary),
+                    child: CircularProgressIndicator(color: sectionProgress),
                   )
                 : error != null
                     ? Center(
@@ -1922,7 +1931,7 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
                             child: Text(
                               appText('لا توجد باقات حالياً',
                                   'No packages yet', 'Henüz paket yok'),
-                              style: TextStyle(color: sectionSecondaryText),
+                              style: TextStyle(color: sectionDescription),
                             ),
                           )
                         : Stack(
@@ -2011,6 +2020,9 @@ class _AccountPageState extends State<AccountPage> {
   Color get accountPanel => AppTheme.sectionColor('account', 'panel');
   Color get accountText => AppTheme.sectionColor('account', 'text');
   Color get accountSecondaryText => AppTheme.sectionColor('account', 'secondaryText');
+  Color get accountIcon => AppTheme.sectionColor('account', 'icon');
+  Color get accountDescription => AppTheme.sectionColor('account', 'description');
+  Color get accountProgress => AppTheme.sectionColor('account', 'progress');
   Color get accountButton => AppTheme.sectionColor('account', 'button');
   bool loading = false;
   bool linkingGoogle = false;
@@ -2153,7 +2165,7 @@ class _AccountPageState extends State<AccountPage> {
       color: accountPanel,
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
-        leading: Icon(icon, color: accountPrimary),
+        leading: Icon(icon, color: accountIcon,
         title: Text(
           title,
           style: TextStyle(color: accountText),
@@ -2162,7 +2174,7 @@ class _AccountPageState extends State<AccountPage> {
             ? null
             : Text(
                 subtitle,
-                style: TextStyle(color: accountSecondaryText),
+                style: TextStyle(color: accountDescription),
               ),
         trailing: Icon(
           Icons.chevron_left,
@@ -2193,7 +2205,7 @@ class _AccountPageState extends State<AccountPage> {
           linked
               ? 'يمكنك تسجيل الدخول باستخدام Google'
               : 'اربط Gmail بحسابك الحالي دون إنشاء حساب جديد',
-          style: TextStyle(color: accountSecondaryText),
+          style: TextStyle(color: accountDescription),
         ),
         trailing: linked
             ? const Icon(
