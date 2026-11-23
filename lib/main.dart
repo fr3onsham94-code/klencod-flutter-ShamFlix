@@ -2165,7 +2165,7 @@ class _AccountPageState extends State<AccountPage> {
       color: accountPanel,
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
-        leading: Icon(icon, color: accountIcon,
+        leading: Icon(icon, color: accountIcon),
         title: Text(
           title,
           style: TextStyle(color: accountText),
