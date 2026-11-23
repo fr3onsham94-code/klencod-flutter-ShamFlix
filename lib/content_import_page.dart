@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'admin_auth_service.dart';
 import 'admin_packages_page.dart';
 import 'app_theme.dart';
 import 'content_category_import_service.dart';
 import 'content_page_import_service.dart';
+import 'shamflix_background_import_service.dart';
 
 class ContentImportPage extends StatefulWidget {
   const ContentImportPage({super.key});
@@ -31,15 +33,71 @@ class _ContentImportPageState extends State<ContentImportPage> {
   int monitorFailures = 0;
   int imported = 0, duplicates = 0, failed = 0;
   String? error;
+  Timer? _backgroundJobTimer;
+  Map<String, dynamic>? backgroundJob;
 
   Color get accent => AppTheme.primary;
   Color get bg => AppTheme.background;
   Color get panel => AppTheme.panel;
 
   @override
-  void initState() { super.initState(); loadPackages(); }
+  void initState() {
+    super.initState();
+    loadPackages();
+    _refreshBackgroundJob();
+    _backgroundJobTimer = Timer.periodic(const Duration(seconds: 3), (_) => _refreshBackgroundJob());
+  }
   @override
-  void dispose() { url.dispose(); category.dispose(); super.dispose(); }
+  void dispose() {
+    _backgroundJobTimer?.cancel();
+    url.dispose();
+    category.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshBackgroundJob() async {
+    final job = await ShamFlixBackgroundImportService.currentJob();
+    if (!mounted) return;
+    final status = job?['status']?.toString();
+    if (status == 'completed' || status == 'failed' || status == 'cancelled') {
+      _backgroundJobTimer?.cancel();
+      _backgroundJobTimer = null;
+    }
+    setState(() => backgroundJob = job);
+  }
+
+  Future<void> startBackgroundImport() async {
+    if (category.text.trim().isNotEmpty) _addCategoriesFromInput();
+    final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
+    if (chosen.isEmpty || packageIds.isEmpty) {
+      message(packageIds.isEmpty ? 'اختر باقة واحدة على الأقل' : 'حدد العناصر التي تريد استيرادها', true);
+      return;
+    }
+    try {
+      await ShamFlixBackgroundImportService.start(
+        items: chosen,
+        packageIds: packageIds.toList(),
+        contentType: type,
+        categories: selectedCategories.toList(),
+        publish: publish,
+        monitorSeries: monitorSeries,
+        monitorMovies: monitorMovies,
+        seriesMonitorInterval: monitorInterval,
+        movieMonitorInterval: movieMonitorInterval,
+        categoryUrl: url.text.trim(),
+      );
+      await _refreshBackgroundJob();
+      _backgroundJobTimer ??= Timer.periodic(const Duration(seconds: 3), (_) => _refreshBackgroundJob());
+      message('بدأ الاستيراد بالخلفية. يمكنك مغادرة هذه الصفحة وسيبقى التقدم محفوظاً.');
+    } catch (e) {
+      message(e.toString().replaceFirst('Exception: ', ''), true);
+    }
+  }
+
+  Future<void> cancelBackgroundImport() async {
+    await ShamFlixBackgroundImportService.cancel();
+    await _refreshBackgroundJob();
+  }
 
   Future<void> loadPackages() async {
     setState(() => loadingPackages = true);
@@ -833,6 +891,39 @@ class _ContentImportPageState extends State<ContentImportPage> {
           if (error != null) Card(color: panel, child: Padding(
             padding: const EdgeInsets.all(12), child: Text(error!, style: const TextStyle(color: Colors.redAccent)),
           )),
+          if (backgroundJob != null) ...[
+            Card(
+              color: panel,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(children: [
+                    Icon(Icons.sync, color: accent),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('حالة الاستيراد بالخلفية', style: TextStyle(color: accent, fontWeight: FontWeight.bold))),
+                    Text((backgroundJob!['status'] ?? '').toString()),
+                  ]),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: (backgroundJob!['total'] as num? ?? 0) == 0 ? 0 :
+                      ((backgroundJob!['processed'] as num? ?? 0) / (backgroundJob!['total'] as num)).clamp(0.0, 1.0),
+                    color: accent,
+                  ),
+                  const SizedBox(height: 8),
+                  Text((backgroundJob!['message'] ?? '').toString()),
+                  Text('تمت الإضافة: ${backgroundJob!['imported'] ?? 0} • المكرر: ${backgroundJob!['duplicates'] ?? 0} • تعذر: ${backgroundJob!['failed'] ?? 0}'),
+                  if ((backgroundJob!['error'] ?? '').toString().isNotEmpty)
+                    Text((backgroundJob!['error']).toString(), style: const TextStyle(color: Colors.redAccent)),
+                  if (['queued', 'running'].contains(backgroundJob!['status']))
+                    Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+                      onPressed: cancelBackgroundImport,
+                      icon: const Icon(Icons.stop_circle_outlined),
+                      label: const Text('إيقاف الاستيراد'),
+                    )),
+                ]),
+              ),
+            ),
+          ],
           if (items.isNotEmpty) ...[
             Card(color: panel, child: Row(children: [
               Expanded(child: Padding(
@@ -868,6 +959,12 @@ class _ContentImportPageState extends State<ContentImportPage> {
                   : const Icon(Icons.cloud_upload_outlined),
               label: Text(importing ? 'جارٍ الاستيراد...' : 'استيراد ونشر ' + selected.length.toString() + ' عنصر'),
               style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: importing || selected.isEmpty ? null : startBackgroundImport,
+              icon: const Icon(Icons.downloading_outlined),
+              label: Text('استيراد بالخلفية ' + selected.length.toString() + ' عنصر'),
             ),
             if (imported + duplicates + failed > 0)
               Card(color: panel, child: Padding(
