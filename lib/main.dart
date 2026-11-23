@@ -2538,9 +2538,9 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
   Future<void> _clearHistory() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => AlertDialog(backgroundColor: settingsDialogBackground,
         backgroundColor: panel,
-        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: settingsPrimary)),
+        title: Text('مسح سجل المشاهدة بالكامل؟', style: TextStyle(color: settingsDialogTitle)),
         content: Text('سيتم حذف سجل المشاهدة من هذا الجهاز والحساب السحابي.', style: TextStyle(color: settingsDescription)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
@@ -2649,9 +2649,9 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       var installAfterDialog = false;
       await showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(backgroundColor: settingsDialogBackground,
           backgroundColor: panel,
-          title: Text('يتوفر تحديث جديد', style: TextStyle(color: settingsPrimary)),
+          title: Text('يتوفر تحديث جديد', style: TextStyle(color: settingsDialogTitle)),
           content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2712,6 +2712,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             max: max,
             divisions: (max - min).round(),
             activeColor: settingsSwitchActive,
+            inactiveThumbColor: settingsSwitchInactive,
             inactiveColor: Colors.white24,
             onChanged: onChanged,
           ),
@@ -2769,6 +2770,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             child: SwitchListTile(
               value: swipeSidebarEnabled,
               activeColor: settingsSwitchActive,
+            inactiveThumbColor: settingsSwitchInactive,
               secondary: Icon(Icons.swipe, color: settingsIcon),
               title: Text(appText('فتح وإغلاق قائمة الباقات بالسحب', 'Swipe to open/close package menu', 'Paket menüsünü kaydırarak aç/kapat'), style: TextStyle(color: settingsText)),
               subtitle: Text(appText('اسحب يميناً أو يساراً لإظهار القائمة الجانبية أو إخفائها في الأفلام والمسلسلات والبث المباشر', 'Swipe horizontally to show or hide the package sidebar in Movies, Series and Live TV', 'Film, Dizi ve Canlı TV sayfalarında paket kenar çubuğunu yatay kaydırarak açıp kapatın'), style: TextStyle(color: settingsDescription, fontSize: 12)),
@@ -2789,6 +2791,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
             child: SwitchListTile(
               value: forceLandscape,
               activeColor: settingsSwitchActive,
+            inactiveThumbColor: settingsSwitchInactive,
               secondary: Icon(Icons.screen_rotation, color: settingsIcon),
               title: Text(appText('تشغيل التطبيق بالوضع العرضي فقط', 'Landscape Mode Only', 'Yalnızca Yatay Mod'), style: TextStyle(color: settingsText)),
               subtitle: Text(appText('قفل التطبيق على الوضع الأفقي ومنع العرض الطولي', 'Lock the entire app to landscape and prevent portrait mode', 'Uygulamayı yatay modda kilitle ve dikey modu engelle'), style: TextStyle(color: settingsDescription, fontSize: 12)),
