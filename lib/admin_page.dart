@@ -12,6 +12,7 @@ import 'admin_packages_page.dart';
 import 'supabase_service.dart';
 import 'content_page_import_service.dart';
 import 'content_import_page.dart';
+import 'background_import_status_page.dart';
 import 'series_monitor_page.dart';
 import 'movie_monitor_page.dart';
 import 'tv_sources_settings_page.dart';
@@ -721,6 +722,23 @@ class _AdminPageState extends State<AdminPage> {
         themePaletteSection(),
         _settingsGroupTitle('القائمة العلوية وقائمة الباقات', 'التحكم بحجم زر القائمة وعرضها والخطوط والأيقونات'),
         _sidebarSettingsCard(),
+        _settingsGroupTitle('الاستيراد وإدارة المهام', 'متابعة جميع عمليات الاستيراد الجارية والسابقة'),
+        Card(
+          color: adminPanel,
+          child: ListTile(
+            leading: Icon(Icons.downloading_outlined, color: adminGold, size: 28),
+            title: Text('حالات الاستيراد', style: TextStyle(
+              color: AppTheme.sectionColor('admin', 'text'),
+              fontWeight: FontWeight.bold,
+            )),
+            subtitle: Text('عرض تقدم كل عملية وإلغاء أي عملية بشكل مستقل',
+              style: TextStyle(color: AppTheme.sectionColor('admin', 'secondaryText'), fontSize: 12)),
+            trailing: Icon(Icons.chevron_left, color: adminGold),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => const BackgroundImportStatusPage(),
+            )),
+          ),
+        ),
         _settingsGroupTitle('عرض المحتوى والبوسترات', 'التحكم ببطاقات الأفلام والمسلسلات والقنوات'),
 
         Card(
