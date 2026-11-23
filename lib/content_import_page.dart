@@ -73,6 +73,59 @@ class _ContentImportPageState extends State<ContentImportPage> {
     setState(() => backgroundJob = job);
   }
 
+  Future<void> _choosePackages() async {
+    final temporary = Set<String>.from(packageIds);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('اختيار الباقات المستهدفة'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 340,
+            child: ListView(
+              children: packages.map((p) {
+                final id = p['id'].toString();
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: temporary.contains(id),
+                  activeColor: accent,
+                  title: Text(p['name'].toString()),
+                  onChanged: (checked) => setDialogState(() {
+                    if (checked == true) {
+                      temporary.add(id);
+                    } else {
+                      temporary.remove(id);
+                    }
+                  }),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                setState(() {
+                  packageIds
+                    ..clear()
+                    ..addAll(temporary);
+                });
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('اعتماد الاختيار'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> startBackgroundImport() async {
     if (category.text.trim().isNotEmpty) _addCategoriesFromInput();
     final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
@@ -752,28 +805,21 @@ class _ContentImportPageState extends State<ContentImportPage> {
               const SizedBox(height: 12),
               if (loadingPackages) Center(child: CircularProgressIndicator(color: accent))
               else if (packages.isNotEmpty) ...[
-                const Text('الباقات المستهدفة (يمكن اختيار أكثر من باقة)',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                ...packages.map((p) {
-                  final id = p['id'].toString();
-                  return CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: packageIds.contains(id),
-                    activeColor: accent,
-                    title: Text(p['name'].toString()),
-                    onChanged: scanning || importing ? null : (checked) => setState(() {
-                      if (checked == true) {
-                        packageIds.add(id);
-                      } else {
-                        packageIds.remove(id);
-                      }
-                    }),
-                  );
-                }),
-                Text('تم اختيار ${packageIds.length} باقة',
-                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+                OutlinedButton.icon(
+                  onPressed: scanning || importing ? null : _choosePackages,
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: Text(packageIds.isEmpty
+                      ? 'اختيار الباقات المستهدفة'
+                      : 'الباقات المستهدفة: ${packageIds.length} محددة'),
+                ),
+                if (packageIds.isNotEmpty)
+                  Text(
+                    packages.where((p) => packageIds.contains(p['id'].toString()))
+                        .map((p) => p['name'].toString()).join(' • '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 11),
+                  ),
               ]
               else ...[
                 const Text('لا توجد باقات لهذا النوع. أنشئ باقة أولاً.'),
@@ -898,35 +944,6 @@ class _ContentImportPageState extends State<ContentImportPage> {
           if (error != null) Card(color: panel, child: Padding(
             padding: const EdgeInsets.all(12), child: Text(error!, style: const TextStyle(color: Colors.redAccent)),
           )),
-          if (backgroundJob != null) ...[
-            Card(
-              color: panel,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Row(children: [
-                    Icon(Icons.sync, color: accent),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('حالة الاستيراد بالخلفية', style: TextStyle(color: accent, fontWeight: FontWeight.bold))),
-                    Text((backgroundJob!['status'] ?? '').toString()),
-                  ]),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(value: _backgroundProgress, color: accent),
-                  const SizedBox(height: 8),
-                  Text((backgroundJob!['message'] ?? '').toString()),
-                  Text('تمت الإضافة: ${backgroundJob!['imported'] ?? 0} • المكرر: ${backgroundJob!['duplicates'] ?? 0} • تعذر: ${backgroundJob!['failed'] ?? 0}'),
-                  if ((backgroundJob!['error'] ?? '').toString().isNotEmpty)
-                    Text((backgroundJob!['error']).toString(), style: const TextStyle(color: Colors.redAccent)),
-                  if (['queued', 'running'].contains(backgroundJob!['status']))
-                    Align(alignment: Alignment.centerLeft, child: TextButton.icon(
-                      onPressed: cancelBackgroundImport,
-                      icon: const Icon(Icons.stop_circle_outlined),
-                      label: const Text('إيقاف الاستيراد'),
-                    )),
-                ]),
-              ),
-            ),
-          ],
           if (items.isNotEmpty) ...[
             Card(color: panel, child: Row(children: [
               Expanded(child: Padding(
@@ -956,18 +973,40 @@ class _ContentImportPageState extends State<ContentImportPage> {
                         errorBuilder: (_, __, ___) => Icon(Icons.movie, color: accent)),
               ));
             }),
-            FilledButton.icon(
-              onPressed: importing || selected.isEmpty ? null : importSelected,
-              icon: importing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.cloud_upload_outlined),
-              label: Text(importing ? 'جارٍ الاستيراد...' : 'استيراد ونشر ' + selected.length.toString() + ' عنصر'),
-              style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: importing || selected.isEmpty ? null : startBackgroundImport,
-              icon: const Icon(Icons.downloading_outlined),
-              label: Text('استيراد بالخلفية ' + selected.length.toString() + ' عنصر'),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: importing || selected.isEmpty ? null : importSelected,
+                    icon: importing
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.cloud_upload_outlined, size: 18),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('استيراد ونشر'),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: importing || selected.isEmpty ? null : startBackgroundImport,
+                    icon: const Icon(Icons.downloading_outlined, size: 18),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('استيراد بالخلفية'),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ),
             if (imported + duplicates + failed > 0)
               Card(color: panel, child: Padding(
