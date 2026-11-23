@@ -163,6 +163,20 @@ class ShamFlixBackgroundImportService {
               (year == null || oldYear == null || year == oldYear);
         });
         if (duplicate) {
+          if (type == 'series' &&
+              (Uri.tryParse(item['page_url']?.toString() ?? '')?.host.toLowerCase() == 'akwam.ss' ||
+               (Uri.tryParse(item['page_url']?.toString() ?? '')?.host.toLowerCase() ?? '').endsWith('.akwam.ss'))) {
+            final existingSeries = known.firstWhere((row) =>
+              _normalize(row['title']?.toString() ?? '') == norm &&
+              (year == null ||
+               int.tryParse(row['release_year']?.toString() ?? '') == null ||
+               int.tryParse(row['release_year']?.toString() ?? '') == year));
+            await _saveAkwamEpisodes(
+              existingSeries['id'].toString(),
+              item['page_url']?.toString() ?? '',
+              job['publish'] == true,
+            );
+          }
           job['duplicates'] = (job['duplicates'] as int) + 1;
         } else {
           final data = <String, dynamic>{
