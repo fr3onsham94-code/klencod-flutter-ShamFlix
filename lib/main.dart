@@ -4287,6 +4287,12 @@ class ShamFlixPlayerPage extends StatefulWidget {
 }
 
 class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
+  Color get playerPrimary => AppTheme.sectionColor('player', 'primary');
+  Color get playerPanel => AppTheme.sectionColor('player', 'playerPanel');
+  Color get playerText => AppTheme.sectionColor('player', 'text');
+  Color get playerSecondaryText => AppTheme.sectionColor('player', 'secondaryText');
+  Color get playerButton => AppTheme.sectionColor('player', 'button');
+  void _onPlayerThemeChanged() { if (mounted) setState(() {}); }
   // قائمة سرعات موحدة للوضعين العمودي والأفقي.
   static const List<double> _playbackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
   late final Player player;
@@ -4314,6 +4320,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   @override
   void initState() {
     super.initState();
+    AppTheme.revision.addListener(_onPlayerThemeChanged);
     currentServerIndex = widget.servers.isEmpty
         ? 0
         : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
@@ -4609,7 +4616,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         visualDensity: const VisualDensity(vertical: -3),
                         contentPadding: EdgeInsets.zero,
                         title: Text('${speed}x', textAlign: TextAlign.center,
-                          style: TextStyle(color: player.state.rate == speed ? gold : Colors.white, fontSize: 13)),
+                          style: TextStyle(color: player.state.rate == speed ? playerPrimary : playerText, fontSize: 13)),
                         onTap: () => Navigator.pop(sheetContext, speed),
                       ),
                   ],
@@ -4681,13 +4688,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   shrinkWrap: true,
                   children: [
                     ListTile(title: Text(appText('مسار الصوت', 'Audio Track', 'Ses Parçası'), textAlign: TextAlign.center,
-                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                      style: TextStyle(color: playerPrimary, fontSize: 14, fontWeight: FontWeight.bold))),
                     for (int index = 0; index < tracks.length; index++)
                       ListTile(
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                          style: TextStyle(color: playerText, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, tracks[index]),
                       ),
                   ],
@@ -4730,28 +4737,28 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                   shrinkWrap: true,
                   children: [
                     ListTile(title: Text(appText('الترجمة', 'Subtitles', 'Altyazılar'), textAlign: TextAlign.center,
-                      style: TextStyle(color: gold, fontSize: 14, fontWeight: FontWeight.bold))),
+                      style: TextStyle(color: playerPrimary, fontSize: 14, fontWeight: FontWeight.bold))),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
-                      leading: Icon(Icons.folder_open_rounded, color: gold, size: 18),
+                      leading: Icon(Icons.folder_open_rounded, color: playerPrimary, size: 18),
                       title: Text(appText('تحميل ترجمة من الجهاز', 'Load Subtitle File', 'Cihazdan Altyazı Yükle'), textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                        style: TextStyle(color: playerText, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, '__local_subtitle__'),
                     ),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
-                      leading: Icon(Icons.link_rounded, color: gold, size: 18),
+                      leading: Icon(Icons.link_rounded, color: playerPrimary, size: 18),
                       title: Text(appText('إضافة ترجمة من رابط', 'Load Subtitle from URL', 'URL ile Altyazı Yükle'), textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                        style: TextStyle(color: playerText, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, '__url_subtitle__'),
                     ),
                     ListTile(
                       dense: true,
                       visualDensity: const VisualDensity(vertical: -2),
                       title: Text(appText('إيقاف الترجمة', 'Turn Subtitles Off', 'Altyazıları Kapat'), textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                        style: TextStyle(color: playerText, fontSize: 12)),
                       onTap: () => Navigator.pop(sheetContext, SubtitleTrack.no()),
                     ),
                     for (int index = 0; index < tracks.length; index++)
@@ -4759,7 +4766,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         dense: true,
                         visualDensity: const VisualDensity(vertical: -2),
                         title: Text(_friendlyTrackLabel(tracks[index], index), textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                          style: TextStyle(color: playerText, fontSize: 12)),
                         onTap: () => Navigator.pop(sheetContext, tracks[index]),
                       ),
                   ],
@@ -4843,15 +4850,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           backgroundColor: const Color(0xFF202020),
           title: Text(
             appText('رابط ملف الترجمة', 'Subtitle URL', 'Altyazı URL\'si'),
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: playerText),
           ),
           content: TextField(
             controller: urlController,
             keyboardType: TextInputType.url,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: playerText),
             decoration: InputDecoration(
               hintText: 'https://example.com/subtitle.srt',
-              hintStyle: const TextStyle(color: Colors.white38),
+              hintStyle: const TextStyle(color: playerText38),
             ),
           ),
           actions: [
@@ -4860,7 +4867,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               child: Text(appText('إلغاء', 'Cancel', 'İptal')),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: gold),
+              style: FilledButton.styleFrom(backgroundColor: playerPrimary),
               onPressed: () => Navigator.pop(dialogContext, urlController.text.trim()),
               child: Text(appText('تحميل', 'Load', 'Yükle')),
             ),
@@ -4939,7 +4946,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       child: Tooltip(
         message: name,
         child: Material(
-          color: active ? gold : Colors.black.withOpacity(0.62),
+          color: active ? playerPrimary : Colors.black.withOpacity(0.62),
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
@@ -4950,7 +4957,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               child: Center(
                 child: Text('S${index + 1}',
                   style: TextStyle(
-                    color: active ? Colors.black : Colors.white,
+                    color: active ? Colors.black : playerText,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -4991,9 +4998,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white, size: 19),
+            Icon(icon, color: playerText, size: 19),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(color: Colors.white70, fontSize: 9)),
+            Text(label, style: TextStyle(color: playerSecondaryText, fontSize: 9)),
           ],
         ),
       ),
@@ -5030,6 +5037,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   @override
   void dispose() {
+    AppTheme.revision.removeListener(_onPlayerThemeChanged);
     controlsTimer?.cancel();
     _positionSubscription?.cancel();
     _saveProgressAtPosition(player.state.position);
@@ -5055,14 +5063,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.error_outline, color: gold, size: 48),
+                        Icon(Icons.error_outline, color: playerPrimary, size: 48),
                         const SizedBox(height: 14),
                         Text(error!, textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white70)),
+                            style: TextStyle(color: playerSecondaryText)),
                         const SizedBox(height: 18),
                         if (_embedFallbackUrl != null) ...[
                           FilledButton.icon(
-                            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
+                            style: FilledButton.styleFrom(backgroundColor: playerPrimary, foregroundColor: playerText),
                             onPressed: _openEmbedFallback,
                             icon: const Icon(Icons.web),
                             label: Text('فتح ${_embedFallbackName ?? 'السيرفر المضمّن'}'),
@@ -5070,7 +5078,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                           const SizedBox(height: 10),
                         ],
                         FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
+                          style: FilledButton.styleFrom(backgroundColor: playerPrimary, foregroundColor: playerText),
                           onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
                           child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
                         ),
@@ -5092,7 +5100,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                         controls: NoVideoControls,
                       ),
                     if (opening)
-                      Center(child: CircularProgressIndicator(color: gold)),
+                      Center(child: CircularProgressIndicator(color: playerPrimary)),
                     if (controlsLocked)
                       Positioned(
                         bottom: 20,
@@ -5105,9 +5113,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                               shape: const StadiumBorder(),
                               child: TextButton.icon(
                                 onPressed: _toggleControlsLock,
-                                icon: Icon(Icons.lock_open_rounded, color: gold),
+                                icon: Icon(Icons.lock_open_rounded, color: playerPrimary),
                                 label: Text(appText('فتح القفل', 'Unlock', 'Kilidi Aç'),
-                                    style: TextStyle(color: Colors.white)),
+                                    style: TextStyle(color: playerText)),
                               ),
                             ),
                           ),
@@ -5156,7 +5164,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                  color: Colors.white,
+                                                  color: playerText,
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -5164,7 +5172,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                               Text(
                                                 'SHAM FLIX PLAYER',
                                                 style: TextStyle(
-                                                  color: gold,
+                                                  color: playerPrimary,
                                                   fontSize: 9,
                                                   letterSpacing: 2,
                                                   fontWeight: FontWeight.w700,
@@ -5236,14 +5244,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                         height: 12,
                                                         child: CircularProgressIndicator(
                                                           strokeWidth: 2,
-                                                          color: gold,
+                                                          color: playerPrimary,
                                                         ),
                                                       ),
                                                       const SizedBox(width: 6),
                                                       Text(
                                                         appText('جارٍ تحميل البث', 'Loading Stream', 'Yayın Yükleniyor'),
                                                         style: const TextStyle(
-                                                          color: Colors.white,
+                                                          color: playerText,
                                                           fontSize: 11,
                                                           fontWeight: FontWeight.w600,
                                                         ),
@@ -5296,8 +5304,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                   child: Slider(
                                                     value: current.clamp(0.0, max).toDouble(),
                                                     max: max,
-                                                    activeColor: gold,
-                                                    inactiveColor: Colors.white24,
+                                                    activeColor: playerPrimary,
+                                                    inactiveColor: playerText24,
                                                     onChangeStart: duration == Duration.zero
                                                         ? null
                                                         : (value) {
@@ -5322,19 +5330,19 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                 Row(
                                                   children: [
                                                     Text(_time(position),
-                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
+                                                        style: TextStyle(color: playerSecondaryText, fontSize: 9)),
                                                     const Spacer(),
                                                     Text(_time(duration),
-                                                        style: TextStyle(color: Colors.white70, fontSize: 9)),
+                                                        style: TextStyle(color: playerSecondaryText, fontSize: 9)),
                                                   ],
                                                 ),
                                                 const SizedBox(height: 8),
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.white.withOpacity(0.07),
+                                                    color: playerText.withOpacity(0.07),
                                                     borderRadius: BorderRadius.circular(16),
-                                                    border: Border.all(color: Colors.white12),
+                                                    border: Border.all(color: playerText12),
                                                   ),
                                                   child: Row(
                                                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -5414,7 +5422,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     bool filled = false,
   }) {
     return Material(
-      color: filled ? gold.withOpacity(0.95) : Colors.black.withOpacity(0.35),
+      color: filled ? playerPrimary.withOpacity(0.95) : Colors.black.withOpacity(0.35),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -5422,7 +5430,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         child: SizedBox(
           width: size + 12,
           height: size + 12,
-          child: Icon(icon, color: filled ? Colors.black : Colors.white, size: size),
+          child: Icon(icon, color: filled ? Colors.black : playerText, size: size),
         ),
       ),
     );
