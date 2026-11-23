@@ -5,7 +5,7 @@ type PlaylistSource = { id: string; name: string; url: string; customId?: string
 // iptv-org publishes dedicated country playlists. Read the Arab countries and Turkey
 // in addition to the global index so country grouping does not depend on index metadata.
 const IPTV_ORG_COUNTRY_CODES = [
-  "dz", "bh", "km", "dj", "eg", "iq", "jo", "kw", "lb", "ly", "mr",
+  "dz", "bh", "km", "eg", "iq", "jo", "kw", "lb", "ly", "mr",
   "ma", "om", "ps", "qa", "sa", "so", "sd", "sy", "tn", "ae", "ye", "tr",
 ];
 
