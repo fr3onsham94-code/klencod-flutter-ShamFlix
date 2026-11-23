@@ -607,6 +607,18 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
+  Widget _settingsGroupTitle(String title, String subtitle) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: TextStyle(color: adminGold, fontSize: 15, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 3),
+        Text(subtitle, style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+      ],
+    ),
+  );
+
   Widget settingsSection() {
     if (badgeSettingLoading) {
       return Center(
@@ -621,8 +633,12 @@ class _AdminPageState extends State<AdminPage> {
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
+        _settingsGroupTitle('المظهر والألوان', 'تخصيص ألوان واجهة التطبيق ومعاينتها'),
         themePaletteSection(),
+        _settingsGroupTitle('القائمة العلوية وقائمة الباقات', 'التحكم بحجم زر القائمة وعرضها والخطوط والأيقونات'),
         _sidebarSettingsCard(),
+        _settingsGroupTitle('عرض المحتوى والبوسترات', 'التحكم ببطاقات الأفلام والمسلسلات والقنوات'),
+
         Card(
           color: adminPanel,
           child: SwitchListTile(
@@ -725,6 +741,7 @@ class _AdminPageState extends State<AdminPage> {
             style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
           ),
         ),
+        _settingsGroupTitle('روابط التطبيق والتحديثات', 'إدارة رابط الدعوة ومعلومات إصدار التطبيق'),
         const SizedBox(height: 10),
         Card(
           color: adminPanel,
@@ -1883,7 +1900,9 @@ class _AdminPageState extends State<AdminPage> {
     setState(()=>{sidebarWidth=(p.getDouble('shamflix_catalog_sidebar_width')??110).clamp(90,160).toDouble(),sidebarButtonSize=(p.getDouble('shamflix_catalog_sidebar_button')??42).clamp(34,56).toDouble(),packageFontSize=(p.getDouble('shamflix_catalog_package_font')??11).clamp(9,15).toDouble(),sectionFontSize=(p.getDouble('shamflix_catalog_section_font')??12).clamp(10,16).toDouble(),packageIconSize=(p.getDouble('shamflix_catalog_package_icon')??15).clamp(12,22).toDouble(),packageItemHeight=(p.getDouble('shamflix_catalog_package_height')??38).clamp(30,60).toDouble()});
   }
   Widget _sidebarSettingsCard()=>Card(color:adminPanel,child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-    Text('إعدادات الزر والقائمة العائمة',style:TextStyle(color:adminGold,fontWeight:FontWeight.bold)),
+    Text('إعدادات زر القائمة العلوية وقائمة الباقات',style:TextStyle(color:adminGold,fontWeight:FontWeight.bold)),
+    const SizedBox(height: 6),
+    Text('تُطبّق هذه القيم على زر فتح القائمة المنسدلة وقائمة الباقات في الأفلام والمسلسلات والبث المباشر. التغيير يظهر مباشرة.',style:TextStyle(color:AppTheme.secondaryText,fontSize:11,height:1.5)),
     for(final item in <List<dynamic>>[
       ['عرض القائمة','shamflix_catalog_sidebar_width',sidebarWidth,90.0,160.0],
       ['حجم الزر العائم','shamflix_catalog_sidebar_button',sidebarButtonSize,34.0,56.0],
