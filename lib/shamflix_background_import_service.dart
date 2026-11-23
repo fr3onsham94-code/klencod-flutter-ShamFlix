@@ -41,6 +41,15 @@ class ShamFlixBackgroundImportService {
   static Future<List<Map<String, dynamic>>> jobs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
+    final legacy = prefs.getString(_jobKey);
+    if (legacy != null) {
+      try {
+        final old = Map<String, dynamic>.from(jsonDecode(legacy) as Map);
+        final id = old['id']?.toString();
+        if (id != null && id.isNotEmpty) await prefs.setString(_jobStorageKey(id), legacy);
+        await prefs.remove(_jobKey);
+      } catch (_) {}
+    }
     final result = <Map<String, dynamic>>[];
     for (final key in prefs.getKeys().where((key) => key.startsWith('${_jobKey}_'))) {
       final raw = prefs.getString(key);
@@ -150,7 +159,7 @@ class ShamFlixBackgroundImportService {
   }
 
   static Future<bool> _saveIfCurrent(Map<String, dynamic> job, String expectedJobId) async {
-    final latest = await job(expectedJobId);
+    final latest = await ShamFlixBackgroundImportService.job(expectedJobId);
     if (latest == null || latest['id']?.toString() != expectedJobId || !['queued', 'running'].contains(latest['status'])) return false;
     await _save(job);
     return true;
