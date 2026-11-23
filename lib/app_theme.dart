@@ -26,6 +26,8 @@ class AppTheme {
     'home_border': '#333333',
     'home_badge': '#E50914',
     'home_packageBorder': '#555555',
+    'home_latestMoviesText': '#FFFFFF',
+    'home_latestSeriesText': '#FFFFFF',
 
     'movies_background': '#090909',
     'movies_primary': '#E50914',
@@ -36,6 +38,8 @@ class AppTheme {
     'movies_border': '#333333',
     'movies_badge': '#E50914',
     'movies_packageBorder': '#555555',
+    'movies_latestMoviesText': '#FFFFFF',
+    'movies_latestSeriesText': '#FFFFFF',
 
     'series_background': '#090909',
     'series_primary': '#E50914',
@@ -46,6 +50,8 @@ class AppTheme {
     'series_border': '#333333',
     'series_badge': '#E50914',
     'series_packageBorder': '#555555',
+    'series_latestMoviesText': '#FFFFFF',
+    'series_latestSeriesText': '#FFFFFF',
 
     'live_background': '#090909',
     'live_primary': '#E50914',
@@ -56,6 +62,8 @@ class AppTheme {
     'live_border': '#333333',
     'live_badge': '#E50914',
     'live_packageBorder': '#555555',
+    'live_latestMoviesText': '#FFFFFF',
+    'live_latestSeriesText': '#FFFFFF',
 
     'settings_background': '#090909',
     'settings_primary': '#E50914',
@@ -66,6 +74,8 @@ class AppTheme {
     'settings_border': '#333333',
     'settings_badge': '#E50914',
     'settings_packageBorder': '#555555',
+    'settings_latestMoviesText': '#FFFFFF',
+    'settings_latestSeriesText': '#FFFFFF',
 
     'admin_background': '#090909',
     'admin_primary': '#E50914',
@@ -76,6 +86,8 @@ class AppTheme {
     'admin_border': '#333333',
     'admin_badge': '#E50914',
     'admin_packageBorder': '#555555',
+    'admin_latestMoviesText': '#FFFFFF',
+    'admin_latestSeriesText': '#FFFFFF',
   };
 
   static const Map<String, String> sectionLabels = {
@@ -97,6 +109,8 @@ class AppTheme {
     'border': 'الحدود والفواصل',
     'badge': 'الشارات والليبل',
     'packageBorder': 'حواف أزرار الباقات',
+    'latestMoviesText': 'عنوان أحدث الأفلام',
+    'latestSeriesText': 'عنوان أحدث المسلسلات',
   };
 
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
