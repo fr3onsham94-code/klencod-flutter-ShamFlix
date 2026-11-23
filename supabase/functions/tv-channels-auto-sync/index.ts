@@ -2,9 +2,21 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type PlaylistSource = { id: string; name: string; url: string; customId?: string };
 
+// iptv-org publishes dedicated country playlists. Read the Arab countries and Turkey
+// in addition to the global index so country grouping does not depend on index metadata.
+const IPTV_ORG_COUNTRY_CODES = [
+  "dz", "bh", "km", "dj", "eg", "iq", "jo", "kw", "lb", "ly", "mr",
+  "ma", "om", "ps", "qa", "sa", "so", "sd", "sy", "tn", "ae", "ye", "tr",
+];
+
 const BUILTIN_SOURCES: PlaylistSource[] = [
   // Original core sources
   { id: "iptv-org", name: "IPTV-ORG PRIMARY", url: "https://iptv-org.github.io/iptv/index.m3u" },
+  ...IPTV_ORG_COUNTRY_CODES.map((countryCode): PlaylistSource => ({
+    id: "iptv-org-country-" + countryCode,
+    name: "IPTV-ORG COUNTRY " + countryCode.toUpperCase(),
+    url: "https://iptv-org.github.io/iptv/countries/" + countryCode + ".m3u",
+  })),
   { id: "free-tv", name: "FREE-TV", url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" },
   { id: "nexus", name: "IPTV-NEXUS", url: "https://dearbulut.github.io/iptv/playlists/index.m3u" },
   // Additional public playlists referenced by the Androidsis guide
@@ -220,7 +232,7 @@ function parseM3u(text: string, sourceId: string, sourceName: string) {
         url,
         position: position++,
         tvgLanguage: pending["tvg-language"] || pending["tvg-language-code"] || "",
-        tvgCountry: pending["tvg-country"] || pending["country"] || "",
+        tvgCountry: pending["tvg-country"] || pending["country"] || (sourceId.startsWith("iptv-org-country-") ? sourceId.slice("iptv-org-country-".length) : ""),
         groupTitle: pending["group-title"] || "",
       });
     }
@@ -528,7 +540,7 @@ async function syncChannels(db: any) {
     const uniqueStreams = [...new Map(entries.map(e => [e.sourceId + "|" + e.url,e])).values()];
     const category = categoryByKey.get(key) || "عامة";
     const labels = new Set<string>();
-    const country = uniqueStreams.map(countryPackageLabel).find(Boolean) || "قنوات عربية متنوعة";
+    const country = uniqueStreams.map(countryPackageLabel).find(label => label !== "قنوات عربية متنوعة") || "قنوات عربية متنوعة";
     labels.add(country);
     if (uniqueStreams.some(e => /\bmbc\b|ام بي سي|إم بي سي/i.test(e.name + " " + e.groupTitle))) labels.add("MBC");
     if (uniqueStreams.some(e => /\bbein(?:\s*[- ]?\s*sports?)?\b|بي ?إن ?سبورت/i.test(e.name + " " + e.groupTitle))) labels.add("beIN SPORTS");
