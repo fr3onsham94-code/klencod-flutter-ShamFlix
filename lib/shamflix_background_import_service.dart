@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'admin_auth_service.dart';
 import 'content_page_import_service.dart';
 import 'stream_source_detector.dart';
@@ -56,6 +57,10 @@ class ShamFlixBackgroundImportService {
     required String categoryUrl,
   }) async {
     if (items.isEmpty || packageIds.isEmpty) throw Exception('اختر عناصر وباقة واحدة على الأقل');
+    final notificationPermission = await Permission.notification.request();
+    if (!notificationPermission.isGranted) {
+      throw Exception('يجب السماح بإشعارات ShamFlix حتى يظهر إشعار الاستيراد أثناء العمل بالخلفية');
+    }
     final old = await currentJob();
     if (old != null && ['queued', 'running'].contains(old['status'])) {
       throw Exception('هناك عملية استيراد تعمل حالياً');
