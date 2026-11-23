@@ -101,7 +101,24 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       _nameController.clear();
       _urlController.clear();
       await _loadSources();
-      if (mounted) _message('تمت إضافة المصدر. سيدخل في المزامنة التلقائية القادمة.');
+      if (!mounted) return;
+      _message('تمت إضافة المصدر، جارٍ استيراد قنواته الآن...');
+      try {
+        final response = await AuthService.client.functions.invoke(
+          'tv-channels-auto-sync',
+          body: {'mode': 'sync'},
+        );
+        final data = response.data;
+        if (mounted) {
+          if (response.status >= 200 && response.status < 300 && data is Map && data['ok'] == true) {
+            _message('تمت إضافة المصدر ومزامنة القنوات فوراً');
+          } else {
+            _message('تمت إضافة المصدر، لكن المزامنة الفورية لم تكتمل؛ سيُعاد المحاولة تلقائياً');
+          }
+        }
+      } catch (_) {
+        if (mounted) _message('تمت إضافة المصدر، لكن تعذرت المزامنة الفورية؛ سيُعاد المحاولة تلقائياً');
+      }
     } catch (e) {
       final message = e.toString().toLowerCase().contains('duplicate')
           ? 'هذا الرابط مضاف مسبقاً'
@@ -263,8 +280,8 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                           color: AppTheme.panel,
                           child: ListTile(
                             leading: Icon(Icons.schedule, color: AppTheme.primary),
-                            title: Text('التحديث التلقائي كل 6 ساعات', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                            subtitle: Text('المصادر المفعّلة تدخل في دورة المزامنة القادمة. إيقاف المصدر يمنع تحديثه دون حذف القنوات التي سبق استيرادها.', style: TextStyle(color: muted, fontSize: 12)),
+                            title: Text('التحديث التلقائي كل ساعة', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                            subtitle: Text('تتم مزامنة القنوات كل ساعة، كما يبدأ استيراد أي مصدر جديد فور إضافته. إيقاف المصدر يمنع تحديثه دون حذف القنوات التي سبق استيرادها.', style: TextStyle(color: muted, fontSize: 12)),
                           ),
                         ),
                         const SizedBox(height: 8),
