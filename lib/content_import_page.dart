@@ -470,21 +470,19 @@ class _ContentImportPageState extends State<ContentImportPage> {
                 episodeImportFailures += stats['failed'] ?? 0;
                 episodesWithoutServers += stats['without_servers'] ?? 0;
               }
-              if (monitorSeries) {
-                final sourceUri = Uri.tryParse(item['page_url']?.toString() ?? '');
-                if (sourceUri != null &&
-                    (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
-                    sourceUri.host.isNotEmpty) {
-                  await AuthService.client.from('series_source_monitors').upsert({
-                    'series_id': targetSeriesId,
-                    'source_url': sourceUri.toString(),
-                    'source_host': sourceUri.host,
-                    'season_number': targetSeasonNumber,
-                    'check_interval_minutes': monitorInterval,
-                    'is_active': true,
-                  }, onConflict: 'series_id,source_url');
-                  monitorsCreated++;
-                }
+              final sourceUri = Uri.tryParse(item['page_url']?.toString() ?? '');
+              if (sourceUri != null &&
+                  (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
+                  sourceUri.host.isNotEmpty) {
+                await AuthService.client.from('series_source_monitors').upsert({
+                  'series_id': targetSeriesId,
+                  'source_url': sourceUri.toString(),
+                  'source_host': sourceUri.host,
+                  'season_number': targetSeasonNumber,
+                  'check_interval_minutes': monitorInterval,
+                  'is_active': true,
+                }, onConflict: 'series_id,source_url');
+                monitorsCreated++;
               }
             } catch (_) {
               episodeImportFailures++;
