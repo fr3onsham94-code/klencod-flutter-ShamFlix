@@ -85,6 +85,81 @@ class _ContentImportPageState extends State<ContentImportPage> {
       .replaceAll('أ', 'ا').replaceAll('إ', 'ا').replaceAll('آ', 'ا').replaceAll('ى', 'ي')
       .replaceAll(RegExp(r'[^a-z0-9\u0600-\u06FF]+'), '');
 
+  double _titleSimilarity(String first, String second) {
+    final a = normalize(first);
+    final b = normalize(second);
+    if (a.isEmpty || b.isEmpty) return 0;
+    if (a == b) return 1;
+    if (a.length > 100 || b.length > 100) return 0;
+    var previous = List<int>.generate(b.length + 1, (i) => i);
+    for (var i = 1; i <= a.length; i++) {
+      final current = List<int>.filled(b.length + 1, 0);
+      current[0] = i;
+      for (var j = 1; j <= b.length; j++) {
+        final cost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
+        current[j] = [current[j - 1] + 1, previous[j] + 1, previous[j - 1] + cost].reduce((x, y) => x < y ? x : y);
+      }
+      previous = current;
+    }
+    final distance = previous[b.length];
+    return 1 - distance / (a.length > b.length ? a.length : b.length);
+  }
+
+  Future<Map<String, dynamic>?> _askDuplicateAction(
+    String importedTitle,
+    List<Map<String, dynamic>> matches,
+    bool allowSeasonMerge,
+  ) async {
+    if (matches.isEmpty) return {'action': 'new'};
+    var selectedId = matches.first['id'].toString();
+    final seasonController = TextEditingController(text: '2');
+    try {
+      return await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('تم العثور على محتوى مشابه'),
+            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('العنوان الجديد: $importedTitle'),
+              const SizedBox(height: 10),
+              const Text('قد يكون هذا العمل موجوداً مسبقاً. اختر كيف تريد المتابعة:'),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: selectedId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'المحتوى الموجود الأقرب'),
+                items: matches.map((item) => DropdownMenuItem<String>(
+                  value: item['id'].toString(),
+                  child: Text('${item['title'] ?? 'بدون عنوان'}${item['release_year'] == null ? '' : ' (${item['release_year']})'}', overflow: TextOverflow.ellipsis),
+                )).toList(),
+                onChanged: (value) { if (value != null) setDialogState(() => selectedId = value); },
+              ),
+              if (allowSeasonMerge) ...[
+                const SizedBox(height: 10),
+                TextField(controller: seasonController, keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'رقم الموسم المراد ضمه', hintText: 'مثلاً 2')),
+              ],
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, {'action': 'skip'}), child: const Text('تجاهل')),
+              TextButton(onPressed: () => Navigator.pop(dialogContext, {'action': 'new'}), child: const Text('إضافة كعمل جديد')),
+              if (allowSeasonMerge)
+                FilledButton(onPressed: () {
+                  final season = int.tryParse(seasonController.text.trim());
+                  if (season == null || season < 1 || season > 100) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('أدخل رقم موسم صحيحاً')));
+                    return;
+                  }
+                  Navigator.pop(dialogContext, {'action': 'merge', 'series_id': selectedId, 'season_number': season});
+                }, child: const Text('دمج كموسم')),
+            ],
+          ),
+        ),
+      );
+    } finally { seasonController.dispose(); }
+  }
+
   bool _isAkwamPage(dynamic value) {
     final uri = Uri.tryParse(value?.toString().trim() ?? '');
     final host = uri?.host.toLowerCase() ?? '';
@@ -340,19 +415,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
     try {
       final table = type == 'movie' ? 'movies' : 'series';
       final rows = await AuthService.client.from(table).select('id,title,release_year');
-      final known = <String>{};
-      final existingIdsByKey = <String, String>{};
-      final existingSeries = type == 'series'
-          ? rows.map((row) => Map<String, dynamic>.from(row)).toList()
-          : <Map<String, dynamic>>[];
-      for (final row in rows) {
-        final existingKey = normalize(row['title']?.toString() ?? '') +
-            '|' + (row['release_year']?.toString() ?? '');
-        known.add(existingKey);
-        if (row['id'] != null) {
-          existingIdsByKey[existingKey] = row['id'].toString();
-        }
-      }
+      final existingRecords = rows.map((row) => Map<String, dynamic>.from(row)).toList();
       var akwamSeriesCount = 0;
       var episodeCount = 0;
       var episodeServerCount = 0;
@@ -364,78 +427,64 @@ class _ContentImportPageState extends State<ContentImportPage> {
         if (title.isEmpty) { setState(() => failed++); continue; }
         final year = int.tryParse(item['release_year']?.toString() ?? '');
         final key = normalize(title) + '|' + (year?.toString() ?? '');
-        if (known.contains(key)) {
-          final existingId = existingIdsByKey[key];
-          if (existingId != null) {
-            try {
-              await _ensureContentInPackages(type, existingId);
-            } catch (_) {
-              setState(() => failed++);
-            }
+        final similarMatches = existingRecords.map((record) {
+          final score = _titleSimilarity(title, record['title']?.toString() ?? '');
+          final oldYear = record['release_year']?.toString() ?? '';
+          final newYear = year?.toString() ?? '';
+          final yearsCompatible = oldYear.isEmpty || newYear.isEmpty || oldYear == newYear;
+          return {...record, '_match_score': score, '_years_compatible': yearsCompatible};
+        }).where((record) =>
+          (record['_match_score'] as double) >= 0.78 &&
+          record['_years_compatible'] == true
+        ).toList()
+          ..sort((a, b) => (b['_match_score'] as double).compareTo(a['_match_score'] as double));
+
+        if (similarMatches.isNotEmpty) {
+          final choice = await _askDuplicateAction(title, similarMatches, type == 'series');
+          final action = choice?['action']?.toString() ?? 'skip';
+          if (action == 'skip') {
+            setState(() => duplicates++);
+            continue;
           }
-          setState(() => duplicates++);
-          // For a second Akwam URL of the same series, offer an explicit
-          // merge into the chosen existing series and season. Skipping keeps
-          // the previous duplicate/backfill behavior unchanged.
-          if (type == 'series' && _isAkwamPage(item['page_url'])) {
-            final mergeChoice = await _askSeasonMerge(title, existingSeries);
-            if (mergeChoice != null) {
-              final targetSeriesId = mergeChoice['series_id'].toString();
-              final targetSeasonNumber = mergeChoice['season_number'] as int;
-              try {
-                await _ensureSeriesInPackage(targetSeriesId);
+          if (action == 'merge' && type == 'series') {
+            final targetSeriesId = choice!['series_id'].toString();
+            final targetSeasonNumber = choice['season_number'] as int;
+            try {
+              await _ensureSeriesInPackage(targetSeriesId);
+              if (_isAkwamPage(item['page_url'])) {
                 akwamSeriesCount++;
                 final stats = await _saveAkwamSeriesEpisodes(
-                  targetSeriesId,
-                  item['page_url'].toString(),
+                  targetSeriesId, item['page_url'].toString(),
                   seasonNumber: targetSeasonNumber,
                 );
                 episodeCount += stats['episodes'] ?? 0;
                 episodeServerCount += stats['servers'] ?? 0;
                 episodeImportFailures += stats['failed'] ?? 0;
                 episodesWithoutServers += stats['without_servers'] ?? 0;
-                if (monitorSeries) {
-                  final sourceUri = Uri.tryParse(item['page_url']?.toString() ?? '');
-                  if (sourceUri != null &&
-                      (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
-                      sourceUri.host.isNotEmpty) {
-                    await AuthService.client.from('series_source_monitors').upsert({
-                      'series_id': targetSeriesId,
-                      'source_url': sourceUri.toString(),
-                      'source_host': sourceUri.host,
-                      'season_number': targetSeasonNumber,
-                      'check_interval_minutes': monitorInterval,
-                      'is_active': true,
-                    }, onConflict: 'series_id,source_url');
-                    monitorsCreated++;
-                  }
+              }
+              if (monitorSeries) {
+                final sourceUri = Uri.tryParse(item['page_url']?.toString() ?? '');
+                if (sourceUri != null &&
+                    (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
+                    sourceUri.host.isNotEmpty) {
+                  await AuthService.client.from('series_source_monitors').upsert({
+                    'series_id': targetSeriesId,
+                    'source_url': sourceUri.toString(),
+                    'source_host': sourceUri.host,
+                    'season_number': targetSeasonNumber,
+                    'check_interval_minutes': monitorInterval,
+                    'is_active': true,
+                  }, onConflict: 'series_id,source_url');
+                  monitorsCreated++;
                 }
-              } catch (_) {
-                episodeImportFailures++;
               }
-              continue;
+            } catch (_) {
+              episodeImportFailures++;
             }
+            setState(() => duplicates++);
+            continue;
           }
-          // Backfill episodes for duplicate series when the user skips the
-          // merge prompt or reruns an existing import.
-          if (type == 'series' && _isAkwamPage(item['page_url'])) {
-            final existingId = existingIdsByKey[key];
-            if (existingId != null) {
-              akwamSeriesCount++;
-              try {
-                final stats = await _saveAkwamSeriesEpisodes(
-                  existingId, item['page_url'].toString(),
-                );
-                episodeCount += stats['episodes'] ?? 0;
-                episodeServerCount += stats['servers'] ?? 0;
-                episodeImportFailures += stats['failed'] ?? 0;
-                episodesWithoutServers += stats['without_servers'] ?? 0;
-              } catch (_) {
-                episodeImportFailures++;
-              }
-            }
-          }
-          continue;
+          // action == 'new': intentionally continue to the normal insert path.
         }
         try {
           final data = <String, dynamic>{
@@ -511,7 +560,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
             }
             await AuthService.client.from('playback_servers').insert(serverRows);
           }
-          known.add(key);
+          existingRecords.add({'id': id, 'title': title, 'release_year': year});
           setState(() => imported++);
         } catch (_) { setState(() => failed++); }
       }
