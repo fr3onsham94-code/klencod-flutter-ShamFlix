@@ -19,11 +19,11 @@ void shamflixImportCallbackDispatcher() {
     try {
       final ok = await AuthService.initialize();
       if (!ok || !AuthService.isAdmin) {
-        await ShamFlixBackgroundImportService._status('failed',
+        await ShamFlixBackgroundImportService._status('failed', expectedJobId: inputData?['job_id']?.toString(),
           error: 'انتهت جلسة المدير أو لم تعد صالحة. افتح التطبيق وسجّل الدخول ثم أعد المحاولة.');
         return false;
       }
-      await ShamFlixBackgroundImportService._run();
+      await ShamFlixBackgroundImportService._run(inputData?['job_id']?.toString());
       return true;
     } catch (e) {
       await ShamFlixBackgroundImportService._status('failed', error: e.toString());
@@ -94,7 +94,7 @@ class ShamFlixBackgroundImportService {
         ),
       );
     } catch (e) {
-      await _status('failed', error: e.toString());
+      await _status('failed', error: e.toString(), expectedJobId: inputData?['job_id']?.toString());
       rethrow;
     }
   }
@@ -109,9 +109,9 @@ class ShamFlixBackgroundImportService {
     await prefs.setString(_jobKey, jsonEncode(job));
   }
 
-  static Future<void> _status(String value, {String? error, String? message}) async {
+  static Future<void> _status(String value, {String? error, String? message, String? expectedJobId}) async {
     final job = await currentJob();
-    if (job == null) return;
+    if (job == null || (expectedJobId != null && job['id']?.toString() != expectedJobId)) return;
     job['status'] = value;
     if (error != null) job['error'] = error;
     if (message != null) job['message'] = message;
@@ -129,9 +129,11 @@ class ShamFlixBackgroundImportService {
     return s.isEmpty ? null : s;
   }
 
-  static Future<void> _run() async {
+  static Future<void> _run(String? expectedJobId) async {
     final job = await currentJob();
     if (job == null) throw Exception('بيانات مهمة الاستيراد غير موجودة');
+    if (expectedJobId == null || job['id']?.toString() != expectedJobId) return;
+    if (job['status'] == 'cancelled') return;
     if (job['status'] == 'completed') return;
     job['status'] = 'running';
     job['message'] = 'بدأ استيراد المحتوى';
@@ -150,7 +152,7 @@ class ShamFlixBackgroundImportService {
     for (var itemIndex = resumeAt; itemIndex < items.length; itemIndex++) {
       final item = items[itemIndex];
       final latest = await currentJob();
-      if (latest?['status'] == 'cancelled') return;
+      if (latest == null || latest['id']?.toString() != expectedJobId || latest['status'] == 'cancelled') return;
       try {
         final title = item['title']?.toString().trim() ?? '';
         if (title.isEmpty) throw Exception('عنصر بلا عنوان');
@@ -255,7 +257,7 @@ class ShamFlixBackgroundImportService {
       }
       // لا تسمح لنسخة المهمة المحلية بالكتابة فوق طلب إلغاء وصل أثناء معالجة العنصر.
       final latestAfterItem = await currentJob();
-      if (latestAfterItem?['status'] == 'cancelled') {
+      if (latestAfterItem == null || latestAfterItem['id']?.toString() != expectedJobId || latestAfterItem['status'] == 'cancelled') {
         return;
       }
       job['processed'] = (job['processed'] as int) + 1;
@@ -270,6 +272,8 @@ class ShamFlixBackgroundImportService {
         'failed': job['failed'],
       });
     }
+    final latestBeforeComplete = await currentJob();
+    if (latestBeforeComplete == null || latestBeforeComplete['id']?.toString() != expectedJobId || latestBeforeComplete['status'] == 'cancelled') return;
     job['status'] = 'completed';
     job['message'] = 'اكتمل الاستيراد';
     job['completed_at'] = DateTime.now().toIso8601String();
