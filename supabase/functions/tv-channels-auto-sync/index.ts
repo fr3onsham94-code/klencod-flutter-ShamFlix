@@ -162,7 +162,9 @@ function countryPackageLabel(entry: {name:string; tvgLanguage:string; tvgCountry
   };
   if (countries[raw]) return countries[raw];
   if (/[\u0600-\u06FF]/.test(entry.name) || /arabic|عربي|العربية/i.test(entry.tvgLanguage + " " + entry.groupTitle)) return "قنوات عربية متنوعة";
-  if (/turkish|turkce|تركي|تركية/i.test(entry.tvgLanguage + " " + entry.groupTitle) || /[ğüşöçıİ]/.test(entry.name)) return "تركيا";
+  if (/turkish|turkce|تركي|تركية/i.test(entry.tvgLanguage + " " + entry.groupTitle) ||
+      /\b(?:trt ?[1-9]|trt ?haber|atv|kanal ?d|show ?tv|star ?tv|tv8|now ?tv|beyaz ?tv|a ?haber|a ?spor|teve ?2|kanal ?7|fox ?turkey)\b/i.test(entry.name) ||
+      /[ğüşöçıİ]/.test(entry.name)) return "تركيا";
   return "قنوات عربية متنوعة";
 }
 
