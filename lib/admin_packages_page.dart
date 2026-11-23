@@ -25,6 +25,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
   bool loading = true;
   String? error;
   List<Map<String, dynamic>> packages = [];
+  int _loadRequestId = 0;
 
   @override
   void initState() {
@@ -33,6 +34,8 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
+    final requestId = ++_loadRequestId;
     setState(() {
       loading = true;
       error = null;
@@ -44,11 +47,16 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
           .eq('content_type', widget.contentType)
           .order('sort_order')
           .order('created_at');
+      if (!mounted || requestId != _loadRequestId) return;
       packages = rows.map((row) => Map<String, dynamic>.from(row)).toList();
     } catch (e) {
+      if (!mounted || requestId != _loadRequestId) return;
       error = e.toString();
+    } finally {
+      if (mounted && requestId == _loadRequestId) {
+        setState(() => loading = false);
+      }
     }
-    if (mounted) setState(() => loading = false);
   }
 
   Future<void> _editPackage({Map<String, dynamic>? existing}) async {
@@ -108,7 +116,7 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
     );
     name.dispose();
     order.dispose();
-    if (result == null) return;
+    if (!mounted || result == null) return;
 
     try {
       if (existing == null) {
