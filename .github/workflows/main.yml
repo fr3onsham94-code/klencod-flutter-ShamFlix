@@ -1,3 +1,4 @@
+# Validate home palette bindings and per-element theme preview.
 # Re-run validation against the complete PR branch after feature updates.
 name: Build Flutter APK
 
