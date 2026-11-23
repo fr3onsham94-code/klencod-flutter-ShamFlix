@@ -3708,7 +3708,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
 
   String _livePackageLabel(Map<String, dynamic> package) {
     final rawName = package['name']?.toString() ?? 'باقة';
-    final cleanName = rawName.replaceAll(RegExp(r'قنوات\\s*تلقائية\\s*[-:|]?\\s*', caseSensitive: false), '').trim();
+    final cleanName = rawName.replaceAll(RegExp(r'قنوات\s*تلقائية\s*[-:|]?\s*', caseSensitive: false), '').trim();
     final name = cleanName.isEmpty ? rawName : cleanName;
     final count = packageChannelCounts[package['id'].toString()] ?? 0;
     return '*$name* $count';
@@ -4078,7 +4078,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                     alignment: Alignment.centerRight,
                                     child: Text(
                                       packages.firstWhere((p) => p['id'].toString() == selectedPackageId,
-                                        orElse: () => <String, dynamic>{'name': ''})['name']?.toString().replaceAll(RegExp(r'قنوات\\s*تلقائية\\s*[-:|]?\\s*', caseSensitive: false), '').trim() ?? '',
+                                        orElse: () => <String, dynamic>{'name': ''})['name']?.toString().replaceAll(RegExp(r'قنوات\s*تلقائية\s*[-:|]?\s*', caseSensitive: false), '').trim() ?? '',
                                       style: TextStyle(color: liveText, fontSize: 14, fontWeight: FontWeight.bold),
                                     ),
                                   ),
@@ -4088,7 +4088,7 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
                                     ? Center(child: CircularProgressIndicator(color: livePrimary))
                                     : error != null
                                         ? Center(child: Text(error!, style: const TextStyle(color: Colors.redAccent)))
-                                        : channels.isEmpty
+                                        : _filteredChannels.isEmpty
                                                 ? Center(child: Text(
                                                     appText('لا توجد قنوات في هذه الباقة', 'No channels in this package', 'Bu pakette kanal yok'),
                                                     style: TextStyle(color: liveSecondaryText)))
