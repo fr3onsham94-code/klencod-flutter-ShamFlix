@@ -275,12 +275,26 @@ class ShamFlixBackgroundImportService {
           .map((v) => Map<String, dynamic>.from(v))
           .where((v) => StreamSourceDetector.isDirectMediaUrl(v['url']?.toString() ?? '')).toList();
       final firstUrl = servers.isEmpty ? '' : servers.first['url'].toString();
-      final saved = await AuthService.client.from('episodes').upsert({
-        'season_id': seasonId, 'episode_number': number,
-        'title': 'الحلقة ' + number.toString(), 'stream_url': firstUrl,
-        'is_published': publish, 'description': null,
-      }, onConflict: 'season_id,episode_number').select('id').single();
-      final episodeId = saved['id'].toString();
+      final oldEpisode = await AuthService.client.from('episodes')
+          .select('id').eq('season_id', seasonId)
+          .eq('episode_number', number).maybeSingle();
+      final episodeData = {
+        'title': 'الحلقة ' + number.toString(),
+        'stream_url': firstUrl,
+        'is_published': publish,
+        'description': null,
+      };
+      final episodeId = oldEpisode == null
+          ? (await AuthService.client.from('episodes').insert({
+              'season_id': seasonId,
+              'episode_number': number,
+              ...episodeData,
+            }).select('id').single())['id'].toString()
+          : oldEpisode['id'].toString();
+      if (oldEpisode != null) {
+        await AuthService.client.from('episodes')
+            .update(episodeData).eq('id', episodeId);
+      }
       final oldServers = await AuthService.client.from('playback_servers')
           .select('stream_url').eq('episode_id', episodeId);
       final knownUrls = oldServers.map((v) => v['stream_url']?.toString() ?? '').toSet();
