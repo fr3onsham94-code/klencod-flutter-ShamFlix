@@ -62,7 +62,21 @@ class ShamFlixBackgroundImportService {
   static Future<Map<String, dynamic>?> job(String id) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
-    final raw = prefs.getString(_jobStorageKey(id));
+    var raw = prefs.getString(_jobStorageKey(id));
+    // ترحيل المهمة القديمة ذات المفتاح المفرد حتى لا تضيع عند تحديث التطبيق.
+    if (raw == null) {
+      final legacy = prefs.getString(_jobKey);
+      if (legacy != null) {
+        try {
+          final old = Map<String, dynamic>.from(jsonDecode(legacy) as Map);
+          if (old['id']?.toString() == id) {
+            raw = legacy;
+            await prefs.setString(_jobStorageKey(id), legacy);
+            await prefs.remove(_jobKey);
+          }
+        } catch (_) {}
+      }
+    }
     if (raw == null) return null;
     try { return Map<String, dynamic>.from(jsonDecode(raw) as Map); } catch (_) { return null; }
   }
@@ -108,7 +122,7 @@ class ShamFlixBackgroundImportService {
           notificationText: 'جارٍ استيراد المحتوى في الخلفية',
           notificationChannelId: 'shamflix_imports',
           notificationChannelName: 'استيراد المحتوى',
-          notificationId: 7314,
+          notificationId: 7314 + (int.tryParse(job['id'].toString()) ?? 0) % 10000,
           foregroundServiceType: ForegroundServiceType.dataSync,
         ),
       );
