@@ -16,6 +16,7 @@ import 'content_import_page.dart';
 import 'series_monitor_page.dart';
 import 'movie_monitor_page.dart';
 import 'tv_sources_settings_page.dart';
+import 'supabase_usage_page.dart';
 
 Color get adminBg => AppTheme.background;
 Color get adminGold => AppTheme.primary;
@@ -4845,6 +4846,18 @@ class _AdminPageState extends State<AdminPage> {
           icon: Icons.settings_outlined,
           onTap: () => navigateTo('settings'),
         ),
+        if (AuthService.isOwner)
+          _homeCard(
+            title: 'مراقبة مساحة واستهلاك Supabase',
+            subtitle: 'متابعة مساحة قاعدة البيانات وStorage وعدد السجلات',
+            icon: Icons.query_stats_outlined,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const SupabaseUsagePage(),
+              ),
+            ),
+          ),
       ],
     );
   }
