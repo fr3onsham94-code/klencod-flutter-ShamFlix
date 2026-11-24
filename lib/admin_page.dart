@@ -12,6 +12,7 @@ import 'admin_packages_page.dart';
 import 'supabase_service.dart';
 import 'content_page_import_service.dart';
 import 'content_import_page.dart';
+import 'background_import_status_page.dart';
 import 'series_monitor_page.dart';
 import 'movie_monitor_page.dart';
 import 'tv_sources_settings_page.dart';
@@ -4748,6 +4749,14 @@ class _AdminPageState extends State<AdminPage> {
           icon: Icons.movie_filter_outlined,
           onTap: () => Navigator.push(context, MaterialPageRoute(
             builder: (_) => const MovieMonitorPage(),
+          )),
+        ),
+        _homeCard(
+          title: 'حالات الاستيراد',
+          subtitle: 'متابعة تقدم عمليات الاستيراد التي تعمل بالخلفية',
+          icon: Icons.downloading_outlined,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const BackgroundImportStatusPage(),
           )),
         ),
         _homeCard(
