@@ -2315,8 +2315,9 @@ class _AdminPageState extends State<AdminPage> {
                         tooltip: 'حذف السيرفر',
                         onPressed: () => setDialogState(() {
                           final removed = drafts.removeAt(index);                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            (removed['name'] as TextEditingController).dispose();
-                            (removed['url'] as TextEditingController).dispose();
+                            for (final key in ['name', 'url', 'user_agent', 'referer', 'origin', 'cookie', 'drm_key', 'license_url']) {
+                              (removed[key] as TextEditingController).dispose();
+                            }
                           });
                         }),
                         icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
@@ -2336,6 +2337,13 @@ class _AdminPageState extends State<AdminPage> {
                       adminField(draft['cookie'] as TextEditingController, 'Cookie', maxLines: 2),
                       adminField(draft['drm_key'] as TextEditingController, 'DRM Key', maxLines: 2),
                       adminField(draft['license_url'] as TextEditingController, 'License URL'),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'ملاحظة: حقول DRM تُحفظ حالياً، وفك التشفير يحتاج دعم DRM متوافقاً داخل المشغّل.',
+                          style: TextStyle(color: AppTheme.secondaryText, fontSize: 11),
+                        ),
+                      ),
                     ],
                   ),
                 ],
