@@ -2222,9 +2222,21 @@ class _AdminPageState extends State<AdminPage> {
     String name = '',
     String url = '',
     bool active = true,
+    String userAgent = '',
+    String referer = '',
+    String origin = '',
+    String cookie = '',
+    String drmKey = '',
+    String licenseUrl = '',
   }) => {
     'name': TextEditingController(text: name),
     'url': TextEditingController(text: url),
+    'user_agent': TextEditingController(text: userAgent),
+    'referer': TextEditingController(text: referer),
+    'origin': TextEditingController(text: origin),
+    'cookie': TextEditingController(text: cookie),
+    'drm_key': TextEditingController(text: drmKey),
+    'license_url': TextEditingController(text: licenseUrl),
     'active': active,
   };
 
@@ -2244,6 +2256,12 @@ class _AdminPageState extends State<AdminPage> {
         name: row['server_name']?.toString() ?? '',
         url: row['stream_url']?.toString() ?? '',
         active: row['is_active'] != false,
+        userAgent: row['user_agent']?.toString() ?? '',
+        referer: row['referer']?.toString() ?? '',
+        origin: row['origin']?.toString() ?? '',
+        cookie: row['cookie']?.toString() ?? '',
+        drmKey: row['drm_key']?.toString() ?? '',
+        licenseUrl: row['license_url']?.toString() ?? '',
       )).toList();
     }
     return [
@@ -2256,8 +2274,9 @@ class _AdminPageState extends State<AdminPage> {
 
   void _disposeServerDrafts(List<Map<String, dynamic>> drafts) {
     for (final draft in drafts) {
-      (draft['name'] as TextEditingController).dispose();
-      (draft['url'] as TextEditingController).dispose();
+      for (final key in ['name', 'url', 'user_agent', 'referer', 'origin', 'cookie', 'drm_key', 'license_url']) {
+        (draft[key] as TextEditingController).dispose();
+      }
     }
   }
 
@@ -2306,6 +2325,19 @@ class _AdminPageState extends State<AdminPage> {
                   ),
                   adminField(name, 'اسم السيرفر'),
                   adminField(url, 'رابط التشغيل', required: false),
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: Text('إعدادات الحماية المتقدمة', style: TextStyle(color: adminGold)),
+                    subtitle: Text('User-Agent وReferer وOrigin وCookie وDRM', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                    children: [
+                      adminField(draft['user_agent'] as TextEditingController, 'User-Agent'),
+                      adminField(draft['referer'] as TextEditingController, 'Referer'),
+                      adminField(draft['origin'] as TextEditingController, 'Origin'),
+                      adminField(draft['cookie'] as TextEditingController, 'Cookie', maxLines: 2),
+                      adminField(draft['drm_key'] as TextEditingController, 'DRM Key', maxLines: 2),
+                      adminField(draft['license_url'] as TextEditingController, 'License URL'),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -2359,6 +2391,12 @@ class _AdminPageState extends State<AdminPage> {
         'stream_url': url,
         'sort_order': index,
         'is_active': draft['active'] == true,
+        'user_agent': (draft['user_agent'] as TextEditingController).text.trim(),
+        'referer': (draft['referer'] as TextEditingController).text.trim(),
+        'origin': (draft['origin'] as TextEditingController).text.trim(),
+        'cookie': (draft['cookie'] as TextEditingController).text.trim(),
+        'drm_key': (draft['drm_key'] as TextEditingController).text.trim(),
+        'license_url': (draft['license_url'] as TextEditingController).text.trim(),
       });
     }
     if (rows.isEmpty) return;
