@@ -22,18 +22,41 @@ class _SupabaseUsagePageState extends State<SupabaseUsagePage> {
   Color get _gold => AppTheme.primary;
   Color get _panel => AppTheme.panel;
 
+  bool _checkingOwner = true;
+
   @override
   void initState() {
     super.initState();
+    _checkOwnerAndLoad();
+  }
+
+  Future<void> _checkOwnerAndLoad() async {
+    // أعد مزامنة جلسة Supabase قبل اتخاذ قرار الصلاحية؛
+    // قد تكون بيانات المستخدم المحلية لم تكتمل عند فتح الصفحة.
+    try {
+      if (AuthService.isInitialized) {
+        await AuthService.restoreSession();
+      }
+    } catch (_) {
+      // ستظهر رسالة الصلاحية/الاتصال المناسبة أدناه دون تعطيل التطبيق.
+    }
+
+    if (!mounted) return;
+
     if (AuthService.isOwner) {
-      _loadMetrics();
+      setState(() => _checkingOwner = false);
+      await _loadMetrics();
+      if (!mounted) return;
       _refreshTimer = Timer.periodic(
         const Duration(minutes: 2),
         (_) => _loadMetrics(showLoading: false),
       );
     } else {
-      _loading = false;
-      _error = 'هذه الصفحة مخصصة لمالك التطبيق الأساسي فقط.';
+      setState(() {
+        _checkingOwner = false;
+        _loading = false;
+        _error = 'هذه الصفحة مخصصة لمالك التطبيق الأساسي فقط.';
+      });
     }
   }
 
@@ -250,6 +273,19 @@ class _SupabaseUsagePageState extends State<SupabaseUsagePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_checkingOwner) {
+      return Scaffold(
+        backgroundColor: AppTheme.background,
+        appBar: AppBar(
+          backgroundColor: AppTheme.background,
+          title: const Text('مراقبة Supabase'),
+        ),
+        body: Center(
+          child: CircularProgressIndicator(color: _gold),
+        ),
+      );
+    }
+
     if (!AuthService.isOwner) {
       return Scaffold(
         backgroundColor: AppTheme.background,
