@@ -6,6 +6,7 @@ on:
       - main
       - feature/auto-tv-channel-aggregation
       - fix/shared-app-settings-notifier
+      - ui/collapsible-admin-settings-packages
   workflow_dispatch:
 
 permissions:
