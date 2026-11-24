@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'admin_auth_service.dart';
 import 'admin_packages_page.dart';
 import 'app_theme.dart';
 import 'content_category_import_service.dart';
 import 'content_page_import_service.dart';
+import 'shamflix_background_import_service.dart';
 
 class ContentImportPage extends StatefulWidget {
   const ContentImportPage({super.key});
@@ -31,15 +33,131 @@ class _ContentImportPageState extends State<ContentImportPage> {
   int monitorFailures = 0;
   int imported = 0, duplicates = 0, failed = 0;
   String? error;
+  Timer? _backgroundJobTimer;
+  Map<String, dynamic>? backgroundJob;
+
+  double get _backgroundProgress {
+    final total = (backgroundJob?['total'] as num?)?.toDouble() ?? 0;
+    final processed = (backgroundJob?['processed'] as num?)?.toDouble() ?? 0;
+    if (total <= 0) return 0;
+    return (processed / total).clamp(0.0, 1.0).toDouble();
+  }
 
   Color get accent => AppTheme.primary;
   Color get bg => AppTheme.background;
   Color get panel => AppTheme.panel;
 
   @override
-  void initState() { super.initState(); loadPackages(); }
+  void initState() {
+    super.initState();
+    loadPackages();
+    _refreshBackgroundJob();
+    _backgroundJobTimer = Timer.periodic(const Duration(seconds: 3), (_) => _refreshBackgroundJob());
+  }
   @override
-  void dispose() { url.dispose(); category.dispose(); super.dispose(); }
+  void dispose() {
+    _backgroundJobTimer?.cancel();
+    url.dispose();
+    category.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshBackgroundJob() async {
+    final job = await ShamFlixBackgroundImportService.currentJob();
+    if (!mounted) return;
+    final status = job?['status']?.toString();
+    if (status == 'completed' || status == 'failed' || status == 'cancelled') {
+      _backgroundJobTimer?.cancel();
+      _backgroundJobTimer = null;
+    }
+    setState(() => backgroundJob = job);
+  }
+
+  Future<void> _choosePackages() async {
+    final temporary = Set<String>.from(packageIds);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('اختيار الباقات المستهدفة'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 340,
+            child: ListView(
+              children: packages.map((p) {
+                final id = p['id'].toString();
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: temporary.contains(id),
+                  activeColor: accent,
+                  title: Text(p['name'].toString()),
+                  onChanged: (checked) => setDialogState(() {
+                    if (checked == true) {
+                      temporary.add(id);
+                    } else {
+                      temporary.remove(id);
+                    }
+                  }),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                setState(() {
+                  packageIds
+                    ..clear()
+                    ..addAll(temporary);
+                });
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('اعتماد الاختيار'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> startBackgroundImport() async {
+    if (category.text.trim().isNotEmpty) _addCategoriesFromInput();
+    final chosen = items.where((e) => selected.contains(e['page_url']?.toString())).toList();
+    if (chosen.isEmpty || packageIds.isEmpty) {
+      message(packageIds.isEmpty ? 'اختر باقة واحدة على الأقل' : 'حدد العناصر التي تريد استيرادها', true);
+      return;
+    }
+    try {
+      await ShamFlixBackgroundImportService.start(
+        items: chosen,
+        packageIds: packageIds.toList(),
+        contentType: type,
+        categories: selectedCategories.toList(),
+        publish: publish,
+        monitorSeries: monitorSeries,
+        monitorMovies: monitorMovies,
+        seriesMonitorInterval: monitorInterval,
+        movieMonitorInterval: movieMonitorInterval,
+        categoryUrl: url.text.trim(),
+      );
+      await _refreshBackgroundJob();
+      _backgroundJobTimer ??= Timer.periodic(const Duration(seconds: 3), (_) => _refreshBackgroundJob());
+      message('بدأ الاستيراد بالخلفية. يمكنك مغادرة هذه الصفحة وسيبقى التقدم محفوظاً.');
+    } catch (e) {
+      message(e.toString().replaceFirst('Exception: ', ''), true);
+    }
+  }
+
+  Future<void> cancelBackgroundImport() async {
+    await ShamFlixBackgroundImportService.cancel();
+    await _refreshBackgroundJob();
+  }
 
   Future<void> loadPackages() async {
     setState(() => loadingPackages = true);
@@ -687,28 +805,21 @@ class _ContentImportPageState extends State<ContentImportPage> {
               const SizedBox(height: 12),
               if (loadingPackages) Center(child: CircularProgressIndicator(color: accent))
               else if (packages.isNotEmpty) ...[
-                const Text('الباقات المستهدفة (يمكن اختيار أكثر من باقة)',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                ...packages.map((p) {
-                  final id = p['id'].toString();
-                  return CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: packageIds.contains(id),
-                    activeColor: accent,
-                    title: Text(p['name'].toString()),
-                    onChanged: scanning || importing ? null : (checked) => setState(() {
-                      if (checked == true) {
-                        packageIds.add(id);
-                      } else {
-                        packageIds.remove(id);
-                      }
-                    }),
-                  );
-                }),
-                Text('تم اختيار ${packageIds.length} باقة',
-                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+                OutlinedButton.icon(
+                  onPressed: scanning || importing ? null : _choosePackages,
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: Text(packageIds.isEmpty
+                      ? 'اختيار الباقات المستهدفة'
+                      : 'الباقات المستهدفة: ${packageIds.length} محددة'),
+                ),
+                if (packageIds.isNotEmpty)
+                  Text(
+                    packages.where((p) => packageIds.contains(p['id'].toString()))
+                        .map((p) => p['name'].toString()).join(' • '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 11),
+                  ),
               ]
               else ...[
                 const Text('لا توجد باقات لهذا النوع. أنشئ باقة أولاً.'),
@@ -862,12 +973,40 @@ class _ContentImportPageState extends State<ContentImportPage> {
                         errorBuilder: (_, __, ___) => Icon(Icons.movie, color: accent)),
               ));
             }),
-            FilledButton.icon(
-              onPressed: importing || selected.isEmpty ? null : importSelected,
-              icon: importing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.cloud_upload_outlined),
-              label: Text(importing ? 'جارٍ الاستيراد...' : 'استيراد ونشر ' + selected.length.toString() + ' عنصر'),
-              style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: importing || selected.isEmpty ? null : importSelected,
+                    icon: importing
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.cloud_upload_outlined, size: 18),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('استيراد ونشر'),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: importing || selected.isEmpty ? null : startBackgroundImport,
+                    icon: const Icon(Icons.downloading_outlined, size: 18),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('استيراد بالخلفية'),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ),
             if (imported + duplicates + failed > 0)
               Card(color: panel, child: Padding(
