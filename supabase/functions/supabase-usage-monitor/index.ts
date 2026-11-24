@@ -6,7 +6,9 @@ const STORAGE_FREE_LIMIT_BYTES = 1024 * 1024 * 1024;
 
 Deno.serve(
   withSupabase({ auth: "user" }, async (_request, ctx) => {
-    if (ctx.userClaims?.sub !== OWNER_USER_ID) {
+    // @supabase/server exposes the authenticated user's ID as userClaims.id.
+    // Keep the owner-only check enforced on the server.
+    if (ctx.userClaims?.id !== OWNER_USER_ID) {
       return Response.json(
         { error: "هذه البيانات متاحة لمالك التطبيق فقط." },
         { status: 403 },
