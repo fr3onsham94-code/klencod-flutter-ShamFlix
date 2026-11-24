@@ -4305,11 +4305,19 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       }
       final userAgent = valueOf(server['user_agent']).trim();
       final referer = valueOf(server['referer']).trim();
+      final origin = valueOf(server['origin']).trim();
+      final cookie = valueOf(server['cookie']).trim();
       if (userAgent.isNotEmpty && !result.keys.any((key) => key.toLowerCase() == 'user-agent')) {
         result['User-Agent'] = userAgent;
       }
       if (referer.isNotEmpty && !result.keys.any((key) => key.toLowerCase() == 'referer')) {
         result['Referer'] = referer;
+      }
+      if (origin.isNotEmpty && !result.keys.any((key) => key.toLowerCase() == 'origin')) {
+        result['Origin'] = origin;
+      }
+      if (cookie.isNotEmpty && !result.keys.any((key) => key.toLowerCase() == 'cookie')) {
+        result['Cookie'] = cookie;
       }
     }
     return result;
