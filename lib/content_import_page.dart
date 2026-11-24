@@ -59,7 +59,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
     final job = await ShamFlixBackgroundImportService.currentJob();
     if (!mounted) return;
     final status = job?['status']?.toString();
-    if (status == 'completed' || status == 'failed' || status == 'cancelled') {
+    if (job == null || !['queued', 'running'].contains(status)) {
       _backgroundJobTimer?.cancel();
       _backgroundJobTimer = null;
     }
@@ -87,6 +87,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
         categoryUrl: url.text.trim(),
       );
       await _refreshBackgroundJob();
+      if (!mounted) return;
       _backgroundJobTimer ??= Timer.periodic(const Duration(seconds: 3), (_) => _refreshBackgroundJob());
       message('بدأ الاستيراد بالخلفية. يمكنك مغادرة هذه الصفحة وسيبقى التقدم محفوظاً.');
     } catch (e) {
