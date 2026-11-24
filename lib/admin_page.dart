@@ -1,5 +1,6 @@
 
 import 'dart:async';
+import 'background_import_status_page.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -4748,6 +4749,14 @@ class _AdminPageState extends State<AdminPage> {
           icon: Icons.movie_filter_outlined,
           onTap: () => Navigator.push(context, MaterialPageRoute(
             builder: (_) => const MovieMonitorPage(),
+          )),
+        ),
+        _homeCard(
+          title: 'حالات الاستيراد',
+          subtitle: 'متابعة تقدم عمليات الاستيراد التي تعمل بالخلفية',
+          icon: Icons.downloading_outlined,
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const BackgroundImportStatusPage(),
           )),
         ),
         _homeCard(
