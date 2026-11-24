@@ -40,8 +40,10 @@ begin
     'user_notifications', (select count(*) from public.user_notifications),
     'app_presence', (select count(*) from public.app_presence),
     'user_devices', (select count(*) from public.user_devices),
-    'live_matches', (select count(*) from public.live_matches),
-    'live_match_servers', (select count(*) from public.live_match_servers)
+    'movie_source_monitors', (select count(*) from public.movie_source_monitors),
+    'series_source_monitors', (select count(*) from public.series_source_monitors),
+    'series_section_monitors', (select count(*) from public.series_section_monitors),
+    'tv_channel_sources', (select count(*) from public.tv_channel_sources)
   );
 
   return jsonb_build_object(
