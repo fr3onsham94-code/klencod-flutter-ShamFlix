@@ -2271,7 +2271,11 @@ class _AccountPageState extends State<AccountPage> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      AuthService.isAdmin ? appText('مدير', 'Admin', 'Yönetici') : appText('مستخدم', 'User', 'Kullanıcı'),
+                      AuthService.isOwner
+                          ? appText('مالك التطبيق', 'App Owner', 'Uygulama Sahibi')
+                          : AuthService.isAdmin
+                              ? appText('مدير', 'Admin', 'Yönetici')
+                              : appText('مستخدم', 'User', 'Kullanıcı'),
                       style: TextStyle(
                         color: gold,
                         fontWeight: FontWeight.bold,
