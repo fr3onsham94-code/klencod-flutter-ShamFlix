@@ -52,6 +52,9 @@ android {
 
     defaultConfig {
         applicationId = "com.shamflix.app"
+        if (System.getenv("SHAMFLIX_EXPERIMENTAL_BUILD") == "true") {
+            applicationIdSuffix ".experimental"
+        }
         minSdk = 24
         targetSdk = 36
         versionCode = flutterVersionCode.toInteger()
@@ -84,4 +87,4 @@ flutter {
     source = "../.."
 }
 
-// ShamFlix - آخر تعديل: منع استخدام Debug keystore لتوقيع Release ودعم مفتاح إصدار خاص محلياً | التاريخ والوقت: 22/11/2026، 00:55 بتوقيت تركيا.
+// ShamFlix - experimental package suffix is enabled only for isolated test builds.
