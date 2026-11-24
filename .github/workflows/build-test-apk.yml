@@ -9,6 +9,7 @@ on:
       - fix/shared-app-settings-notifier
       - ui/collapsible-admin-settings-packages
       - feature/supabase-usage-dashboard
+      - feature/channel-playback-headers
   workflow_dispatch:
 
 permissions:
