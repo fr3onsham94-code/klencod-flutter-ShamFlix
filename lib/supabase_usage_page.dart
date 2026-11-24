@@ -68,7 +68,7 @@ class _SupabaseUsagePageState extends State<SupabaseUsagePage> {
           .timeout(const Duration(seconds: 25));
 
       if (response.status >= 400) {
-        throw Exception('تعذر جلب البيانات (\u0024{response.status}).');
+        throw Exception('تعذر جلب البيانات (${response.status}).');
       }
 
       final raw = response.data;
@@ -108,20 +108,20 @@ class _SupabaseUsagePageState extends State<SupabaseUsagePage> {
     final bytes = _number(value);
     if (bytes < 1024) return '$bytes بايت';
     if (bytes < 1024 * 1024) {
-      return '\u0024{(bytes / 1024).toStringAsFixed(1)} KB';
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
     }
     if (bytes < 1024 * 1024 * 1024) {
-      return '\u0024{(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
     }
-    return '\u0024{(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
   String _formatDate(dynamic value) {
     final parsed = DateTime.tryParse(value?.toString() ?? '');
     if (parsed == null) return 'غير متوفر';
     final local = parsed.toLocal();
-    final date = '\u0024{local.year}-\u0024{local.month.toString().padLeft(2, '0')}-\u0024{local.day.toString().padLeft(2, '0')}';
-    final time = '\u0024{local.hour.toString().padLeft(2, '0')}:\u0024{local.minute.toString().padLeft(2, '0')}:\u0024{local.second.toString().padLeft(2, '0')}';
+    final date = "${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}";
+    final time = "${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}:${local.second.toString().padLeft(2, '0')}";
     return '$date  $time';
   }
 
@@ -166,7 +166,7 @@ class _SupabaseUsagePageState extends State<SupabaseUsagePage> {
                   ),
                 ),
                 Text(
-                  '\u0024{(ratio * 100).toStringAsFixed(1)}%',
+                  '${(ratio * 100).toStringAsFixed(1)}%',
                   style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.bold,
@@ -186,7 +186,7 @@ class _SupabaseUsagePageState extends State<SupabaseUsagePage> {
             ),
             const SizedBox(height: 10),
             Text(
-              '\u0024{_formatBytes(usedBytes)} مستخدم من \u0024{_formatBytes(limitBytes)}',
+              '${_formatBytes(usedBytes)} مستخدم من ${_formatBytes(limitBytes)}',
               style: TextStyle(color: AppTheme.text, fontSize: 13),
             ),
             const SizedBox(height: 4),
@@ -418,7 +418,7 @@ class _SupabaseUsagePageState extends State<SupabaseUsagePage> {
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
                           child: Text(
-                            'آخر تحديث: \u0024{_formatDate(_metrics?['measured_at'])}',
+                            "آخر تحديث: ${_formatDate(_metrics?['measured_at'])}",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppTheme.secondaryText,
