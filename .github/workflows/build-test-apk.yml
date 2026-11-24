@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/auto-tv-channel-aggregation
+      - test/shamflix-version-4
   workflow_dispatch:
 
 permissions:
