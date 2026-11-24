@@ -52,63 +52,17 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
   }
 
   Future<void> _editPackage({Map<String, dynamic>? existing}) async {
-    final name = TextEditingController(text: existing?['name']?.toString() ?? '');
-    final order = TextEditingController(text: existing?['sort_order']?.toString() ?? '${packages.length + 1}');
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (dialogContext) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          backgroundColor: packagePanel,
-          title: Text(existing == null ? 'إضافة باقة' : 'تعديل الباقة',
-              style: TextStyle(color: packageGold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                autofocus: true,
-                style: TextStyle(color: AppTheme.text),
-                decoration: InputDecoration(
-                  labelText: 'اسم الباقة',
-                  labelStyle: TextStyle(color: AppTheme.secondaryText),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: order,
-                keyboardType: TextInputType.number,
-                style: TextStyle(color: AppTheme.text),
-                decoration: InputDecoration(
-                  labelText: 'ترتيب الباقة',
-                  labelStyle: TextStyle(color: AppTheme.secondaryText),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('إلغاء', style: TextStyle(color: AppTheme.secondaryText)),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: packageGold, foregroundColor: AppTheme.text),
-              onPressed: () {
-                if (name.text.trim().isEmpty) return;
-                Navigator.pop(dialogContext, {
-                  'name': name.text.trim(),
-                  'sort_order': int.tryParse(order.text.trim()) ?? packages.length + 1,
-                });
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
-        ),
+      builder: (_) => _PackageEditorDialog(
+        initialName: existing?['name']?.toString() ?? '',
+        initialOrder:
+            existing?['sort_order']?.toString() ?? '${packages.length + 1}',
+        isEditing: existing != null,
+        fallbackOrder: packages.length + 1,
       ),
     );
-    name.dispose();
-    order.dispose();
-    if (result == null) return;
+    if (!mounted || result == null) return;
 
     try {
       if (existing == null) {
@@ -117,11 +71,16 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
           'content_type': widget.contentType,
         });
       } else {
-        await AuthService.client.from('content_packages')
-            .update(result).eq('id', existing['id'].toString());
+        await AuthService.client
+            .from('content_packages')
+            .update(result)
+            .eq('id', existing['id'].toString());
       }
+      if (!mounted) return;
       await _load();
-      if (mounted) _message(existing == null ? 'تمت إضافة الباقة' : 'تم تعديل الباقة');
+      if (mounted) {
+        _message(existing == null ? 'تمت إضافة الباقة' : 'تم تعديل الباقة');
+      }
     } catch (e) {
       if (mounted) _message('تعذر حفظ الباقة: $e', isError: true);
     }
@@ -289,3 +248,108 @@ class _AdminPackagesPageState extends State<AdminPackagesPage> {
 
 
 // آخر تعديل: ربط ألوان النصوص والأزرار والواجهات بإعدادات لوحة الإدارة | التاريخ: 2026-11-21 | الوقت: 22:05:00 بتوقيت تركيا
+
+/// نافذة مستقلة تملك وحدها حقول الإدخال، حتى لا يتم التخلص من
+/// TextEditingController قبل اكتمال خروج نافذة الحوار من شجرة الواجهات.
+class _PackageEditorDialog extends StatefulWidget {
+  final String initialName;
+  final String initialOrder;
+  final bool isEditing;
+  final int fallbackOrder;
+
+  const _PackageEditorDialog({
+    required this.initialName,
+    required this.initialOrder,
+    required this.isEditing,
+    required this.fallbackOrder,
+  });
+
+  @override
+  State<_PackageEditorDialog> createState() => _PackageEditorDialogState();
+}
+
+class _PackageEditorDialogState extends State<_PackageEditorDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _orderController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _orderController = TextEditingController(text: widget.initialOrder);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _orderController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    Navigator.of(context).pop({
+      'name': name,
+      'sort_order':
+          int.tryParse(_orderController.text.trim()) ?? widget.fallbackOrder,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: AlertDialog(
+        backgroundColor: packagePanel,
+        title: Text(
+          widget.isEditing ? 'تعديل الباقة' : 'إضافة باقة',
+          style: TextStyle(color: packageGold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              style: TextStyle(color: AppTheme.text),
+              decoration: InputDecoration(
+                labelText: 'اسم الباقة',
+                labelStyle: TextStyle(color: AppTheme.secondaryText),
+              ),
+              onSubmitted: (_) => _save(),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _orderController,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: AppTheme.text),
+              decoration: InputDecoration(
+                labelText: 'ترتيب الباقة',
+                labelStyle: TextStyle(color: AppTheme.secondaryText),
+              ),
+              onSubmitted: (_) => _save(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'إلغاء',
+              style: TextStyle(color: AppTheme.secondaryText),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: packageGold,
+              foregroundColor: AppTheme.text,
+            ),
+            onPressed: _save,
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+}
