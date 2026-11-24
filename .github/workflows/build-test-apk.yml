@@ -3,6 +3,7 @@ name: Build ShamFlix test APK
 on:
   push:
     branches:
+      - main
       - feature/auto-tv-channel-aggregation
       - fix/shared-app-settings-notifier
   workflow_dispatch:
