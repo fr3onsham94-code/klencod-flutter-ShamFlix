@@ -1,4 +1,5 @@
 name: Build ShamFlix test APK
+# Test branch APK build: verify the owner dashboard changes before merge.
 
 on:
   push:
