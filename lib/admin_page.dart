@@ -2433,6 +2433,8 @@ class _AdminPageState extends State<AdminPage> {
       foreignKey = 'channel_id';
     }
 
+    var serversFuture = _extraLoad('playback_servers', {foreignKey: 'eq.' + contentId}, order: 'sort_order.asc,created_at.asc');
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -2444,11 +2446,7 @@ class _AdminPageState extends State<AdminPage> {
             content: SizedBox(
               width: 540,
               child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _extraLoad(
-                  'playback_servers',
-                  {foreignKey: 'eq.' + contentId},
-                  order: 'sort_order.asc,created_at.asc',
-                ),
+                future: serversFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return SizedBox(
@@ -2500,7 +2498,7 @@ class _AdminPageState extends State<AdminPage> {
                                           contentId: contentId,
                                           existing: server,
                                         );
-                                        setDialogState(() {});
+                                        setDialogState(() { serversFuture = _extraLoad('playback_servers', {foreignKey: 'eq.' + contentId}, order: 'sort_order.asc,created_at.asc'); });
                                       },
                                       icon: Icon(Icons.edit, color: adminGold),
                                     ),
@@ -2520,7 +2518,7 @@ class _AdminPageState extends State<AdminPage> {
                                         );
                                         if (yes == true) {
                                           await _extraDelete('playback_servers', server['id'].toString());
-                                          setDialogState(() {});
+                                          setDialogState(() { serversFuture = _extraLoad('playback_servers', {foreignKey: 'eq.' + contentId}, order: 'sort_order.asc,created_at.asc'); });
                                         }
                                       },
                                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
@@ -2544,7 +2542,7 @@ class _AdminPageState extends State<AdminPage> {
                 style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
                 onPressed: () async {
                   await _editPlaybackServer(type: type, contentId: contentId);
-                  setDialogState(() {});
+                  setDialogState(() { serversFuture = _extraLoad('playback_servers', {foreignKey: 'eq.' + contentId}, order: 'sort_order.asc,created_at.asc'); });
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('إضافة سيرفر'),
@@ -2560,6 +2558,8 @@ class _AdminPageState extends State<AdminPage> {
     final seriesId = seriesItem['id']?.toString();
     if (seriesId == null || seriesId.isEmpty) return;
 
+    var seasonsFuture = _extraLoad('seasons', {'series_id': 'eq.' + seriesId}, order: 'season_number.asc');
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -2571,7 +2571,7 @@ class _AdminPageState extends State<AdminPage> {
             content: SizedBox(
               width: 540,
               child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _extraLoad('seasons', {'series_id': 'eq.' + seriesId}, order: 'season_number.asc'),
+                future: seasonsFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
@@ -2604,7 +2604,7 @@ class _AdminPageState extends State<AdminPage> {
                                     ),
                                     IconButton(
                                       tooltip: 'تعديل',
-                                      onPressed: () => _editSeason(seriesId, existing: season, onSaved: () => setDialogState(() {})),
+                                      onPressed: () => _editSeason(seriesId, existing: season, onSaved: () => setDialogState(() { seasonsFuture = _extraLoad('seasons', {'series_id': 'eq.' + seriesId}, order: 'season_number.asc'); })),
                                       icon: const Icon(Icons.edit, color: Colors.lightBlueAccent),
                                     ),
                                     IconButton(
@@ -2628,7 +2628,7 @@ class _AdminPageState extends State<AdminPage> {
                                             await _extraDelete('episodes', ep['id'].toString());
                                           }
                                           await _extraDelete('seasons', season['id'].toString());
-                                          setDialogState(() {});
+                                          setDialogState(() { seasonsFuture = _extraLoad('seasons', {'series_id': 'eq.' + seriesId}, order: 'season_number.asc'); });
                                         }
                                       },
                                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
@@ -2647,7 +2647,7 @@ class _AdminPageState extends State<AdminPage> {
               TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('إغلاق', style: TextStyle(color: AppTheme.secondaryText))),
               FilledButton.icon(
                 style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
-                onPressed: () => _editSeason(seriesId, onSaved: () => setDialogState(() {})),
+                onPressed: () => _editSeason(seriesId, onSaved: () => setDialogState(() { seasonsFuture = _extraLoad('seasons', {'series_id': 'eq.' + seriesId}, order: 'season_number.asc'); })),
                 icon: const Icon(Icons.add),
                 label: const Text('إضافة موسم'),
               ),
@@ -2710,6 +2710,8 @@ class _AdminPageState extends State<AdminPage> {
   Future<void> _openSeasonEpisodes(Map<String, dynamic> season) async {
     final seasonId = season['id']?.toString();
     if (seasonId == null) return;
+    var episodesFuture = _extraLoad('episodes', {'season_id': 'eq.' + seasonId}, order: 'episode_number.asc');
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -2721,7 +2723,7 @@ class _AdminPageState extends State<AdminPage> {
             content: SizedBox(
               width: 560,
               child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _extraLoad('episodes', {'season_id': 'eq.' + seasonId}, order: 'episode_number.asc'),
+                future: episodesFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return SizedBox(height: 100, child: Center(child: CircularProgressIndicator(color: adminGold)));
@@ -2756,14 +2758,14 @@ class _AdminPageState extends State<AdminPage> {
                                       icon: Icon(Icons.dns_outlined, color: adminGold),
                                     ),
                                     IconButton(
-                                      tooltip: 'تعديل',                                      onPressed: () => _editEpisode(seasonId, existing: episode, onSaved: () => setDialogState(() {})),
+                                      tooltip: 'تعديل',                                      onPressed: () => _editEpisode(seasonId, existing: episode, onSaved: () => setDialogState(() { episodesFuture = _extraLoad('episodes', {'season_id': 'eq.' + seasonId}, order: 'episode_number.asc'); })),
                                       icon: const Icon(Icons.edit, color: Colors.lightBlueAccent),
                                     ),
                                     IconButton(
                                       tooltip: 'حذف',
                                       onPressed: () async {
                                         await _extraDelete('episodes', episode['id'].toString());
-                                        setDialogState(() {});
+                                        setDialogState(() { episodesFuture = _extraLoad('episodes', {'season_id': 'eq.' + seasonId}, order: 'episode_number.asc'); });
                                       },
                                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                                     ),
@@ -2781,7 +2783,7 @@ class _AdminPageState extends State<AdminPage> {
               TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('إغلاق', style: TextStyle(color: AppTheme.secondaryText))),
               FilledButton.icon(
                 style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
-                onPressed: () => _editEpisode(seasonId, onSaved: () => setDialogState(() {})),
+                onPressed: () => _editEpisode(seasonId, onSaved: () => setDialogState(() { episodesFuture = _extraLoad('episodes', {'season_id': 'eq.' + seasonId}, order: 'episode_number.asc'); })),
                 icon: const Icon(Icons.add),
                 label: const Text('إضافة حلقة'),
               ),
