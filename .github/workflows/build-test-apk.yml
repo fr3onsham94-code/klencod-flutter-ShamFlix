@@ -7,6 +7,7 @@ on:
       - feature/auto-tv-channel-aggregation
       - fix/shared-app-settings-notifier
       - ui/collapsible-admin-settings-packages
+      - feature/supabase-usage-dashboard
   workflow_dispatch:
 
 permissions:
