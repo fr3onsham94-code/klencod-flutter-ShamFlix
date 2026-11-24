@@ -3714,9 +3714,25 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
 
   String _livePackageLabel(Map<String, dynamic> package) {
     final rawName = package['name']?.toString() ?? 'باقة';
-    final cleanName = rawName
-        .replaceAll(RegExp(r'قنوات\s*تلقائية', caseSensitive: false), '')
-        .replaceAll(RegExp(r'^[\s\\-–—:|•·]+|[\s\\-–—:|•·]+
+    var name = rawName.replaceAll('قنوات تلقائية', '').trim();
+    while (name.isNotEmpty &&
+        (name.startsWith('-') || name.startsWith('–') ||
+         name.startsWith('—') || name.startsWith(':') ||
+         name.startsWith('|') || name.startsWith('•') ||
+         name.startsWith('·'))) {
+      name = name.substring(1).trim();
+    }
+    while (name.isNotEmpty &&
+        (name.endsWith('-') || name.endsWith('–') ||
+         name.endsWith('—') || name.endsWith(':') ||
+         name.endsWith('|') || name.endsWith('•') ||
+         name.endsWith('·'))) {
+      name = name.substring(0, name.length - 1).trim();
+    }
+    if (name.isEmpty) name = rawName.trim();
+    final count = packageChannelCounts[package['id'].toString()] ?? 0;
+    return '*$name* $count';
+  }
 
   Widget _liveFloatingMenu() {
     return AnimatedPositioned(
