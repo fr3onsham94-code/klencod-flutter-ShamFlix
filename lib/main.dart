@@ -1475,16 +1475,33 @@ class _PackageCatalogPageState extends State<PackageCatalogPage> {
           return;
         }
 
-        final contentRows = await AuthService.client
-            .from(tableName)
-            .select()
-            .inFilter('id', ids)
-            .eq('is_published', true)
-            .order('created_at', ascending: false);
+        // تقسيم معرّفات المحتوى إلى دفعات لتجنب طلبات PostgREST الكبيرة.
+        // ينطبق ذلك تلقائياً على الأفلام والمسلسلات وجميع الباقات.
+        final packageItems = <Map<String, dynamic>>[];
+        const batchSize = 50;
+        for (var start = 0; start < ids.length; start += batchSize) {
+          final end = (start + batchSize < ids.length)
+              ? start + batchSize
+              : ids.length;
+          final batchIds = ids.sublist(start, end);
 
-        packageContents[packageId] = contentRows
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
+          final contentRows = await AuthService.client
+              .from(tableName)
+              .select()
+              .inFilter('id', batchIds)
+              .eq('is_published', true);
+
+          packageItems.addAll(
+            contentRows.map((row) => Map<String, dynamic>.from(row)),
+          );
+        }
+
+        // الحفاظ على نفس ترتيب العرض السابق: الأحدث أولاً.
+        packageItems.sort(
+          (a, b) => (b['created_at']?.toString() ?? '')
+              .compareTo(a['created_at']?.toString() ?? ''),
+        );
+        packageContents[packageId] = packageItems;
       }));
 
       packages = loadedPackages;
