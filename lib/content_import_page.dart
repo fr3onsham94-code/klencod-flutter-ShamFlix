@@ -741,28 +741,66 @@ class _ContentImportPageState extends State<ContentImportPage> {
               const SizedBox(height: 12),
               if (loadingPackages) Center(child: CircularProgressIndicator(color: accent))
               else if (packages.isNotEmpty) ...[
-                const Text('الباقات المستهدفة (يمكن اختيار أكثر من باقة)',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                ...packages.map((p) {
-                  final id = p['id'].toString();
-                  return CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: packageIds.contains(id),
-                    activeColor: accent,
-                    title: Text(p['name'].toString()),
-                    onChanged: scanning || importing ? null : (checked) => setState(() {
-                      if (checked == true) {
-                        packageIds.add(id);
-                      } else {
-                        packageIds.remove(id);
-                      }
-                    }),
-                  );
-                }),
-                Text('تم اختيار ${packageIds.length} باقة',
-                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+                Card(
+                  color: panel,
+                  margin: EdgeInsets.zero,
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      initiallyExpanded: false,
+                      leading: Icon(Icons.folder_copy_outlined, color: accent),
+                      title: const Text('الباقات المستهدفة'),
+                      subtitle: Text(
+                        packageIds.isEmpty
+                            ? 'لم يتم اختيار باقة'
+                            : 'تم اختيار ${packageIds.length} من ${packages.length} باقة',
+                        style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
+                      ),
+                      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      children: [
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Wrap(
+                            spacing: 8,
+                            children: [
+                              TextButton(
+                                onPressed: scanning || importing
+                                    ? null
+                                    : () => setState(() => packageIds.addAll(
+                                          packages.map((p) => p['id'].toString()),
+                                        )),
+                                child: const Text('تحديد الكل'),
+                              ),
+                              TextButton(
+                                onPressed: scanning || importing || packageIds.isEmpty
+                                    ? null
+                                    : () => setState(() => packageIds.clear()),
+                                child: const Text('إلغاء التحديد'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ...packages.map((p) {
+                          final id = p['id'].toString();
+                          return CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: packageIds.contains(id),
+                            activeColor: accent,
+                            title: Text(p['name'].toString()),
+                            onChanged: scanning || importing ? null : (checked) => setState(() {
+                              if (checked == true) {
+                                packageIds.add(id);
+                              } else {
+                                packageIds.remove(id);
+                              }
+                            }),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
               ]
               else ...[
                 const Text('لا توجد باقات لهذا النوع. أنشئ باقة أولاً.'),

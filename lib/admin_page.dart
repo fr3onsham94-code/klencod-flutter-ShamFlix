@@ -620,13 +620,35 @@ class _AdminPageState extends State<AdminPage> {
     ),
   );
 
+  Widget _settingsExpansion({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Card(
+      color: adminPanel,
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+          leading: Icon(icon, color: adminGold),
+          title: Text(title, style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+          subtitle: Text(subtitle, style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+          iconColor: adminGold,
+          collapsedIconColor: AppTheme.secondaryText,
+          children: children,
+        ),
+      ),
+    );
+  }
+
   Widget settingsSection() {
     if (badgeSettingLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: adminGold),
-      );
+      return Center(child: CircularProgressIndicator(color: adminGold));
     }
-
     if (badgeSettingError != null) {
       return errorView(badgeSettingError!, loadCategoryBadgeSetting);
     }
@@ -634,13 +656,23 @@ class _AdminPageState extends State<AdminPage> {
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
-        _settingsGroupTitle('المظهر والألوان', 'تخصيص ألوان واجهة التطبيق ومعاينتها'),
-        themePaletteSection(),
-        _settingsGroupTitle('القائمة العلوية وقائمة الباقات', 'التحكم بحجم زر القائمة وعرضها والخطوط والأيقونات'),
-        _sidebarSettingsCard(),
-        _settingsGroupTitle('عرض المحتوى والبوسترات', 'التحكم ببطاقات الأفلام والمسلسلات والقنوات'),
-
-        Card(
+        _settingsExpansion(
+          title: 'المظهر والألوان',
+          subtitle: 'تخصيص ألوان واجهة التطبيق ومعاينتها',
+          icon: Icons.palette_outlined,
+          children: [themePaletteSection()],
+        ),
+        _settingsExpansion(
+          title: 'القائمة العلوية وقائمة الباقات',
+          subtitle: 'التحكم بحجم زر القائمة وعرضها والخطوط والأيقونات',
+          icon: Icons.menu_open,
+          children: [_sidebarSettingsCard()],
+        ),
+        _settingsExpansion(
+          title: 'عرض المحتوى والبوسترات',
+          subtitle: 'التحكم ببطاقات الأفلام والمسلسلات والقنوات',
+          icon: Icons.grid_view_rounded,
+          children: [Card(
           color: adminPanel,
           child: SwitchListTile(
             value: showCategoryBadge,
@@ -741,9 +773,13 @@ class _AdminPageState extends State<AdminPage> {
             'هذا إعداد عام يُحفظ في قاعدة البيانات ويُطبّق على كل مستخدمي ShamFlix.',
             style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
           ),
+        )],
         ),
-        _settingsGroupTitle('روابط التطبيق والتحديثات', 'إدارة رابط الدعوة ومعلومات إصدار التطبيق'),
-        const SizedBox(height: 10),
+        _settingsExpansion(
+          title: 'روابط التطبيق والتحديثات',
+          subtitle: 'إدارة رابط الدعوة ومعلومات إصدار التطبيق',
+          icon: Icons.system_update_alt,
+          children: [const SizedBox(height: 10),
         Card(
           color: adminPanel,
           child: Padding(
@@ -786,7 +822,8 @@ class _AdminPageState extends State<AdminPage> {
           Padding(
             padding: EdgeInsets.all(12),
             child: Center(child: CircularProgressIndicator(color: adminGold)),
-          ),
+          )],
+        ),
       ],
     );
   }
@@ -4715,66 +4752,80 @@ class _AdminPageState extends State<AdminPage> {
   Widget homeSection() {
     return ListView(
       children: [
-        _homeCard(
-          title: 'الأفلام',
-          subtitle: 'إضافة وتعديل وحذف وبحث عن الأفلام',
-          icon: Icons.movie_creation_outlined,
-          onTap: () => navigateTo('movies'),
+        _homeGroup(
+          title: 'إدارة المحتوى والباقات',
+          subtitle: 'الأفلام والمسلسلات والقنوات ومصادر البث',
+          icon: Icons.video_library_outlined,
+          children: [
+            _homeCard(
+              title: 'الأفلام',
+              subtitle: 'إضافة وتعديل وحذف وبحث عن الأفلام',
+              icon: Icons.movie_creation_outlined,
+              onTap: () => navigateTo('movies'),
+            ),
+            _homeCard(
+              title: 'المسلسلات',
+              subtitle: 'إضافة وتعديل وحذف ونشر المسلسلات',
+              icon: Icons.live_tv_outlined,
+              onTap: () => navigateTo('series'),
+            ),
+            _homeCard(
+              title: 'القنوات',
+              subtitle: 'إضافة وتعديل وحذف وإدارة البث المباشر',
+              icon: Icons.tv,
+              onTap: () => navigateTo('channels'),
+            ),
+            Card(
+              color: adminPanel,
+              margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: ListTile(
+                leading: Icon(Icons.playlist_add_check_circle_outlined, color: adminGold, size: 30),
+                title: Text('مصادر قنوات IPTV', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+                subtitle: Text('إضافة وإدارة روابط قوائم M3U وM3U8 ودمج قنواتها تلقائياً', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+                trailing: Icon(Icons.chevron_left, color: adminGold),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TvSourcesSettingsPage())),
+              ),
+            ),
+          ],
         ),
-        _homeCard(
-          title: 'المسلسلات',
-          subtitle: 'إضافة وتعديل وحذف ونشر المسلسلات',
-          icon: Icons.live_tv_outlined,
-          onTap: () => navigateTo('series'),
-        ),
-        _homeCard(
-          title: 'استيراد المحتوى من المواقع',
-          subtitle: 'اكتشاف الأفلام والمسلسلات من رابط قسم وإضافتها إلى الباقة تلقائياً',
-          icon: Icons.travel_explore,
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => const ContentImportPage(),
-          )),
-        ),
-        _homeCard(
-          title: 'مراقبة أقسام المسلسلات تلقائياً',
-          subtitle: 'اكتشاف المسلسلات الجديدة وإنشاء صفحاتها وإضافة الحلقات تلقائياً إلى الباقات',
-          icon: Icons.radar,
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => const SeriesMonitorPage(),
-          )),
-        ),
-        _homeCard(
-          title: 'مراقبة الأفلام تلقائياً',
-          subtitle: 'إضافة الأفلام الجديدة من أقسام المواقع إلى الباقات تلقائياً',
-          icon: Icons.movie_filter_outlined,
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => const MovieMonitorPage(),
-          )),
-        ),
-        _homeCard(
-          title: 'حالات الاستيراد',
-          subtitle: 'متابعة تقدم عمليات الاستيراد التي تعمل بالخلفية',
-          icon: Icons.downloading_outlined,
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => const BackgroundImportStatusPage(),
-          )),
-        ),
-        _homeCard(
-          title: 'القنوات',
-          subtitle: 'إضافة وتعديل وحذف وإدارة البث المباشر',
-          icon: Icons.tv,
-          onTap: () => navigateTo('channels'),
-        ),
-        Card(
-          color: adminPanel,
-          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          child: ListTile(
-            leading: Icon(Icons.playlist_add_check_circle_outlined, color: adminGold, size: 30),
-            title: Text('مصادر قنوات IPTV', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
-            subtitle: Text('إضافة وإدارة روابط قوائم M3U وM3U8 ودمج قنواتها تلقائياً', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
-            trailing: Icon(Icons.chevron_left, color: adminGold),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TvSourcesSettingsPage())),
-          ),
+        _homeGroup(
+          title: 'الاستيراد والمراقبة',
+          subtitle: 'استيراد المحتوى ومراقبة التحديثات وحالات التشغيل',
+          icon: Icons.cloud_sync_outlined,
+          children: [
+            _homeCard(
+              title: 'استيراد المحتوى من المواقع',
+              subtitle: 'اكتشاف الأفلام والمسلسلات من رابط قسم وإضافتها إلى الباقة تلقائياً',
+              icon: Icons.travel_explore,
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const ContentImportPage(),
+              )),
+            ),
+            _homeCard(
+              title: 'مراقبة أقسام المسلسلات تلقائياً',
+              subtitle: 'اكتشاف المسلسلات الجديدة وإنشاء صفحاتها وإضافة الحلقات تلقائياً إلى الباقات',
+              icon: Icons.radar,
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const SeriesMonitorPage(),
+              )),
+            ),
+            _homeCard(
+              title: 'مراقبة الأفلام تلقائياً',
+              subtitle: 'إضافة الأفلام الجديدة من أقسام المواقع إلى الباقات تلقائياً',
+              icon: Icons.movie_filter_outlined,
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const MovieMonitorPage(),
+              )),
+            ),
+            _homeCard(
+              title: 'حالات الاستيراد',
+              subtitle: 'متابعة تقدم عمليات الاستيراد التي تعمل بالخلفية',
+              icon: Icons.downloading_outlined,
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const BackgroundImportStatusPage(),
+              )),
+            ),
+          ],
         ),
         _homeCard(
           title: 'المتصلون الآن',
@@ -4795,6 +4846,42 @@ class _AdminPageState extends State<AdminPage> {
           onTap: () => navigateTo('settings'),
         ),
       ],
+    );
+  }
+
+  Widget _homeGroup({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Card(
+      color: adminPanel,
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: false,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+          childrenPadding: const EdgeInsets.only(bottom: 8),
+          leading: Icon(icon, color: adminGold, size: 30),
+          title: Text(
+            title,
+            style: TextStyle(
+              color: AppTheme.text,
+              fontWeight: FontWeight.bold,
+              fontSize: 17,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
+          ),
+          iconColor: adminGold,
+          collapsedIconColor: AppTheme.secondaryText,
+          children: children,
+        ),
+      ),
     );
   }
 
