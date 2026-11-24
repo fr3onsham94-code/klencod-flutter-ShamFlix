@@ -1,4 +1,5 @@
 name: Build ShamFlix test APK
+# Test branch APK build: verify the owner dashboard changes before merge.
 
 on:
   push:
@@ -7,6 +8,7 @@ on:
       - feature/auto-tv-channel-aggregation
       - fix/shared-app-settings-notifier
       - ui/collapsible-admin-settings-packages
+      - feature/supabase-usage-dashboard
   workflow_dispatch:
 
 permissions:
