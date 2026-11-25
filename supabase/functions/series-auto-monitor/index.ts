@@ -447,7 +447,7 @@ Deno.serve(async (req: Request) => {
     await Promise.all((episodePages||[]).slice(start,start+10).map(async (row:any)=>{
     const last=row.source_page_checked_at?new Date(row.source_page_checked_at).getTime():0;
     const interval=Math.max(15,Number(row.source_monitor_interval_minutes)||60)*60000;
-    if(last&&now-last<interval)continue;
+    if(last&&now-last<interval)return;
     let pageError:string|null=null;
     try{
       const source=validateUrl(row.source_page_url);
