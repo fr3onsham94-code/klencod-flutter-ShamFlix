@@ -356,7 +356,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
         backgroundColor: AppTheme.panel,
         title: Text('حذف المصدر؟', style: TextStyle(color: AppTheme.text)),
         content: Text(
-          'سيُحذف المصدر «${source['name']}». القنوات وروابط البث التي سبق استيرادها لن تُحذف تلقائياً.',
+          'سيُحذف المصدر «${source['name']}» وتُعطّل روابطه. تبقى القناة ظاهرة فقط إذا كان هناك مصدر آخر نشط يزوّدها.',
           style: TextStyle(color: AppTheme.secondaryText),
         ),
         actions: [
@@ -381,8 +381,9 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           await AuthService.client.storage.from('tv-source-playlists').remove([storagePath]);
         } catch (_) {}
       }
+      final synced = await _syncNow();
       await _loadSources();
-      if (mounted) _message('تم حذف المصدر');
+      if (synced && mounted) _message('تم حذف المصدر وتنظيف قنواته غير المدعومة');
     } catch (e) {
       _message('تعذر حذف المصدر: $e', error: true);
     }
