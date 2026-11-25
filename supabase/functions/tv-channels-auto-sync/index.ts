@@ -467,8 +467,12 @@ async function disableInactiveSourceServers(db: any, activeSourceIds: Set<string
 async function hideInactiveImportedChannels(db: any) {
   const activeChannelIds = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
+    // Manual playback rows have source_id = NULL. They are intentionally
+    // outside source cleanup and must continue to keep their channels visible.
     const { data, error } = await db.from("playback_servers")
-      .select("channel_id").not("source_id", "is", null).eq("is_active", true)
+      .select("channel_id")
+      .not("channel_id", "is", null)
+      .eq("is_active", true)
       .order("channel_id").range(offset, offset + 999);
     if (error) throw new Error("active channel lookup: " + JSON.stringify(error));
     for (const row of data || []) if (row.channel_id) activeChannelIds.add(String(row.channel_id));
@@ -828,10 +832,12 @@ async function syncChannels(db: any) {
   // packages. If another active source still provides the same channel, it stays visible.
   const activeSourceChannelIds = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
+    // Count active manual rows (source_id IS NULL) for visibility only.
+    // Their playback rows are never updated, pruned, or deleted by source sync.
     const { data, error } = await db.from("playback_servers")
       .select("channel_id")
-      .not("source_id","is",null)
-      .eq("is_active",true)
+      .not("channel_id", "is", null)
+      .eq("is_active", true)
       .order("channel_id")
       .range(offset, offset + 999);
     if (error) throw new Error("active source channel lookup: " + JSON.stringify(error));
