@@ -51,7 +51,7 @@ function baseChannelName(value: string): string {
   return clean(value).normalize("NFKC")
     // Remove codec / quality markers that identify a stream variant, not a channel.
     .replace(/\s*[([]?\s*(?:SD|HD|FHD|UHD|4K|8K|H\.?265|HEVC|AVC|X\.?265|HDR|[0-9]{3,4}\s*[pPiI])\s*[)\]]?\s*$/i, "")
-    .replace(/\b(?:FULL\s*HD|ULTRA\s*HD|FHD|UHD|HD|SD)\s*(?=\d+\b)/gi, " ")
+    .replace(/\s+(?:FULL\s*HD|ULTRA\s*HD|FHD|UHD|HD|SD)\s*(?=\d+\b)/gi, " ")
     .replace(/\b(?:H\.?265|HEVC|AVC|X\.?265)\b/gi, " ")
     .replace(/\s*[ⓈⒼⓅⒽⓊ]+\s*$/u, "")
     .replace(/\s+/g, " ").trim();
