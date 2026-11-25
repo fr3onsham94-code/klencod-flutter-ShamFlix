@@ -359,7 +359,7 @@ async function deleteEmptyAutomaticChannelPackages(db: any) {
     if (!data || data.length < 1000) break;
   }
 
-  const emptyPackageIds = packageIds.filter(id => !nonEmptyPackageIds.has(id));
+  const emptyPackageIds = packageIds.filter((id: string) => !nonEmptyPackageIds.has(id));
   for (let i = 0; i < emptyPackageIds.length; i += 500) {
     const { error } = await db.from("content_packages").delete().in("id", emptyPackageIds.slice(i, i + 500));
     if (error) throw new Error("empty automatic package deletion: " + JSON.stringify(error));
