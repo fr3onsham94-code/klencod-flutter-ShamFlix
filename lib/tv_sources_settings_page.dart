@@ -47,7 +47,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     try {
       final rows = await AuthService.client
           .from('tv_channel_sources')
-          .select('id,name,playlist_url,is_active,last_checked_at,last_error,last_entry_count,created_at')
+          .select('id,name,playlist_url,is_active,is_builtin,source_key,last_checked_at,last_error,last_entry_count,created_at')
           .order('created_at', ascending: false);
       if (!mounted) return;
       setState(() {
@@ -75,7 +75,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
 
   Future<void> _addSource() async {
     if (_saving) return;
-    if (_sources.length >= 20) {
+    if (_sources.where((source) => source['is_builtin'] != true).length >= 20) {
       _message('وصلت للحد الأقصى: 20 مصدراً إضافياً', error: true);
       return;
     }
@@ -146,7 +146,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     }
   }
 
-  Future<void> _deleteSource(Map<String, dynamic> source) async {
+  Future<void> _deleteSource(Map<String, dynamic> source) async {\n    if (source['is_builtin'] == true) {\n      _message('المصادر الأساسية لا تُحذف؛ يمكنك إيقافها أو تشغيلها فقط', error: true);\n      return;\n    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -313,7 +313,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                     activeColor: AppTheme.primary,
                                     onChanged: (value) => _setActive(source, value),
                                     title: Text(source['name']?.toString() ?? 'مصدر', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                                    subtitle: Text(source['playlist_url']?.toString() ?? '', textDirection: TextDirection.ltr, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11)),
+                                    subtitle: Text('${source['is_builtin'] == true ? 'مصدر أساسي' : 'مصدر مضاف'} • ${source['playlist_url']?.toString() ?? ''}', textDirection: TextDirection.ltr, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11)),
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
@@ -322,7 +322,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                         Expanded(child: Text(_lastStatus(source), style: TextStyle(color: source['last_error'] == null ? muted : Colors.orangeAccent, fontSize: 11))),
                                         IconButton(
                                           tooltip: 'حذف المصدر',
-                                          onPressed: () => _deleteSource(source),
+                                          onPressed: source['is_builtin'] == true ? null : () => _deleteSource(source),
                                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                                         ),
                                       ],
