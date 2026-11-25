@@ -33,3 +33,12 @@ create index if not exists idx_series_source_page_monitor
 create index if not exists idx_episodes_source_page_monitor
   on public.episodes (source_page_checked_at)
   where source_page_url is not null and source_monitor_enabled = true;
+
+-- Tag only links discovered from a particular source page so refreshes never
+-- disable manually-entered playback servers.
+alter table public.playback_servers
+  add column if not exists source_page_url text;
+
+create index if not exists idx_playback_servers_source_page
+  on public.playback_servers (source_page_url)
+  where source_page_url is not null;
