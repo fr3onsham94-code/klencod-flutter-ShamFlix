@@ -1,5 +1,8 @@
 -- Xtream credentials and imported M3U files are managed independently per source.
 alter table public.tv_channel_sources
+  alter column playlist_url drop not null;
+
+alter table public.tv_channel_sources
   add column if not exists source_type text not null default 'm3u_url',
   add column if not exists xtream_server_url text,
   add column if not exists xtream_username text,
