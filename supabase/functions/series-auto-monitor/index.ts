@@ -380,12 +380,16 @@ Deno.serve(async (req: Request) => {
               if(ins)throw ins;seriesId=saved.id;
             }
           }
-          const {error:metadataUpdateError}=await db.from("series").update({
-            title:meta.title,poster_url:meta.poster_url,description:meta.description,
-            category:meta.category,release_year:meta.release_year,
+          const metadataUpdates:Record<string,unknown>={
             source_monitor_enabled:true,source_monitor_interval_minutes:monitor.check_interval_minutes,
             source_page_checked_at:new Date().toISOString(),source_page_last_error:null,
-          }).eq("id",seriesId);
+          };
+          if(meta.title)metadataUpdates.title=meta.title;
+          if(meta.poster_url)metadataUpdates.poster_url=meta.poster_url;
+          if(meta.description)metadataUpdates.description=meta.description;
+          if(meta.category)metadataUpdates.category=meta.category;
+          if(meta.release_year)metadataUpdates.release_year=meta.release_year;
+          const {error:metadataUpdateError}=await db.from("series").update(metadataUpdates).eq("id",seriesId);
           if(metadataUpdateError)throw metadataUpdateError;
           await db.from("series").update({source_page_url:card.url})
             .eq("id",seriesId).is("source_page_url",null);
