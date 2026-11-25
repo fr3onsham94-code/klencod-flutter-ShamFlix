@@ -189,14 +189,15 @@ function extractSources(html: string, page: URL) {
   return [...found.values()].slice(0,60);
 }
 function findPublicWatchUrls(html: string, page: URL, allowedHost: string): string[] {
-  const normalized = html.replace(/\\\\\//g,"/").replace(/\\u0026/g,"&").replace(/&amp;/g,"&");
+  const normalized = html.replaceAll("\\/", "/").replaceAll("\\u0026", "&").replaceAll("&amp;", "&");
   const candidates = new Set<string>();
+  const routePattern = new RegExp(String.raw\`(?:https?:\/\/[^\s"'<>]+)?\/watch\/[^\s"'<>\\)]+\`, "gi");
   const add = (raw: string) => {
-    const value = raw.trim().replace(/^["']|["']$/g,"");
+    const value = raw.trim().replace(/^["']|["']$/g, "");
     if (!value || /^(javascript:|#|mailto:)/i.test(value)) return;
     try {
-      const target = validateUrl(new URL(value,page).toString());
-      if (target.hostname === allowedHost && /\\/watch(?:\\/|$)/i.test(target.pathname)) {
+      const target = validateUrl(new URL(value, page).toString());
+      if (target.hostname === allowedHost && target.pathname.toLowerCase().includes("/watch/")) {
         target.hash = "";
         candidates.add(target.toString());
       }
@@ -205,20 +206,19 @@ function findPublicWatchUrls(html: string, page: URL, allowedHost: string): stri
   // Akwam and similar sites may store the watch route in data-* attributes.
   for (const match of normalized.matchAll(/<(?:a|button|iframe|frame|div|span)[^>]*>/gi)) {
     const a = attrs(match[0]);
-    for (const key of ["href","data-href","data-url","data-link","data-src","data-embed","onclick"]) {
-      if (a[key]) {
-        const value = a[key];
-        const route = /(?:https?:\\/\\/[^\\s"'<>]+)?\\/watch\\/[^\\s"'<>\\\\)]+/i.exec(value);
-        if (route) add(route[0]);
-      }
+    for (const key of ["href", "data-href", "data-url", "data-link", "data-src", "data-embed", "onclick"]) {
+      if (!a[key]) continue;
+      const route = routePattern.exec(a[key]);
+      routePattern.lastIndex = 0;
+      if (route) add(route[0]);
     }
   }
   // Some versions expose the public /watch/ route only inside inline scripts.
-  for (const match of normalized.matchAll(/(?:https?:\\/\\/[^\\s"'<>]+)?\\/watch\\/[^\\s"'<>\\\\)]+/gi)) {
+  for (const match of normalized.matchAll(routePattern)) {
     add(match[0]);
     if (candidates.size >= 5) break;
   }
-  return [...candidates].slice(0,5);
+  return [...candidates].slice(0, 5);
 }
 async function inspectMovie(card: {url:string;title:string;poster:string}, host: string, category: string) {
   const page = await fetchHtml(card.url,host);
