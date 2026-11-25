@@ -906,6 +906,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
                     dropdownColor: panel,
                     decoration: const InputDecoration(labelText: 'فترة فحص الحلقات'),
                     items: const [
+                      DropdownMenuItem(value: 15, child: Text('كل 15 دقيقة')),
                       DropdownMenuItem(value: 30, child: Text('كل 30 دقيقة')),
                       DropdownMenuItem(value: 60, child: Text('كل ساعة')),
                       DropdownMenuItem(value: 180, child: Text('كل 3 ساعات')),
