@@ -363,9 +363,10 @@ Deno.serve(async (req: Request) => {
   const {data:pageMovies,error:pageMoviesError} = await db.from("movies")
     .select("id,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes")
     .eq("source_monitor_enabled",true).not("source_page_url","is",null)
-    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(50);
+    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(20);
   if (pageMoviesError) return json({error:pageMoviesError.message},500);
-  for (const movieRow of pageMovies || []) {
+  for (let start=0;start<(pageMovies||[]).length;start+=10) {
+    await Promise.all((pageMovies||[]).slice(start,start+10).map(async (movieRow:any) => {
     const last = movieRow.source_page_checked_at ? new Date(movieRow.source_page_checked_at).getTime() : 0;
     const interval = Math.max(15,Number(movieRow.source_monitor_interval_minutes)||60)*60000;
     if (last && now-last < interval) continue;
@@ -400,6 +401,7 @@ Deno.serve(async (req: Request) => {
       summary.failed++;
     }
     summary.results.push({movie_id:movieRow.id,mode:"individual_page",error:pageError});
+    }));
   }
   return json({success:true,...summary});
 });
