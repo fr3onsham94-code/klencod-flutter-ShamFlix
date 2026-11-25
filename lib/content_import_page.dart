@@ -526,10 +526,12 @@ class _ContentImportPageState extends State<ContentImportPage> {
             try {
               await _ensureSeriesInPackage(targetSeriesId);
               await AuthService.client.from('series').update({
-                'source_page_url': emptyNull(item['page_url']),
                 'source_monitor_enabled': monitorSeries,
                 'source_monitor_interval_minutes': monitorInterval,
               }).eq('id', targetSeriesId);
+              await AuthService.client.from('series').update({
+                'source_page_url': emptyNull(item['page_url']),
+              }).eq('id', targetSeriesId).is('source_page_url', null);
               if (_isAkwamPage(item['page_url'])) {
                 akwamSeriesCount++;
                 final stats = await _saveAkwamSeriesEpisodes(
