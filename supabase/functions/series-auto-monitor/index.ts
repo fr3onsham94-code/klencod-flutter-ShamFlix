@@ -202,11 +202,17 @@ async function replaceEpisodePageServers(db: any, episodeId: string, pageUrl: st
   const {data:oldServers,error:readError} = await db.from("playback_servers")
     .select("id,stream_url").eq("episode_id",episodeId).eq("source_page_url",pageUrl);
   if (readError) throw readError;
-  const nextUrls = new Set(sources.map(source => source.url));
+  const sourceByUrl = new Map(sources.map((source,index) => [source.url,{source,index}]));
   const oldUrls = new Set((oldServers || []).map((server:any) => server.stream_url));
   for (const server of oldServers || []) {
+    const match = sourceByUrl.get(server.stream_url);
+    const updates:any = {is_active:!!match};
+    if (match) {
+      updates.sort_order = match.index;
+      updates.server_name = match.source.name || ("السيرفر " + (match.index + 1));
+    }
     const {error:updateError} = await db.from("playback_servers")
-      .update({is_active:nextUrls.has(server.stream_url)}).eq("id",server.id);
+      .update(updates).eq("id",server.id);
     if (updateError) throw updateError;
   }
   const rows = sources.filter(source => !oldUrls.has(source.url)).map((source,index) => ({
