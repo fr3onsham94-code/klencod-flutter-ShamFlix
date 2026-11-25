@@ -83,7 +83,7 @@ function safeStreamUrl(raw: string): string | null {
         /^f[cd][0-9a-f]{2}:/i.test(ipHost) || /^fe80:/i.test(ipHost) ||
         /^::ffff:(127|10|192\.168|169\.254)\./i.test(ipHost)) return null;
     if (/youtube\.com|youtu\.be|twitch\.tv|facebook\.com|instagram\.com/i.test(host)) return null;
-    if (!/\.m3u8?(?:$|\?)|\.mpd(?:$|\?)/i.test(u.pathname + u.search)) return null;
+    if (!/\.m3u8?(?:$|\?)|\.mpd(?:$|\?)|\.ts(?:$|\?)/i.test(u.pathname + u.search)) return null;
     u.hash = "";
     return u.toString();
   } catch { return null; }
@@ -341,17 +341,22 @@ async function syncChannels(db: any) {
       const sourceType = String(row.source_type || "m3u_url");
       let sourceUrl = String(row.playlist_url || "");
       if (sourceType === "xtream") {
-        const base = new URL(String(row.xtream_server_url || ""));
-        if (base.protocol !== "https:" || base.username || base.password) {
-          throw new Error("Xtream source must use a public HTTPS server URL");
+        try {
+          const base = new URL(String(row.xtream_server_url || ""));
+          if (base.protocol !== "https:" || base.username || base.password) {
+            throw new Error("invalid Xtream URL");
+          }
+          base.pathname = base.pathname.replace(/\/$/, "") + "/get.php";
+          base.search = "";
+          base.searchParams.set("username", String(row.xtream_username || ""));
+          base.searchParams.set("password", String(row.xtream_password || ""));
+          base.searchParams.set("type", "m3u_plus");
+          base.searchParams.set("output", "m3u8");
+          sourceUrl = base.toString();
+        } catch {
+          // Keep this source isolated; its failure is recorded without aborting other sources.
+          sourceUrl = "invalid://xtream-source";
         }
-        base.pathname = base.pathname.replace(/\/$/, "") + "/get.php";
-        base.search = "";
-        base.searchParams.set("username", String(row.xtream_username || ""));
-        base.searchParams.set("password", String(row.xtream_password || ""));
-        base.searchParams.set("type", "m3u_plus");
-        base.searchParams.set("output", "m3u8");
-        sourceUrl = base.toString();
       }
       return {
         id: row.source_key ? String(row.source_key) : (sourceType === "xtream" ? "xtream:" : "custom:") + String(row.id),
@@ -451,7 +456,7 @@ async function syncChannels(db: any) {
       streamRows.push({
         channel_id: null,
         channel_key: key,
-        server_name: stream.sourceName + " • " + qualityLabel(stream.name, stream.url) + " • " + (stream.url.includes(".m3u8") ? "HLS" : "DASH"),
+        server_name: stream.sourceName + " • " + qualityLabel(stream.name, stream.url) + " • " + (stream.url.includes(".m3u8") ? "HLS" : stream.url.includes(".ts") ? "MPEG-TS" : "DASH"),
         stream_url: stream.url,
         source_key: stream.sourceId + ":" + await hash(key + "|" + stream.url),
         source_id: stream.sourceId,
