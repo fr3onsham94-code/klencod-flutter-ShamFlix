@@ -227,10 +227,10 @@ function isPublicIpAddress(address: string): boolean {
   return true;
 }
 
-async function validatePublicPlaylistUrl(url: URL) {
+async function validatePublicPlaylistUrl(url: URL, allowNonStandardPort = false) {
   const host = url.hostname.toLowerCase();
   if (url.protocol !== "https:" || url.username || url.password ||
-      (url.port && url.port !== "443") || !host || host === "localhost" ||
+      (url.port && url.port !== "443" && !allowNonStandardPort) || !host || host === "localhost" ||
       host.endsWith(".localhost") || host.endsWith(".local") ||
       host.endsWith(".internal") || host.endsWith(".test") ||
       host.includes(":") || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) {
@@ -259,7 +259,7 @@ async function fetchPlaylist(source: PlaylistSource, db: any) {
   let current = new URL(source.url);
   let response: Response | null = null;
   for (let hop = 0; hop <= 3; hop++) {
-    await validatePublicPlaylistUrl(current);
+    await validatePublicPlaylistUrl(current, source.sourceType === "xtream");
     response = await fetch(current.toString(), {
       redirect: "manual",
       signal: AbortSignal.timeout(45000),
