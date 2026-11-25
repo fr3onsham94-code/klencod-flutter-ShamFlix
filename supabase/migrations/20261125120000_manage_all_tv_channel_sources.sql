@@ -51,7 +51,7 @@ values
 ('m3ucl-pe',true,'M3U.CL PERU','https://www.m3u.cl/lista/PE.m3u',true),
 ('m3ucl-do',true,'M3U.CL DOMINICAN REPUBLIC','https://www.m3u.cl/lista/DO.m3u',true),
 ('m3ucl-ve',true,'M3U.CL VENEZUELA','https://www.m3u.cl/lista/VE.m3u',true)
-on conflict (source_key) where source_key is not null do nothing;
+on conflict do nothing;
 
 comment on column public.tv_channel_sources.source_key is
   'Stable identifier for built-in playlist sources; null for user-added sources.';
