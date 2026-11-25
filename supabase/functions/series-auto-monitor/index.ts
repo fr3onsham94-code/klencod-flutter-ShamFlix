@@ -330,6 +330,9 @@ Deno.serve(async (req: Request) => {
     await db.from("series_source_monitors").update({
       last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString(),
     }).eq("id",monitor.id);
+    await db.from("series").update({
+      source_page_checked_at:new Date().toISOString(),source_page_last_error:errorMessage,
+    }).eq("id",monitor.series_id);
     summary.checked++;
     summary.results.push({monitor_id:monitor.id,added,error:errorMessage});
   }
@@ -427,6 +430,43 @@ Deno.serve(async (req: Request) => {
     }catch(e){errorMessage=e instanceof Error?e.message:"تعذر فحص قسم المسلسلات";summary.failed++;}
     await db.from("series_section_monitors").update({last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString()}).eq("id",monitor.id);
     summary.checked++;summary.results.push({monitor_id:monitor.id,added,error:errorMessage,mode:"section"});
+  }
+
+  // Independently recheck saved episode pages, even if a provider removes
+  // an episode from the current series listing.
+  const {data:episodePages,error:episodePagesError}=await db.from("episodes")
+    .select("id,episode_number,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes,seasons!inner(season_number,series_id,series!inner(source_monitor_enabled))")
+    .eq("source_monitor_enabled",true).eq("seasons.series.source_monitor_enabled",true)
+    .not("source_page_url","is",null)
+    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(50);
+  if(episodePagesError)return json({error:episodePagesError.message},500);
+  for(const row of episodePages||[]){
+    const last=row.source_page_checked_at?new Date(row.source_page_checked_at).getTime():0;
+    const interval=Math.max(15,Number(row.source_monitor_interval_minutes)||60)*60000;
+    if(last&&now-last<interval)continue;
+    let pageError:string|null=null;
+    try{
+      const source=validateUrl(row.source_page_url);
+      const season=Array.isArray(row.seasons)?row.seasons[0]:row.seasons;
+      const link={url:source.toString(),title:row.title||("الحلقة "+row.episode_number),number:Number(row.episode_number)};
+      const episode=await inspectEpisode(link,source.hostname,Number(season?.season_number)||1);
+      let primaryUrl:string|null=null;
+      if(episode.sources.length)primaryUrl=await replaceEpisodePageServers(db,row.id,source.toString(),episode.sources);
+      const updates:Record<string,unknown>={
+        source_page_checked_at:new Date().toISOString(),source_page_last_error:null,
+      };
+      if(primaryUrl)updates.stream_url=primaryUrl;
+      const {error:updateError}=await db.from("episodes").update(updates).eq("id",row.id);
+      if(updateError)throw updateError;
+      summary.checked++;
+    }catch(error){
+      pageError=error instanceof Error?error.message:"تعذر تحديث صفحة الحلقة";
+      await db.from("episodes").update({
+        source_page_checked_at:new Date().toISOString(),source_page_last_error:pageError,
+      }).eq("id",row.id);
+      summary.failed++;
+    }
+    summary.results.push({episode_id:row.id,mode:"individual_episode_page",error:pageError});
   }
 
   return json({success:true,...summary});
