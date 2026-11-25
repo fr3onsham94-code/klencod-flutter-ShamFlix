@@ -188,26 +188,51 @@ function extractSources(html: string, page: URL) {
 
   return [...found.values()].slice(0,60);
 }
+function findPublicWatchUrls(html: string, page: URL, allowedHost: string): string[] {
+  const normalized = html.replace(/\\\\\//g,"/").replace(/\\u0026/g,"&").replace(/&amp;/g,"&");
+  const candidates = new Set<string>();
+  const add = (raw: string) => {
+    const value = raw.trim().replace(/^["']|["']$/g,"");
+    if (!value || /^(javascript:|#|mailto:)/i.test(value)) return;
+    try {
+      const target = validateUrl(new URL(value,page).toString());
+      if (target.hostname === allowedHost && /\\/watch(?:\\/|$)/i.test(target.pathname)) {
+        target.hash = "";
+        candidates.add(target.toString());
+      }
+    } catch {}
+  };
+  // Akwam and similar sites may store the watch route in data-* attributes.
+  for (const match of normalized.matchAll(/<(?:a|button|iframe|frame|div|span)[^>]*>/gi)) {
+    const a = attrs(match[0]);
+    for (const key of ["href","data-href","data-url","data-link","data-src","data-embed","onclick"]) {
+      if (a[key]) {
+        const value = a[key];
+        const route = /(?:https?:\\/\\/[^\\s"'<>]+)?\\/watch\\/[^\\s"'<>\\\\)]+/i.exec(value);
+        if (route) add(route[0]);
+      }
+    }
+  }
+  // Some versions expose the public /watch/ route only inside inline scripts.
+  for (const match of normalized.matchAll(/(?:https?:\\/\\/[^\\s"'<>]+)?\\/watch\\/[^\\s"'<>\\\\)]+/gi)) {
+    add(match[0]);
+    if (candidates.size >= 5) break;
+  }
+  return [...candidates].slice(0,5);
+}
 async function inspectMovie(card: {url:string;title:string;poster:string}, host: string, category: string) {
   const page = await fetchHtml(card.url,host);
   let sources=extractSources(page.html,page.url);
-  let watchUrl:string|null=null;
-  for(const match of page.html.matchAll(/<a\b[^>]*>/gi)){
-    const a=attrs(match[0]),href=a.href;
-    if(!href)continue;
-    const label=clean(a.title||a["aria-label"]||match[0].replace(/<[^>]+>/g,""));
-    try{
-      const candidate=validateUrl(new URL(href,page.url).toString());
-      if(candidate.hostname===host && (/\/(?:watch|view)(?:\/|$)/i.test(candidate.pathname)||/مشاهدة|watch/i.test(label))){
-        watchUrl=candidate.toString();break;
-      }
-    }catch{}
-  }
-  if(watchUrl){
+  const watchUrls=findPublicWatchUrls(page.html,page.url,host);
+  // Follow public watch pages (including Akwam's /watch/ route) without
+  // attempting to defeat authentication, anti-bot challenges or DRM.
+  for(const watchUrl of watchUrls){
     try{
       const watch=await fetchHtml(watchUrl,host);
       sources=[...sources,...extractSources(watch.html,watch.url)];
-    }catch{}
+    }catch{
+      // A blocked/removed watch page must not prevent checking other public links.
+    }
   }
   const unique=[...new Map(sources.map(item=>[item.url,item])).values()].slice(0,60);
   return {...parseMetadata(page.html,page.url,card.title,card.poster,category),
