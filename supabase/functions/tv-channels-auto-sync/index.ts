@@ -384,7 +384,8 @@ async function syncChannels(db: any) {
     if (error) throw new Error("paused source stream update: " + JSON.stringify(error));
   }
 
-  // Each source is reconciled independently. A failed source must never affect its saved servers.\n  const settledSources = await Promise.all(sources.map(async source => {
+  // Each source is reconciled independently. A failed source must never affect its saved servers.
+  const settledSources = await Promise.all(sources.map(async source => {
     try {
       return { status: "fulfilled" as const, source, entries: await fetchPlaylist(source, db) };
     } catch (reason) {
