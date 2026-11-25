@@ -336,6 +336,34 @@ async function getBuiltinImportEnabled(db: any): Promise<boolean> {
   return data?.built_in_import_enabled !== false;
 }
 
+async function deleteEmptyAutomaticChannelPackages(db: any) {
+  const { data: packages, error: packageError } = await db.from("content_packages")
+    .select("id").eq("content_type", "channel").like("name", "قنوات تلقائية — %");
+  if (packageError) throw new Error("automatic package cleanup lookup: " + JSON.stringify(packageError));
+
+  const packageIds = (packages || []).map((row: any) => String(row.id));
+  if (!packageIds.length) return { checked: 0, deleted: 0 };
+
+  // Consider every membership type before deleting a package. This protects any
+  // package that still contains content, even if its type metadata is unexpected.
+  const nonEmptyPackageIds = new Set<string>();
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("content_package_items")
+      .select("package_id").in("package_id", packageIds)
+      .order("package_id").range(offset, offset + 999);
+    if (error) throw new Error("automatic package contents lookup: " + JSON.stringify(error));
+    for (const item of data || []) nonEmptyPackageIds.add(String(item.package_id));
+    if (!data || data.length < 1000) break;
+  }
+
+  const emptyPackageIds = packageIds.filter(id => !nonEmptyPackageIds.has(id));
+  for (let i = 0; i < emptyPackageIds.length; i += 500) {
+    const { error } = await db.from("content_packages").delete().in("id", emptyPackageIds.slice(i, i + 500));
+    if (error) throw new Error("empty automatic package deletion: " + JSON.stringify(error));
+  }
+  return { checked: packageIds.length, deleted: emptyPackageIds.length };
+}
+
 async function hideInactiveImportedChannels(db: any) {
   const activeChannelIds = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
@@ -387,6 +415,7 @@ async function hideInactiveImportedChannels(db: any) {
       if (error) throw new Error("automatic package cleanup: " + JSON.stringify(error));
     }
   }
+  await deleteEmptyAutomaticChannelPackages(db);
 }
 
 async function setBuiltinImportEnabled(db: any, enabled: boolean) {
@@ -750,6 +779,7 @@ async function syncChannels(db: any) {
       if (error) throw new Error("automatic package membership cleanup: " + JSON.stringify(error));
     }
   }
+  await deleteEmptyAutomaticChannelPackages(db);
 
   return {
     channels: channelRows.length,
