@@ -179,10 +179,10 @@ function seriesMetadata(html:string,page:URL,fallbackTitle:string,fallbackPoster
   try{const parsed=JSON.parse(m[1].trim());const visit=(v:unknown)=>{if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==="object"){const o=v as Record<string,unknown>;if(!Object.keys(structured).length&&o.name)structured=o;if(o["@graph"])visit(o["@graph"]);}};visit(parsed);}catch{}
  }
  const titleTag=/<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]||"";
- const title=clean(structured.name||structured.headline||meta["og:title"]||meta["twitter:title"]||titleTag||fallbackTitle);
+ const title=clean(String(structured.name||structured.headline||meta["og:title"]||meta["twitter:title"]||titleTag||fallbackTitle));
  const iv=structured.image,ir=typeof iv==="string"?iv:Array.isArray(iv)?String(iv[0]||""):iv&&typeof iv==="object"?String((iv as Record<string,unknown>).url||""):"";
  const pr=ir||meta["og:image"]||meta["twitter:image"]||fallbackPoster;
- const description=clean(structured.description||meta["og:description"]||meta.description||"");
+ const description=clean(String(structured.description||meta["og:description"]||meta.description||""));
  const date=String(structured.datePublished||structured.dateCreated||meta["article:published_time"]||"");
  const year=Number(/\b(19|20)\d{2}\b/.exec(date)?.[0]||/\b(19|20)\d{2}\b/.exec(title)?.[0]||0)||null;
  const genre=structured.genre||meta.genre||fallbackCategory;
