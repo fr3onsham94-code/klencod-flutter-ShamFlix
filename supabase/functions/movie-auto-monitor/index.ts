@@ -213,6 +213,30 @@ async function inspectMovie(card: {url:string;title:string;poster:string}, host:
   return {...parseMetadata(page.html,page.url,card.title,card.poster,category),
     page_url:page.url.toString(),sources:unique};
 }
+async function replaceMoviePageServers(db: any, movieId: string, pageUrl: string, sources: {url:string;name:string}[]) {
+  if (!sources.length) return null;
+  const {data:oldServers,error:readError} = await db.from("playback_servers")
+    .select("id,stream_url").eq("movie_id",movieId).eq("source_page_url",pageUrl);
+  if (readError) throw readError;
+  const nextUrls = new Set(sources.map(source => source.url));
+  const oldUrls = new Set((oldServers || []).map((server:any) => server.stream_url));
+  for (const server of oldServers || []) {
+    const {error:updateError} = await db.from("playback_servers")
+      .update({is_active:nextUrls.has(server.stream_url)}).eq("id",server.id);
+    if (updateError) throw updateError;
+  }
+  const rows = sources.filter(source => !oldUrls.has(source.url)).map((source,index) => ({
+    movie_id:movieId, source_page_url:pageUrl,
+    server_name:source.name || ("السيرفر " + (index + 1)),
+    stream_url:source.url, sort_order:index, is_active:true,
+  }));
+  if (rows.length) {
+    const {error:insertError} = await db.from("playback_servers").insert(rows);
+    if (insertError) throw insertError;
+  }
+  return sources[0].url;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok",{headers:corsHeaders});
   if (req.method !== "POST") return json({error:"Method not allowed"},405);
@@ -259,12 +283,8 @@ Deno.serve(async (req: Request) => {
           if (existsByUrl.data) {
             const movieId=existsByUrl.data.id;
             if(movie.sources.length){
-              const {data:oldServers,error:readServersError}=await db.from("playback_servers").select("stream_url").eq("movie_id",movieId);
-              if(readServersError)throw readServersError;
-              const oldUrls=new Set((oldServers||[]).map((x:any)=>x.stream_url));
-              const rows=movie.sources.filter(x=>!oldUrls.has(x.url)).map((x,index)=>({movie_id:movieId,server_name:x.name||("السيرفر "+(index+1)),stream_url:x.url,sort_order:(oldServers||[]).length+index,is_active:true}));
-              if(rows.length){const {error:saveServersError}=await db.from("playback_servers").insert(rows);if(saveServersError)throw saveServersError;}
-              const {error:updateMovie}=await db.from("movies").update({stream_url:movie.sources[0].url}).eq("id",movieId);
+              const primaryUrl=await replaceMoviePageServers(db,movieId,card.url,movie.sources);
+              const {error:updateMovie}=await db.from("movies").update({stream_url:primaryUrl}).eq("id",movieId);
               if(updateMovie)throw updateMovie;
             }
             const {error:linkError} = await db.from("content_package_items").upsert({
@@ -290,12 +310,8 @@ Deno.serve(async (req: Request) => {
             },{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
             if (linkError) throw linkError;
             if(movie.sources.length){
-              const {data:oldServers,error:readServersError}=await db.from("playback_servers").select("stream_url").eq("movie_id",movieId);
-              if(readServersError)throw readServersError;
-              const oldUrls=new Set((oldServers||[]).map((x:any)=>x.stream_url));
-              const rows=movie.sources.filter(x=>!oldUrls.has(x.url)).map((x,index)=>({movie_id:movieId,server_name:x.name||("السيرفر "+(index+1)),stream_url:x.url,sort_order:(oldServers||[]).length+index,is_active:true}));
-              if(rows.length){const {error:saveServersError}=await db.from("playback_servers").insert(rows);if(saveServersError)throw saveServersError;}
-              const {error:updateMovie}=await db.from("movies").update({stream_url:movie.sources[0].url}).eq("id",movieId);
+              const primaryUrl=await replaceMoviePageServers(db,movieId,card.url,movie.sources);
+              const {error:updateMovie}=await db.from("movies").update({stream_url:primaryUrl}).eq("id",movieId);
               if(updateMovie)throw updateMovie;
             }
             linked++; summary.linked++;
@@ -304,7 +320,8 @@ Deno.serve(async (req: Request) => {
               title:movie.title,poster_url:movie.poster_url,description:movie.description,
               category:movie.category || monitor.category || null,release_year:movie.release_year,
               rating:movie.rating,director:movie.director,cast:movie.cast,
-              stream_url:movie.sources[0]?.url || null,is_published:true,source_page_url:card.url
+              stream_url:movie.sources[0]?.url || null,is_published:true,source_page_url:card.url,
+              source_monitor_enabled:true,source_monitor_interval_minutes:monitor.check_interval_minutes
             }).select("id").single();
             if (insertError) throw insertError;
             movieId = saved.id;
@@ -314,7 +331,7 @@ Deno.serve(async (req: Request) => {
             },{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
             if (packageError) throw packageError;
             if (movie.sources.length) {
-              const rows = movie.sources.map((s,index)=>({movie_id:movieId,server_name:s.name || ("السيرفر "+(index+1)),
+              const rows = movie.sources.map((s,index)=>({movie_id:movieId,source_page_url:card.url,server_name:s.name || ("السيرفر "+(index+1)),
                 stream_url:s.url,sort_order:index,is_active:true}));
               const {error:serverError} = await db.from("playback_servers").insert(rows);
               if (serverError) throw serverError;
@@ -335,6 +352,48 @@ Deno.serve(async (req: Request) => {
     }).eq("id",monitor.id);
     summary.checked++;
     summary.results.push({monitor_id:monitor.id,added,linked,error:errorMessage});
+  }
+  // Monitor every imported movie page independently of its category listing.
+  const {data:pageMovies,error:pageMoviesError} = await db.from("movies")
+    .select("id,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes")
+    .eq("source_monitor_enabled",true).not("source_page_url","is",null)
+    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(50);
+  if (pageMoviesError) return json({error:pageMoviesError.message},500);
+  for (const movieRow of pageMovies || []) {
+    const last = movieRow.source_page_checked_at ? new Date(movieRow.source_page_checked_at).getTime() : 0;
+    const interval = Math.max(15,Number(movieRow.source_monitor_interval_minutes)||60)*60000;
+    if (last && now-last < interval) continue;
+    let pageError: string | null = null;
+    try {
+      const source = validateUrl(movieRow.source_page_url);
+      const inspected = await inspectMovie({url:source.toString(),title:movieRow.title,poster:""},source.hostname,"");
+      let primaryUrl: string | null = null;
+      if (inspected.sources.length) {
+        primaryUrl = await replaceMoviePageServers(db,movieRow.id,source.toString(),inspected.sources);
+      }
+      const updates: Record<string,unknown> = {
+        source_page_checked_at:new Date().toISOString(),
+        source_page_last_error:null,
+      };
+      if (primaryUrl) updates.stream_url = primaryUrl;
+      if (inspected.poster_url) updates.poster_url = inspected.poster_url;
+      if (inspected.description) updates.description = inspected.description;
+      if (inspected.category) updates.category = inspected.category;
+      if (inspected.release_year) updates.release_year = inspected.release_year;
+      if (inspected.rating) updates.rating = inspected.rating;
+      if (inspected.director) updates.director = inspected.director;
+      if (inspected.cast) updates.cast = inspected.cast;
+      const {error:updateError} = await db.from("movies").update(updates).eq("id",movieRow.id);
+      if (updateError) throw updateError;
+      summary.checked++;
+    } catch (error) {
+      pageError = error instanceof Error ? error.message : "تعذر تحديث صفحة الفيلم";
+      await db.from("movies").update({
+        source_page_checked_at:new Date().toISOString(),source_page_last_error:pageError,
+      }).eq("id",movieRow.id);
+      summary.failed++;
+    }
+    summary.results.push({movie_id:movieRow.id,mode:"individual_page",error:pageError});
   }
   return json({success:true,...summary});
 });
