@@ -441,9 +441,10 @@ Deno.serve(async (req: Request) => {
     .select("id,episode_number,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes,seasons!inner(season_number,series_id,series!inner(source_monitor_enabled))")
     .eq("source_monitor_enabled",true).eq("seasons.series.source_monitor_enabled",true)
     .not("source_page_url","is",null)
-    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(50);
+    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(20);
   if(episodePagesError)return json({error:episodePagesError.message},500);
-  for(const row of episodePages||[]){
+  for(let start=0;start<(episodePages||[]).length;start+=10){
+    await Promise.all((episodePages||[]).slice(start,start+10).map(async (row:any)=>{
     const last=row.source_page_checked_at?new Date(row.source_page_checked_at).getTime():0;
     const interval=Math.max(15,Number(row.source_monitor_interval_minutes)||60)*60000;
     if(last&&now-last<interval)continue;
@@ -470,6 +471,7 @@ Deno.serve(async (req: Request) => {
       summary.failed++;
     }
     summary.results.push({episode_id:row.id,mode:"individual_episode_page",error:pageError});
+    }));
   }
 
   return json({success:true,...summary});
