@@ -724,6 +724,7 @@ async function syncChannels(db: any) {
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await db.from("channels")
       .select("id,external_source_key").not("external_source_key","is",null)
+      .eq("is_published", true)
       .order("id").range(offset, offset + 999);
     if (error) throw new Error("channel ID lookup: " + JSON.stringify(error));
     syncedChannels.push(...(data || []));
