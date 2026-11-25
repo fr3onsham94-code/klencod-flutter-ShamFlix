@@ -45,8 +45,9 @@ class _AdminPageState extends State<AdminPage> {
   final Set<String> selectedMovieIds = {};
   final Set<String> selectedCatalogIds = {};
   bool bulkDeleting = false;
-  int bulkMovieDeleteTotal = 0;
-  int bulkMovieDeleteDone = 0;
+  int bulkDeleteTotal = 0;
+  int bulkDeleteDone = 0;
+  String bulkDeleteLabel = '';
   bool mergingSeries = false;
   double sidebarWidth=110, sidebarButtonSize=42, packageFontSize=11, sectionFontSize=12, packageIconSize=15, packageItemHeight=38;
   List<Map<String, dynamic>> users = [];
@@ -2079,6 +2080,7 @@ class _AdminPageState extends State<AdminPage> {
           mergeSelected: isSeries ? _mergeSelectedSeries : null,
           merging: mergingSeries,
         ),
+        _bulkDeleteProgress(),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
           child: list.isEmpty
@@ -4542,8 +4544,9 @@ class _AdminPageState extends State<AdminPage> {
 
     setState(() {
       bulkDeleting = true;
-      bulkMovieDeleteTotal = ids.length;
-      bulkMovieDeleteDone = 0;
+      bulkDeleteTotal = ids.length;
+      bulkDeleteDone = 0;
+      bulkDeleteLabel = 'أفلام';
       selectedMovieIds.clear();
     });
     showMessage('بدأ حذف ${ids.length} فيلم بالخلفية. يمكنك متابعة استخدام التطبيق.');
@@ -4579,7 +4582,7 @@ class _AdminPageState extends State<AdminPage> {
         await AuthService.client.from('movies').delete().inFilter('id', batch);
         deleted += batch.length;
         if (mounted) {
-          setState(() => bulkMovieDeleteDone = deleted);
+          setState(() => bulkDeleteDone = deleted);
         }
       }
 
@@ -4597,8 +4600,9 @@ class _AdminPageState extends State<AdminPage> {
       if (mounted) {
         setState(() {
           bulkDeleting = false;
-          bulkMovieDeleteTotal = 0;
-          bulkMovieDeleteDone = 0;
+          bulkDeleteTotal = 0;
+          bulkDeleteDone = 0;
+          bulkDeleteLabel = '';
         });
       }
     }
@@ -4615,23 +4619,74 @@ class _AdminPageState extends State<AdminPage> {
       'حذف $contentLabel المحددة',
       'سيتم حذف ${ids.length} $singularLabel نهائياً مع الحلقات والسيرفرات والارتباطات التابعة. لا يمكن التراجع.',
     );
-    if (!yes) return;
-    setState(() => bulkDeleting = true);
+    if (!yes || !mounted) return;
+    setState(() {
+      bulkDeleting = true;
+      bulkDeleteTotal = ids.length;
+      bulkDeleteDone = 0;
+      bulkDeleteLabel = contentLabel;
+      selectedCatalogIds.clear();
+    });
+    showMessage('بدأ حذف ${ids.length} $singularLabel بالخلفية. يمكنك متابعة استخدام التطبيق.');
+    // Run the existing cascade deletion away from the UI action so the
+    // administrator can keep navigating while each item is processed.
+    unawaited(_runBulkCatalogDeletion(ids, section, singularLabel));
+  }
+
+  Future<void> _runBulkCatalogDeletion(
+    List<String> ids,
+    String section,
+    String singularLabel,
+  ) async {
     var deleted = 0;
     try {
       for (final id in ids) {
         await _deleteCatalogRecord(section, id);
         deleted++;
+        if (mounted) setState(() => bulkDeleteDone = deleted);
       }
-      selectedCatalogIds.clear();
-      await loadCatalog(section);
-      if (mounted) showMessage('تم حذف $deleted عنصر');
+      if (mounted && currentSection == section) await loadCatalog(section);
+      if (mounted) showMessage('اكتمل الحذف بالخلفية: تم حذف $deleted $singularLabel');
     } catch (e) {
-      await loadCatalog(section);
-      if (mounted) showMessage('تم حذف $deleted من أصل ${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+      if (mounted && currentSection == section) await loadCatalog(section);
+      if (mounted) {
+        showMessage(
+          'توقف الحذف بعد حذف $deleted من أصل ${ids.length} $singularLabel. يمكنك مراجعة القائمة وإعادة المحاولة. التفاصيل: $e',
+          isError: true,
+        );
+      }
     } finally {
-      if (mounted) setState(() => bulkDeleting = false);
+      if (mounted) {
+        setState(() {
+          bulkDeleting = false;
+          bulkDeleteTotal = 0;
+          bulkDeleteDone = 0;
+          bulkDeleteLabel = '';
+        });
+      }
     }
+  }
+
+  Widget _bulkDeleteProgress() {
+    if (!bulkDeleting || bulkDeleteTotal <= 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'جاري حذف $bulkDeleteLabel بالخلفية: $bulkDeleteDone من $bulkDeleteTotal',
+            style: TextStyle(color: adminGold, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          LinearProgressIndicator(
+            value: bulkDeleteTotal == 0 ? null : bulkDeleteDone / bulkDeleteTotal,
+            color: adminGold,
+            backgroundColor: adminPanel,
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _bulkSelectionToolbar({
@@ -5295,27 +5350,7 @@ class _AdminPageState extends State<AdminPage> {
           clearSelection: () => setState(() => selectedMovieIds.clear()),
           deleteSelected: _deleteSelectedMovies,
         ),
-        if (bulkDeleting && bulkMovieDeleteTotal > 0)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'جاري حذف الأفلام بالخلفية: $bulkMovieDeleteDone من $bulkMovieDeleteTotal',
-                  style: TextStyle(color: adminGold, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(
-                  value: bulkMovieDeleteTotal == 0
-                      ? null
-                      : bulkMovieDeleteDone / bulkMovieDeleteTotal,
-                  color: adminGold,
-                  backgroundColor: adminPanel,
-                ),
-              ],
-            ),
-          ),
+        _bulkDeleteProgress(),
         searchBox(
           hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
         ),
