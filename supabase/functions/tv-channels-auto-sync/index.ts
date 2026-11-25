@@ -328,17 +328,103 @@ async function verifyAdminBearer(db: any, req: Request): Promise<boolean> {
     ["admin","manager"].includes(String(user.app_metadata?.role || ""));
 }
 
+
+async function getBuiltinImportEnabled(db: any): Promise<boolean> {
+  const { data, error } = await db.from("tv_source_global_settings")
+    .select("built_in_import_enabled").eq("id", "global").maybeSingle();
+  if (error) throw new Error("Built-in TV setting lookup: " + JSON.stringify(error));
+  return data?.built_in_import_enabled !== false;
+}
+
+async function hideInactiveImportedChannels(db: any) {
+  const activeChannelIds = new Set<string>();
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("playback_servers")
+      .select("channel_id").not("source_id", "is", null).eq("is_active", true)
+      .order("channel_id").range(offset, offset + 999);
+    if (error) throw new Error("active channel lookup: " + JSON.stringify(error));
+    for (const row of data || []) if (row.channel_id) activeChannelIds.add(String(row.channel_id));
+    if (!data || data.length < 1000) break;
+  }
+
+  const importedIds: string[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("channels").select("id")
+      .not("external_source_key", "is", null).order("id").range(offset, offset + 999);
+    if (error) throw new Error("imported channel lookup: " + JSON.stringify(error));
+    for (const row of data || []) importedIds.push(String(row.id));
+    if (!data || data.length < 1000) break;
+  }
+  const visible = importedIds.filter(id => activeChannelIds.has(id));
+  const hidden = importedIds.filter(id => !activeChannelIds.has(id));
+  for (let i = 0; i < visible.length; i += 500) {
+    const { error } = await db.from("channels").update({ is_published: true }).in("id", visible.slice(i, i + 500));
+    if (error) throw new Error("restore channel visibility: " + JSON.stringify(error));
+  }
+  for (let i = 0; i < hidden.length; i += 500) {
+    const { error } = await db.from("channels").update({ is_published: false }).in("id", hidden.slice(i, i + 500));
+    if (error) throw new Error("hide channel visibility: " + JSON.stringify(error));
+  }
+
+  const { data: packages, error: packageError } = await db.from("content_packages")
+    .select("id").eq("content_type", "channel").like("name", "قنوات تلقائية — %");
+  if (packageError) throw new Error("automatic package lookup: " + JSON.stringify(packageError));
+  const packageIds = (packages || []).map((row: any) => String(row.id));
+  if (packageIds.length) {
+    const staleIds: string[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await db.from("content_package_items")
+        .select("id,content_id").in("package_id", packageIds).eq("content_type", "channel")
+        .order("id").range(offset, offset + 999);
+      if (error) throw new Error("automatic package membership lookup: " + JSON.stringify(error));
+      for (const item of data || []) {
+        if (!activeChannelIds.has(String(item.content_id))) staleIds.push(String(item.id));
+      }
+      if (!data || data.length < 1000) break;
+    }
+    for (let i = 0; i < staleIds.length; i += 500) {
+      const { error } = await db.from("content_package_items").delete().in("id", staleIds.slice(i, i + 500));
+      if (error) throw new Error("automatic package cleanup: " + JSON.stringify(error));
+    }
+  }
+}
+
+async function setBuiltinImportEnabled(db: any, enabled: boolean) {
+  const { error: settingError } = await db.from("tv_source_global_settings").upsert({
+    id: "global", built_in_import_enabled: enabled, updated_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (settingError) throw new Error("Built-in TV setting update: " + JSON.stringify(settingError));
+
+  if (!enabled) {
+    const { data: builtins, error } = await db.from("tv_channel_sources")
+      .select("source_key").eq("is_builtin", true);
+    if (error) throw new Error("Built-in source lookup: " + JSON.stringify(error));
+    const sourceIds = (builtins || []).map((row: any) => String(row.source_key || "")).filter(Boolean);
+    if (sourceIds.length) {
+      const { error: pauseError } = await db.from("playback_servers")
+        .update({ is_active: false }).in("source_id", sourceIds);
+      if (pauseError) throw new Error("Built-in stream pause: " + JSON.stringify(pauseError));
+    }
+    await hideInactiveImportedChannels(db);
+    return { enabled: false, hiddenImmediately: true };
+  }
+
+  const sync = await syncChannels(db);
+  return { enabled: true, sync };
+}
+
 async function syncChannels(db: any) {
   const { data: allSourceRows, error: sourceLookupError } = await db.from("tv_channel_sources")
     .select("id,name,playlist_url,source_key,is_builtin,is_active,source_type,xtream_server_url,xtream_username,xtream_password,playlist_storage_path")
     .order("created_at", { ascending: true });
   if (sourceLookupError) throw new Error("TV source lookup: " + JSON.stringify(sourceLookupError));
+  const builtinEnabled = await getBuiltinImportEnabled(db);
   const customRows = (allSourceRows || []).filter((row: any) => row.is_builtin !== true);
   if (customRows.length > MAX_CUSTOM_SOURCES) {
     throw new Error("Too many custom TV sources; maximum is " + MAX_CUSTOM_SOURCES);
   }
   const sources: PlaylistSource[] = (allSourceRows || [])
-    .filter((row: any) => row.is_active === true)
+    .filter((row: any) => row.is_active === true && (row.is_builtin !== true || builtinEnabled))
     .map((row: any) => {
       const sourceType = String(row.source_type || "m3u_url");
       let sourceUrl = String(row.playlist_url || "");
@@ -374,7 +460,7 @@ async function syncChannels(db: any) {
   // Pausing a source immediately disables its previously imported stream rows.
   // A channel remains visible if another active source still provides a stream for it.
   const pausedSourceIds = (allSourceRows || [])
-    .filter((row: any) => row.is_active !== true)
+    .filter((row: any) => row.is_active !== true || (row.is_builtin === true && !builtinEnabled))
     .map((row: any) => row.source_key ? String(row.source_key) :
       (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id));
   if (pausedSourceIds.length) {
@@ -714,6 +800,16 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json(); } catch {}
   try {
     if (body.mode === "health") return json({ ok: true, mode: "health", result: await healthCheck(db) });
+    if (body.mode === "builtin-status") {
+      if (!adminAuthorized) return json({ error: "Admin authorization required" }, 403);
+      return json({ ok: true, mode: "builtin-status", enabled: await getBuiltinImportEnabled(db) });
+    }
+    if (body.mode === "set-builtin-import") {
+      if (!adminAuthorized || typeof body.enabled !== "boolean") {
+        return json({ error: "Admin authorization and a boolean enabled value are required" }, 403);
+      }
+      return json({ ok: true, mode: "set-builtin-import", result: await setBuiltinImportEnabled(db, body.enabled) });
+    }
     return json({ ok: true, mode: "sync", result: await syncChannels(db) });
   } catch (error) {
     return json({ ok: false, error: error instanceof Error ? error.message : JSON.stringify(error) }, 500);
