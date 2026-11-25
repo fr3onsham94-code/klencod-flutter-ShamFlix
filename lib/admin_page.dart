@@ -45,6 +45,9 @@ class _AdminPageState extends State<AdminPage> {
   final Set<String> selectedMovieIds = {};
   final Set<String> selectedCatalogIds = {};
   bool bulkDeleting = false;
+  int bulkDeleteTotal = 0;
+  int bulkDeleteDone = 0;
+  String bulkDeleteLabel = '';
   bool mergingSeries = false;
   double sidebarWidth=110, sidebarButtonSize=42, packageFontSize=11, sectionFontSize=12, packageIconSize=15, packageItemHeight=38;
   List<Map<String, dynamic>> users = [];
@@ -2077,6 +2080,7 @@ class _AdminPageState extends State<AdminPage> {
           mergeSelected: isSeries ? _mergeSelectedSeries : null,
           merging: mergingSeries,
         ),
+        _bulkDeleteProgress(),
         searchBox(hint: isSeries ? 'ابحث عن مسلسل بالاسم أو التصنيف' : 'ابحث عن قناة بالاسم أو التصنيف'),
         Expanded(
           child: list.isEmpty
@@ -4536,22 +4540,71 @@ class _AdminPageState extends State<AdminPage> {
       'حذف الأفلام المحددة',
       'سيتم حذف ${ids.length} فيلم نهائياً مع سيرفراتها وارتباطاتها. لا يمكن التراجع.',
     );
-    if (!yes) return;
-    setState(() => bulkDeleting = true);
-    var deleted = 0;
-    try {
-      for (final id in ids) {
-        await _deleteMovieRecord(id);
-        deleted++;
-      }
+    if (!yes || !mounted) return;
+
+    setState(() {
+      bulkDeleting = true;
+      bulkDeleteTotal = ids.length;
+      bulkDeleteDone = 0;
+      bulkDeleteLabel = 'أفلام';
       selectedMovieIds.clear();
-      await loadMovies();
-      if (mounted) showMessage('تم حذف $deleted فيلم');
+    });
+    showMessage('بدأ حذف ${ids.length} فيلم بالخلفية. يمكنك متابعة استخدام التطبيق.');
+    // Do not await the long-running task from the button callback.
+    // The deletion continues while the admin navigates through the app.
+    unawaited(_runBulkMovieDeletion(ids));
+  }
+
+  Future<void> _runBulkMovieDeletion(List<String> ids) async {
+    var deleted = 0;
+    const batchSize = 100;
+    try {
+      for (var offset = 0; offset < ids.length; offset += batchSize) {
+        final batch = ids.skip(offset).take(batchSize).toList();
+
+        // Remove all dependent rows for this batch concurrently, then remove
+        // the movies themselves. This avoids six sequential requests per movie.
+        await Future.wait<dynamic>([
+          AuthService.client.from('playback_servers')
+              .delete().inFilter('movie_id', batch),
+          AuthService.client.from('content_package_items')
+              .delete().eq('content_type', 'movie').inFilter('content_id', batch),
+          AuthService.client.from('user_library')
+              .delete().eq('content_type', 'movie').inFilter('content_id', batch),
+          AuthService.client.from('user_ratings')
+              .delete().eq('content_type', 'movie').inFilter('content_id', batch),
+          AuthService.client.from('user_notifications')
+              .delete().eq('content_type', 'movie').inFilter('content_id', batch),
+          AuthService.client.from('content_rating_stats')
+              .delete().eq('content_type', 'movie').inFilter('content_id', batch),
+        ]);
+
+        await AuthService.client.from('movies').delete().inFilter('id', batch);
+        deleted += batch.length;
+        if (mounted) {
+          setState(() => bulkDeleteDone = deleted);
+        }
+      }
+
+      if (mounted && currentSection == 'movies') await loadMovies();
+      if (mounted) showMessage('اكتمل الحذف بالخلفية: تم حذف $deleted فيلم');
     } catch (e) {
-      await loadMovies();
-      if (mounted) showMessage('تم حذف $deleted من أصل ${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+      if (mounted && currentSection == 'movies') await loadMovies();
+      if (mounted) {
+        showMessage(
+          'توقف الحذف بعد حذف $deleted من أصل ${ids.length} فيلم. يمكنك مراجعة القائمة وإعادة المحاولة. التفاصيل: $e',
+          isError: true,
+        );
+      }
     } finally {
-      if (mounted) setState(() => bulkDeleting = false);
+      if (mounted) {
+        setState(() {
+          bulkDeleting = false;
+          bulkDeleteTotal = 0;
+          bulkDeleteDone = 0;
+          bulkDeleteLabel = '';
+        });
+      }
     }
   }
 
@@ -4566,23 +4619,74 @@ class _AdminPageState extends State<AdminPage> {
       'حذف $contentLabel المحددة',
       'سيتم حذف ${ids.length} $singularLabel نهائياً مع الحلقات والسيرفرات والارتباطات التابعة. لا يمكن التراجع.',
     );
-    if (!yes) return;
-    setState(() => bulkDeleting = true);
+    if (!yes || !mounted) return;
+    setState(() {
+      bulkDeleting = true;
+      bulkDeleteTotal = ids.length;
+      bulkDeleteDone = 0;
+      bulkDeleteLabel = contentLabel;
+      selectedCatalogIds.clear();
+    });
+    showMessage('بدأ حذف ${ids.length} $singularLabel بالخلفية. يمكنك متابعة استخدام التطبيق.');
+    // Run the existing cascade deletion away from the UI action so the
+    // administrator can keep navigating while each item is processed.
+    unawaited(_runBulkCatalogDeletion(ids, section, singularLabel));
+  }
+
+  Future<void> _runBulkCatalogDeletion(
+    List<String> ids,
+    String section,
+    String singularLabel,
+  ) async {
     var deleted = 0;
     try {
       for (final id in ids) {
         await _deleteCatalogRecord(section, id);
         deleted++;
+        if (mounted) setState(() => bulkDeleteDone = deleted);
       }
-      selectedCatalogIds.clear();
-      await loadCatalog(section);
-      if (mounted) showMessage('تم حذف $deleted عنصر');
+      if (mounted && currentSection == section) await loadCatalog(section);
+      if (mounted) showMessage('اكتمل الحذف بالخلفية: تم حذف $deleted $singularLabel');
     } catch (e) {
-      await loadCatalog(section);
-      if (mounted) showMessage('تم حذف $deleted من أصل ${ids.length}. تعذر إكمال الباقي: $e', isError: true);
+      if (mounted && currentSection == section) await loadCatalog(section);
+      if (mounted) {
+        showMessage(
+          'توقف الحذف بعد حذف $deleted من أصل ${ids.length} $singularLabel. يمكنك مراجعة القائمة وإعادة المحاولة. التفاصيل: $e',
+          isError: true,
+        );
+      }
     } finally {
-      if (mounted) setState(() => bulkDeleting = false);
+      if (mounted) {
+        setState(() {
+          bulkDeleting = false;
+          bulkDeleteTotal = 0;
+          bulkDeleteDone = 0;
+          bulkDeleteLabel = '';
+        });
+      }
     }
+  }
+
+  Widget _bulkDeleteProgress() {
+    if (!bulkDeleting || bulkDeleteTotal <= 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'جاري حذف $bulkDeleteLabel بالخلفية: $bulkDeleteDone من $bulkDeleteTotal',
+            style: TextStyle(color: adminGold, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          LinearProgressIndicator(
+            value: bulkDeleteTotal == 0 ? null : bulkDeleteDone / bulkDeleteTotal,
+            color: adminGold,
+            backgroundColor: adminPanel,
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _bulkSelectionToolbar({
@@ -5246,6 +5350,7 @@ class _AdminPageState extends State<AdminPage> {
           clearSelection: () => setState(() => selectedMovieIds.clear()),
           deleteSelected: _deleteSelectedMovies,
         ),
+        _bulkDeleteProgress(),
         searchBox(
           hint: 'ابحث عن فيلم بالاسم أو التصنيف أو TMDB',
         ),
