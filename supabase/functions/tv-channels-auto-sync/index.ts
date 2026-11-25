@@ -294,6 +294,8 @@ async function hash(value: string): Promise<string> {
 
 function arabicAlias(name: string): string | null {
   const n = normalizeName(name);
+  const beinNumber = n.match(/^(?:بينسبورت|بيانسبورت|بينسبورتس|بيانسبورتس)(\\d+)$/);
+  if (beinNumber) return "beIN SPORTS " + beinNumber[1];
   const known: Record<string,string> = {
     aljazeera: "الجزيرة الإخبارية", aljazeeraenglish: "الجزيرة الإنجليزية",
     aljazeeraarabic: "الجزيرة الإخبارية", "الجزيرهالاخباريه": "الجزيرة الإخبارية",
