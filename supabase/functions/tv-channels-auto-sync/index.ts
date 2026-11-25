@@ -628,7 +628,9 @@ async function syncChannels(db: any) {
     const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.dbId);
     if (error) throw new Error("TV source status update: " + JSON.stringify(error));
   }
-  if (!sourceResults.length && !pausedSourceIds.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
+  if (!sourceResults.length && !pausedSourceIds.length && activeSourceIds.size > 0) {
+    throw new Error("All active playlist sources failed; existing catalogue was left untouched");
+  }
   const grouped = new Map<string, typeof sourceResults[number]["entries"]>();
   for (const { entries } of sourceResults) {
     for (const entry of entries) {
@@ -637,7 +639,9 @@ async function syncChannels(db: any) {
       grouped.set(entry.key, group);
     }
   }
-  if (!grouped.size && !pausedSourceIds.length) throw new Error("No channels were aggregated; existing catalogue was left untouched");
+  if (!grouped.size && !pausedSourceIds.length && activeSourceIds.size > 0) {
+    throw new Error("No channels were aggregated from active sources; existing catalogue was left untouched");
+  }
   if (grouped.size > MAX_CHANNELS_PER_RUN) throw new Error("Playlist set exceeded the safe per-run channel limit; existing catalogue was left untouched");
 
   const oldChannels: any[] = [];
