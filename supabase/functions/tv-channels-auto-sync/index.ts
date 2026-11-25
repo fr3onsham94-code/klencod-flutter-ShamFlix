@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-type PlaylistSource = { id: string; name: string; url: string; dbId: string };
+type PlaylistSource = { id: string; name: string; url: string; dbId: string; sourceType: string; storagePath?: string };
 
 // Sources are managed in public.tv_channel_sources so every built-in and custom\n// playlist can be enabled or paused independently from the admin panel.\nconst MAX_CUSTOM_SOURCES = 20;
 
@@ -244,7 +244,18 @@ async function validatePublicPlaylistUrl(url: URL) {
   }
 }
 
-async function fetchPlaylist(source: PlaylistSource) {
+async function fetchPlaylist(source: PlaylistSource, db: any) {
+  if (source.sourceType === "m3u_file") {
+    if (!source.storagePath) throw new Error(source.id + " has no uploaded playlist file");
+    const { data, error } = await db.storage.from("tv-source-playlists").download(source.storagePath);
+    if (error || !data) throw new Error(source.id + " playlist file could not be read");
+    if (data.size > MAX_PLAYLIST_BYTES) throw new Error(source.id + " playlist exceeds size limit");
+    const body = await data.text();
+    if (!body.trimStart().startsWith("#EXTM3U")) throw new Error(source.id + " uploaded file is not a valid M3U playlist");
+    const entries = parseM3u(body, source.id, source.name);
+    if (!entries.length) throw new Error(source.id + " contained no supported direct HLS/DASH streams");
+    return entries;
+  }
   let current = new URL(source.url);
   let response: Response | null = null;
   for (let hop = 0; hop <= 3; hop++) {
@@ -317,7 +328,7 @@ async function verifyAdminBearer(db: any, req: Request): Promise<boolean> {
 
 async function syncChannels(db: any) {
   const { data: allSourceRows, error: sourceLookupError } = await db.from("tv_channel_sources")
-    .select("id,name,playlist_url,source_key,is_builtin,is_active")
+    .select("id,name,playlist_url,source_key,is_builtin,is_active,source_type,xtream_server_url,xtream_username,xtream_password,playlist_storage_path")
     .order("created_at", { ascending: true });
   if (sourceLookupError) throw new Error("TV source lookup: " + JSON.stringify(sourceLookupError));
   const customRows = (allSourceRows || []).filter((row: any) => row.is_builtin !== true);
@@ -326,17 +337,36 @@ async function syncChannels(db: any) {
   }
   const sources: PlaylistSource[] = (allSourceRows || [])
     .filter((row: any) => row.is_active === true)
-    .map((row: any) => ({
-      id: row.source_key ? String(row.source_key) : "custom:" + String(row.id),
-      dbId: String(row.id),
-      name: clean(row.name).slice(0, 80),
-      url: String(row.playlist_url),
-    }));
+    .map((row: any) => {
+      const sourceType = String(row.source_type || "m3u_url");
+      let sourceUrl = String(row.playlist_url || "");
+      if (sourceType === "xtream") {
+        const base = new URL(String(row.xtream_server_url || ""));
+        if (base.protocol !== "https:" || base.username || base.password) {
+          throw new Error("Xtream source must use a public HTTPS server URL");
+        }
+        base.pathname = base.pathname.replace(/\/$/, "") + "/get.php";
+        base.search = "";
+        base.searchParams.set("username", String(row.xtream_username || ""));
+        base.searchParams.set("password", String(row.xtream_password || ""));
+        base.searchParams.set("type", "m3u_plus");
+        base.searchParams.set("output", "m3u8");
+        sourceUrl = base.toString();
+      }
+      return {
+        id: row.source_key ? String(row.source_key) : (sourceType === "xtream" ? "xtream:" : "custom:") + String(row.id),
+        dbId: String(row.id),
+        name: clean(row.name).slice(0, 80),
+        url: sourceUrl,
+        sourceType,
+        storagePath: row.playlist_storage_path ? String(row.playlist_storage_path) : undefined,
+      };
+    });
 
   // Each source is reconciled independently. A failed source must never affect its saved servers.
   const settledSources = await Promise.all(sources.map(async source => {
     try {
-      return { status: "fulfilled" as const, source, entries: await fetchPlaylist(source) };
+      return { status: "fulfilled" as const, source, entries: await fetchPlaylist(source, db) };
     } catch (reason) {
       return { status: "rejected" as const, source, reason };
     }
