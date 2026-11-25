@@ -191,7 +191,7 @@ function extractSources(html: string, page: URL) {
 function findPublicWatchUrls(html: string, page: URL, allowedHost: string): string[] {
   const normalized = html.replaceAll("\\/", "/").replaceAll("\\u0026", "&").replaceAll("&amp;", "&");
   const candidates = new Set<string>();
-  const routePattern = new RegExp(String.raw\`(?:https?:\/\/[^\s"'<>]+)?\/watch\/[^\s"'<>\\)]+\`, "gi");
+  const routePattern = new RegExp(String.raw`(?:https?:\/\/[^\s"'<>]+)?\/watch\/[^\s"'<>\\)]+`, "gi");
   const add = (raw: string) => {
     const value = raw.trim().replace(/^["']|["']$/g, "");
     if (!value || /^(javascript:|#|mailto:)/i.test(value)) return;
