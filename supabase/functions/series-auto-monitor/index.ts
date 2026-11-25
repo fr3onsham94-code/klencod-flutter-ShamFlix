@@ -242,7 +242,7 @@ Deno.serve(async (req: Request) => {
   const {data:monitors,error:listError} = await db.from("series_source_monitors")
     .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at,series!inner(source_monitor_enabled)")
     .eq("is_active",true).eq("series.source_monitor_enabled",true)
-    .order("created_at",{ascending:true}).limit(100);
+    .order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100);
   if (listError) return json({error:listError.message},500);
   const now = Date.now();
   const summary = {checked:0,added:0,skipped:0,failed:0,results:[] as unknown[]};
@@ -346,7 +346,7 @@ Deno.serve(async (req: Request) => {
 
   const {data:sectionMonitors,error:sectionListError}=await db.from("series_section_monitors")
     .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at")
-    .eq("is_active",true).order("created_at",{ascending:true}).limit(100);
+    .eq("is_active",true).order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100);
   if(sectionListError)return json({error:sectionListError.message},500);
   for(const monitor of sectionMonitors||[]){
     const last=monitor.last_checked_at?new Date(monitor.last_checked_at).getTime():0;
@@ -452,13 +452,15 @@ Deno.serve(async (req: Request) => {
     .select("id,episode_number,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes,seasons!inner(season_number,series_id,series!inner(source_monitor_enabled))")
     .eq("source_monitor_enabled",true).eq("seasons.series.source_monitor_enabled",true)
     .not("source_page_url","is",null)
-    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(20);
+    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(200);
   if(episodePagesError)return json({error:episodePagesError.message},500);
-  for(let start=0;start<(episodePages||[]).length;start+=10){
-    await Promise.all((episodePages||[]).slice(start,start+10).map(async (row:any)=>{
+  const dueEpisodes=(episodePages||[]).filter((row:any)=>{
     const last=row.source_page_checked_at?new Date(row.source_page_checked_at).getTime():0;
     const interval=Math.max(15,Number(row.source_monitor_interval_minutes)||60)*60000;
-    if(last&&now-last<interval)return;
+    return !last||now-last>=interval;
+  }).slice(0,20);
+  for(let start=0;start<dueEpisodes.length;start+=10){
+    await Promise.all(dueEpisodes.slice(start,start+10).map(async (row:any)=>{
     let pageError:string|null=null;
     try{
       const source=validateUrl(row.source_page_url);
