@@ -369,7 +369,7 @@ Deno.serve(async (req: Request) => {
     await Promise.all((pageMovies||[]).slice(start,start+10).map(async (movieRow:any) => {
     const last = movieRow.source_page_checked_at ? new Date(movieRow.source_page_checked_at).getTime() : 0;
     const interval = Math.max(15,Number(movieRow.source_monitor_interval_minutes)||60)*60000;
-    if (last && now-last < interval) continue;
+    if (last && now-last < interval) return;
     let pageError: string | null = null;
     try {
       const source = validateUrl(movieRow.source_page_url);
