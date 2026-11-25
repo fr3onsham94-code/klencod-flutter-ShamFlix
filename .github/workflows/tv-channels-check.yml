@@ -6,7 +6,9 @@ on:
       - main
     paths:
       - "supabase/functions/tv-channels-auto-sync/**"
+      - "supabase/functions/tv-builtins-control/**"
       - "supabase/migrations/*tv_channel*"
+      - "supabase/migrations/*builtin_tv_import*"
       - "supabase/migrations/*schedule_tv_channels_sync*"
       - ".github/workflows/tv-channels-check.yml"
 
@@ -20,5 +22,7 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Type-check Edge Function
-        run: deno check supabase/functions/tv-channels-auto-sync/index.ts
+      - name: Type-check TV Edge Functions
+        run: |
+          deno check supabase/functions/tv-channels-auto-sync/index.ts
+          deno check supabase/functions/tv-builtins-control/index.ts
