@@ -44,7 +44,8 @@ function normalizeName(value: string): string {
   return clean(value).toLowerCase()
     .replace(/[\u064B-\u065F\u0670]/g, "")
     .replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه")
-    .replace(/[^\p{L}\p{N}]+/gu, "");
+    // Ignore spaces and separators such as hyphens, but preserve meaningful + and &.
+    .replace(/[^\p{L}\p{N}+&]+/gu, "");
 }
 
 function baseChannelName(value: string): string {
