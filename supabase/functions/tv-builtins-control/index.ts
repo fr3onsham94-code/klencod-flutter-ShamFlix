@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -25,17 +25,13 @@ async function verifyAdmin(db: any, req: Request): Promise<boolean> {
 }
 
 async function hideInactiveImportedChannels(db: any) {
-  const activeChannelUrls = new Map<string, string>();
+  const activeChannelIds = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await db.from("playback_servers")
-      .select("channel_id,stream_url").not("source_id", "is", null).eq("is_active", true)
+      .select("channel_id").not("source_id", "is", null).eq("is_active", true)
       .order("channel_id").range(offset, offset + 999);
     if (error) throw new Error("Active stream lookup: " + JSON.stringify(error));
-    for (const row of data || []) {
-      if (row.channel_id && row.stream_url && !activeChannelUrls.has(String(row.channel_id))) {
-        activeChannelUrls.set(String(row.channel_id), String(row.stream_url));
-      }
-    }
+    for (const row of data || []) if (row.channel_id) activeChannelIds.add(String(row.channel_id));
     if (!data || data.length < 1000) break;
   }
 
@@ -48,16 +44,12 @@ async function hideInactiveImportedChannels(db: any) {
     if (!data || data.length < 1000) break;
   }
 
-  const visibleIds = importedIds.filter(id => activeChannelUrls.has(id));
-  const hiddenIds = importedIds.filter(id => !activeChannelUrls.has(id));
-  for (let i = 0; i < visibleIds.length; i += 250) {
-    const batch = visibleIds.slice(i, i + 250);
-    for (const id of batch) {
-      const { error } = await db.from("channels")
-        .update({ is_published: true, stream_url: activeChannelUrls.get(id) })
-        .eq("id", id);
-      if (error) throw new Error("Restore channel visibility: " + JSON.stringify(error));
-    }
+  const visibleIds = importedIds.filter(id => activeChannelIds.has(id));
+  const hiddenIds = importedIds.filter(id => !activeChannelIds.has(id));
+  for (let i = 0; i < visibleIds.length; i += 500) {
+    const { error } = await db.from("channels").update({ is_published: true })
+      .in("id", visibleIds.slice(i, i + 500));
+    if (error) throw new Error("Restore channel visibility: " + JSON.stringify(error));
   }
   for (let i = 0; i < hiddenIds.length; i += 500) {
     const { error } = await db.from("channels").update({ is_published: false })
@@ -78,7 +70,7 @@ async function hideInactiveImportedChannels(db: any) {
       .order("id").range(offset, offset + 999);
     if (error) throw new Error("Automatic package membership lookup: " + JSON.stringify(error));
     for (const item of data || []) {
-      if (!activeChannelUrls.has(String(item.content_id))) staleIds.push(String(item.id));
+      if (!activeChannelIds.has(String(item.content_id))) staleIds.push(String(item.id));
     }
     if (!data || data.length < 1000) break;
   }
