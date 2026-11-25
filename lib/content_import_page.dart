@@ -542,7 +542,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
                 episodesWithoutServers += stats['without_servers'] ?? 0;
               }
               final sourceUri = Uri.tryParse(item['page_url']?.toString() ?? '');
-              if (sourceUri != null &&
+              if (monitorSeries && sourceUri != null &&
                   (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
                   sourceUri.host.isNotEmpty) {
                 await AuthService.client.from('series_source_monitors').upsert({
@@ -579,8 +579,9 @@ class _ContentImportPageState extends State<ContentImportPage> {
             'is_published': publish,
           };
           data['source_page_url'] = emptyNull(item['page_url']);
-          data['source_monitor_enabled'] =
-              type == 'movie' ? monitorMovies : monitorSeries;
+          data['source_monitor_enabled'] = type == 'movie'
+              ? (monitorMovies && !_isAkwamPage(item['page_url']))
+              : monitorSeries;
           data['source_monitor_interval_minutes'] =
               type == 'movie' ? movieMonitorInterval : monitorInterval;
           final saved = await AuthService.client.from(table).insert(data).select('id').single();
