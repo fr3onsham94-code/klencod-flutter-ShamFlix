@@ -353,7 +353,7 @@ async function syncChannels(db: any) {
       ? { last_checked_at: checkedAt, last_error: null, last_entry_count: result.entries.filter(isArabicOrTurkishChannel).length }
       : { last_checked_at: checkedAt, last_error: String(result.reason instanceof Error ? result.reason.message : result.reason).slice(0, 1000) };
     const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.dbId);
-    if (error) throw new Error("custom source status update: " + JSON.stringify(error));
+    if (error) throw new Error("TV source status update: " + JSON.stringify(error));
   }
   if (!sourceResults.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
   const grouped = new Map<string, typeof sourceResults[number]["entries"]>();
@@ -533,14 +533,9 @@ async function syncChannels(db: any) {
       if (packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
     }
   }
-  if (sourceErrors.length === 0) {
-    const automaticPackageIds = (packages || []).map((x:any) => x.id);
-    for (let i=0; i<automaticPackageIds.length; i+=100) {
-      const { error: clearAutomaticMemberships } = await db.from("content_package_items")
-        .delete().eq("content_type","channel").in("package_id",automaticPackageIds.slice(i,i+100));
-      if (clearAutomaticMemberships) throw new Error("automatic package rebuild cleanup: " + JSON.stringify(clearAutomaticMemberships));
-    }
-  }
+  // Add/update automatic package memberships, but do not remove existing ones.
+  // Pausing a source stops future imports from it without hiding or deleting channels
+  // and links that were already imported from that source.
   for (let i=0; i<itemRows.length; i+=500) {
     const { error } = await db.from("content_package_items")
       .upsert(itemRows.slice(i,i+500), { onConflict:"package_id,content_type,content_id", ignoreDuplicates:true });
