@@ -247,7 +247,8 @@ async function validatePublicPlaylistUrl(url: URL, allowNonStandardPort = false)
   try { records.push(...await Deno.resolveDns(host, "AAAA")); } catch {}
   if (!records.length || records.some(address => !isPublicIpAddress(address))) {
     throw new Error("Playlist host did not resolve exclusively to public IP addresses");
-  }}
+  }
+}
 
 async function fetchPlaylist(source: PlaylistSource, db: any) {
   if (source.sourceType === "m3u_file") {
@@ -498,7 +499,8 @@ async function hideInactiveImportedChannels(db: any) {
   }
 
   const { data: packages, error: packageError } = await db.from("content_packages")
-    .select("id").eq("content_type", "channel").like("name", "قنوات تلقائية — %");  if (packageError) throw new Error("automatic package lookup: " + JSON.stringify(packageError));
+    .select("id").eq("content_type", "channel").like("name", "قنوات تلقائية — %");
+  if (packageError) throw new Error("automatic package lookup: " + JSON.stringify(packageError));
   const packageIds = (packages || []).map((row: any) => String(row.id));
   if (packageIds.length) {
     const staleIds: string[] = [];
@@ -747,7 +749,8 @@ async function syncChannels(db: any) {
   }
 
   // Keep only the two most recently observed URLs for each channel + source pair.
-  // This bounds history without allowing one source to delete another source's servers.  const sourceServers: any[] = [];
+  // This bounds history without allowing one source to delete another source's servers.
+  const sourceServers: any[] = [];
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await db.from("playback_servers")
       .select("id,channel_id,source_id,source_seen_at,source_position")
