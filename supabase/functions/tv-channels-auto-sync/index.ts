@@ -2,7 +2,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type PlaylistSource = { id: string; name: string; url: string; dbId: string; sourceType: string; storagePath?: string };
 
-// Sources are managed in public.tv_channel_sources so every built-in and custom\n// playlist can be enabled or paused independently from the admin panel.\nconst MAX_CUSTOM_SOURCES = 20;
+// Sources are managed in public.tv_channel_sources so every built-in and custom
+// playlist can be enabled or paused independently from the admin panel.
+const MAX_CUSTOM_SOURCES = 20;
 
 const MAX_PLAYLIST_BYTES = 24 * 1024 * 1024;
 const MAX_CHANNELS_PER_RUN = 6000;
