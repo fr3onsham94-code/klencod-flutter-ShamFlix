@@ -411,17 +411,18 @@ class _ContentImportPageState extends State<ContentImportPage> {
         String episodeId;
         final episodeData = <String, dynamic>{
           'title': 'الحلقة $number',
-          'stream_url': firstUrl,
           'is_published': publish,
           'source_page_url': emptyNull(episode['source_page_url']),
           'source_monitor_enabled': monitorSeries,
           'source_monitor_interval_minutes': monitorInterval,
         };
+        if (firstUrl.isNotEmpty) episodeData['stream_url'] = firstUrl;
         if (existing == null) {
           final saved = await AuthService.client.from('episodes').insert({
             'season_id': seasonId,
             'episode_number': number,
             ...episodeData,
+            'stream_url': firstUrl,
             'description': null,
           }).select('id').single();
           episodeId = saved['id'].toString();
