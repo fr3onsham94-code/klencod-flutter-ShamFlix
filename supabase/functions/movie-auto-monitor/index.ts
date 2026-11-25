@@ -287,7 +287,7 @@ Deno.serve(async (req: Request) => {
   const now = Date.now();
   for (const monitor of monitors || []) {
     const last = monitor.last_checked_at ? new Date(monitor.last_checked_at).getTime() : 0;
-    const interval = Math.max(30,Number(monitor.check_interval_minutes)||60)*60000;
+    const interval = Math.max(15,Number(monitor.check_interval_minutes)||15)*60000;
     if (last && now-last < interval) continue;
     let added = 0, linked = 0, errorMessage: string | null = null;
     try {
