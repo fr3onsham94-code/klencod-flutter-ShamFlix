@@ -25,6 +25,36 @@ async function verifyAdmin(db: any, req: Request): Promise<boolean> {
 }
 
 async function hideInactiveImportedChannels(db: any) {
+  const { data: setting, error: settingError } = await db.from("tv_source_global_settings")
+    .select("built_in_import_enabled").eq("id", "global").maybeSingle();
+  if (settingError) throw new Error("Global source setting lookup: " + JSON.stringify(settingError));
+  const builtinsEnabled = setting?.built_in_import_enabled !== false;
+  const { data: sources, error: sourceError } = await db.from("tv_channel_sources")
+    .select("id,source_key,source_type,is_builtin,is_active");
+  if (sourceError) throw new Error("Source state lookup: " + JSON.stringify(sourceError));
+  const allowedSourceIds = new Set<string>((sources || [])
+    .filter((source: any) => source.is_active === true && (source.is_builtin !== true || builtinsEnabled))
+    .map((source: any) => source.source_key ? String(source.source_key) :
+      (String(source.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(source.id)));
+
+  // Remove active links from paused/deleted/legacy sources before calculating visibility.
+  const staleServerIds: string[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("playback_servers")
+      .select("id,source_id").not("source_id", "is", null).eq("is_active", true)
+      .order("id").range(offset, offset + 999);
+    if (error) throw new Error("Active source server lookup: " + JSON.stringify(error));
+    for (const row of data || []) {
+      if (!allowedSourceIds.has(String(row.source_id))) staleServerIds.push(String(row.id));
+    }
+    if (!data || data.length < 1000) break;
+  }
+  for (let i = 0; i < staleServerIds.length; i += 500) {
+    const { error } = await db.from("playback_servers")
+      .update({ is_active: false }).in("id", staleServerIds.slice(i, i + 500));
+    if (error) throw new Error("Paused/orphan server cleanup: " + JSON.stringify(error));
+  }
+
   const activeChannelIds = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await db.from("playback_servers")
@@ -77,6 +107,27 @@ async function hideInactiveImportedChannels(db: any) {
   for (let i = 0; i < staleIds.length; i += 500) {
     const { error } = await db.from("content_package_items").delete().in("id", staleIds.slice(i, i + 500));
     if (error) throw new Error("Automatic package cleanup: " + JSON.stringify(error));
+  }
+
+  const { data: automaticPackages, error: automaticPackagesError } = await db.from("content_packages")
+    .select("id").eq("content_type", "channel").like("name", "قنوات تلقائية — %");
+  if (automaticPackagesError) throw new Error("Empty automatic package lookup: " + JSON.stringify(automaticPackagesError));
+  const automaticPackageIds = (automaticPackages || []).map((row: any) => String(row.id));
+  if (automaticPackageIds.length) {
+    const nonEmptyIds = new Set<string>();
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await db.from("content_package_items")
+        .select("package_id").in("package_id", automaticPackageIds)
+        .order("package_id").range(offset, offset + 999);
+      if (error) throw new Error("Automatic package emptiness lookup: " + JSON.stringify(error));
+      for (const item of data || []) nonEmptyIds.add(String(item.package_id));
+      if (!data || data.length < 1000) break;
+    }
+    const emptyIds = automaticPackageIds.filter(id => !nonEmptyIds.has(id));
+    for (let i = 0; i < emptyIds.length; i += 500) {
+      const { error } = await db.from("content_packages").delete().in("id", emptyIds.slice(i, i + 500));
+      if (error) throw new Error("Empty automatic package deletion: " + JSON.stringify(error));
+    }
   }
 }
 
