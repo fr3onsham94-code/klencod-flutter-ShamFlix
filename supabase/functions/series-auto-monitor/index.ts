@@ -144,7 +144,7 @@ async function inspectEpisode(link: {url:string;title:string;number:number}, hos
     number: link.number,
     seasonNumber: parseSeason(title + " " + link.url, fallbackSeason),
     title,
-    sourcePageUrl: page.url.toString(),
+    sourcePageUrl: link.url,
     streamUrl: unique[0]?.url ?? null,
     sources: unique,
   };
@@ -380,6 +380,14 @@ Deno.serve(async (req: Request) => {
               if(ins)throw ins;seriesId=saved.id;
             }
           }
+          const {error:metadataUpdateError}=await db.from("series").update({
+            title:meta.title,poster_url:meta.poster_url,description:meta.description,
+            category:meta.category,release_year:meta.release_year,
+            source_page_url:card.url,source_monitor_enabled:true,
+            source_monitor_interval_minutes:monitor.check_interval_minutes,
+            source_page_checked_at:new Date().toISOString(),source_page_last_error:null,
+          }).eq("id",seriesId);
+          if(metadataUpdateError)throw metadataUpdateError;
           const {error:sourceMonitorError}=await db.from("series_source_monitors").upsert({
             series_id:seriesId,source_url:card.url,source_host:source.hostname,
             season_number:1,check_interval_minutes:monitor.check_interval_minutes,is_active:true,
