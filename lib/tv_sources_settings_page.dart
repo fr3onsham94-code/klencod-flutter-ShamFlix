@@ -110,7 +110,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
   bool get _limitReached =>
       _sources.where((source) => source['is_builtin'] != true).length >= 20;
 
-  Future<void> _syncNow() async {
+  Future<bool> _syncNow() async {
     try {
       final accessToken = AuthService.client.auth.currentSession?.accessToken;
       final response = await AuthService.client.functions.invoke(
@@ -119,16 +119,18 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
         body: {'mode': 'sync'},
       );
       final data = response.data;
+      final success = response.status >= 200 && response.status < 300 &&
+          data is Map && data['ok'] == true;
       if (mounted) {
-        if (response.status >= 200 && response.status < 300 &&
-            data is Map && data['ok'] == true) {
-          _message('تمت مزامنة المصدر بنجاح');
-        } else {
-          _message('تمت إضافة المصدر؛ ستتم إعادة محاولة المزامنة تلقائياً');
-        }
+        _message(success
+            ? 'تمت مزامنة المصادر وتحديث ظهور القنوات'
+            : 'تعذرت المزامنة؛ ستتم إعادة المحاولة تلقائياً',
+            error: !success);
       }
+      return success;
     } catch (_) {
-      if (mounted) _message('تمت إضافة المصدر؛ ستتم إعادة محاولة المزامنة تلقائياً');
+      if (mounted) _message('تعذرت المزامنة؛ ستتم إعادة المحاولة تلقائياً', error: true);
+      return false;
     }
   }
 
@@ -332,8 +334,12 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
         'is_active': active,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', source['id']);
+      // Reconcile old stream rows immediately; a database flag alone does not hide them.
+      final synced = await _syncNow();
       await _loadSources();
-      if (mounted) _message(active ? 'تم تفعيل المصدر' : 'تم إيقاف المصدر');
+      if (synced && mounted) {
+        _message(active ? 'تم تفعيل المصدر ومزامنة قنواته' : 'تم إيقاف المصدر وإخفاء قنواته غير المدعومة');
+      }
     } catch (e) {
       _message('تعذر تحديث المصدر: $e', error: true);
     }
