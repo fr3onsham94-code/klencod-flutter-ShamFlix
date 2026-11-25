@@ -48,8 +48,11 @@ function normalizeName(value: string): string {
 }
 
 function baseChannelName(value: string): string {
-  return clean(value)
-    .replace(/\s*[([]?\s*(?:SD|HD|FHD|UHD|4K|8K|[0-9]{3,4}\s*[pPiI])\s*[)\]]?\s*$/i, "")
+  return clean(value).normalize("NFKC")
+    // Remove codec / quality markers that identify a stream variant, not a channel.
+    .replace(/\s*[([]?\s*(?:SD|HD|FHD|UHD|4K|8K|H\.?265|HEVC|AVC|X\.?265|HDR|[0-9]{3,4}\s*[pPiI])\s*[)\]]?\s*$/i, "")
+    .replace(/\b(?:FULL\s*HD|ULTRA\s*HD|FHD|UHD|HD|SD)\s*(?=\d+\b)/gi, " ")
+    .replace(/\b(?:H\.?265|HEVC|AVC|X\.?265)\b/gi, " ")
     .replace(/\s*[ⓈⒼⓅⒽⓊ]+\s*$/u, "")
     .replace(/\s+/g, " ").trim();
 }
@@ -364,6 +367,100 @@ async function deleteEmptyAutomaticChannelPackages(db: any) {
   return { checked: packageIds.length, deleted: emptyPackageIds.length };
 }
 
+async function mergeDuplicateImportedChannels(db: any, rows: any[]) {
+  const groups = new Map<string, any[]>();
+  for (const row of rows) {
+    const key = canonicalKey("", String(row.name_en || row.name || ""), "");
+    if (!key || key === "name:") continue;
+    const group = groups.get(key) || [];
+    group.push(row);
+    groups.set(key, group);
+  }
+
+  const mergedIds = new Set<string>();
+  let mergedChannels = 0;
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    group.sort((a, b) =>
+      Number(b.is_published === true) - Number(a.is_published === true) ||
+      String(a.id).localeCompare(String(b.id))
+    );
+    const survivor = group[0];
+    const aliases = new Set<string>(Array.isArray(survivor.aliases) ? survivor.aliases.map(String) : []);
+    for (const duplicate of group.slice(1)) {
+      if (String(duplicate.id) === String(survivor.id)) continue;
+
+      const duplicateNames = [duplicate.name, duplicate.name_en]
+        .map((x: unknown) => clean(x))
+        .filter((x: string) => x && x !== survivor.name && x !== survivor.name_en);
+      for (const name of duplicateNames) aliases.add(name);
+      if (Array.isArray(duplicate.aliases)) {
+        for (const alias of duplicate.aliases) {
+          const value = clean(alias);
+          if (value) aliases.add(value);
+        }
+      }
+
+      const { error: serverError } = await db.from("playback_servers")
+        .update({ channel_id: survivor.id }).eq("channel_id", duplicate.id);
+      if (serverError) throw new Error("duplicate channel server merge: " + JSON.stringify(serverError));
+
+      const { data: memberships, error: membershipError } = await db.from("content_package_items")
+        .select("id,package_id")
+        .eq("content_type", "channel")
+        .eq("content_id", duplicate.id);
+      if (membershipError) throw new Error("duplicate channel package lookup: " + JSON.stringify(membershipError));
+      if (memberships?.length) {
+        const moved = memberships.map((item: any) => ({
+          package_id: item.package_id,
+          content_type: "channel",
+          content_id: survivor.id,
+        }));
+        const { error: moveError } = await db.from("content_package_items")
+          .upsert(moved, { onConflict: "package_id,content_type,content_id", ignoreDuplicates: true });
+        if (moveError) throw new Error("duplicate channel package merge: " + JSON.stringify(moveError));
+        const { error: deleteMembershipError } = await db.from("content_package_items")
+          .delete().in("id", memberships.map((item: any) => item.id));
+        if (deleteMembershipError) throw new Error("duplicate channel old package cleanup: " + JSON.stringify(deleteMembershipError));
+      }
+
+      const { error: hideError } = await db.from("channels")
+        .update({ is_published: false }).eq("id", duplicate.id);
+      if (hideError) throw new Error("duplicate channel hide: " + JSON.stringify(hideError));
+      mergedIds.add(String(duplicate.id));
+      mergedChannels++;
+    }
+
+    const { error: aliasError } = await db.from("channels")
+      .update({ aliases: [...aliases] }).eq("id", survivor.id);
+    if (aliasError) throw new Error("merged channel aliases update: " + JSON.stringify(aliasError));
+  }
+  return { rows: rows.filter(row => !mergedIds.has(String(row.id))), mergedChannels };
+}
+
+async function disableInactiveSourceServers(db: any, activeSourceIds: Set<string>) {
+  const staleServerIds: string[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("playback_servers")
+      .select("id,source_id")
+      .not("source_id", "is", null)
+      .eq("is_active", true)
+      .order("id")
+      .range(offset, offset + 999);
+    if (error) throw new Error("active imported server lookup: " + JSON.stringify(error));
+    for (const row of data || []) {
+      if (!activeSourceIds.has(String(row.source_id))) staleServerIds.push(String(row.id));
+    }
+    if (!data || data.length < 1000) break;
+  }
+  for (let i = 0; i < staleServerIds.length; i += 500) {
+    const { error } = await db.from("playback_servers")
+      .update({ is_active: false }).in("id", staleServerIds.slice(i, i + 500));
+    if (error) throw new Error("inactive/orphan source server pause: " + JSON.stringify(error));
+  }
+  return staleServerIds.length;
+}
+
 async function hideInactiveImportedChannels(db: any) {
   const activeChannelIds = new Set<string>();
   for (let offset = 0; ; offset += 1000) {
@@ -498,6 +595,10 @@ async function syncChannels(db: any) {
       .in("source_id", pausedSourceIds);
     if (error) throw new Error("paused source stream update: " + JSON.stringify(error));
   }
+  // Also disable legacy/orphan stream rows whose source was deleted or no longer
+  // exists in tv_channel_sources. Only currently enabled sources remain active.
+  const activeSourceIds = new Set(sources.map(source => source.id));
+  const disabledStaleServers = await disableInactiveSourceServers(db, activeSourceIds);
 
   // Each source is reconciled independently. A failed source must never affect its saved servers.
   const settledSources = await Promise.all(sources.map(async source => {
@@ -541,15 +642,17 @@ async function syncChannels(db: any) {
   const oldChannels: any[] = [];
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await db.from("channels")
-      .select("id,external_source_key,name,name_en").not("external_source_key","is",null)
+      .select("id,external_source_key,name,name_en,aliases,is_published").not("external_source_key","is",null)
       .order("id").range(offset, offset + 999);
     if (error) throw new Error("existing channel lookup: " + JSON.stringify(error));
     oldChannels.push(...(data || []));
     if (!data || data.length < 1000) break;
   }
+  const dedupeResult = await mergeDuplicateImportedChannels(db, oldChannels);
+  const canonicalChannels = dedupeResult.rows;
   const byExternalKey = new Map<string, any>();
   const byCanonicalName = new Map<string, any>();
-  for (const row of oldChannels) {
+  for (const row of canonicalChannels) {
     byExternalKey.set(row.external_source_key, row);
     const canonical = canonicalKey("", String(row.name_en || row.name || ""), "");
     if (!byCanonicalName.has(canonical)) byCanonicalName.set(canonical, row);
@@ -794,6 +897,8 @@ async function syncChannels(db: any) {
     languageFilter: { builtIn: ["Arabic", "Turkish"], custom: "all" },
     filteredEntries: sourceResults.reduce((n,x)=>n+x.entries.length,0),
     customSources: customRows.length,
+    disabledStaleServers,
+    mergedDuplicateChannels: dedupeResult.mergedChannels,
   };
 }
 
