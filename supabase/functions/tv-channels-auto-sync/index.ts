@@ -411,7 +411,7 @@ async function syncChannels(db: any) {
     const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.dbId);
     if (error) throw new Error("TV source status update: " + JSON.stringify(error));
   }
-  if (!sourceResults.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
+  if (!sourceResults.length && !pausedSourceIds.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
   const grouped = new Map<string, typeof sourceResults[number]["entries"]>();
   for (const { entries } of sourceResults) {
     for (const entry of entries) {
@@ -420,7 +420,7 @@ async function syncChannels(db: any) {
       grouped.set(entry.key, group);
     }
   }
-  if (!grouped.size) throw new Error("No channels were aggregated; existing catalogue was left untouched");
+  if (!grouped.size && !pausedSourceIds.length) throw new Error("No channels were aggregated; existing catalogue was left untouched");
   if (grouped.size > MAX_CHANNELS_PER_RUN) throw new Error("Playlist set exceeded the safe per-run channel limit; existing catalogue was left untouched");
 
   const oldChannels: any[] = [];
@@ -573,9 +573,11 @@ async function syncChannels(db: any) {
   const packageRows = [...packageDefinitions.entries()].map(([label,sort_order]) => ({
     name: "قنوات تلقائية — " + label, content_type: "channel", sort_order,
   }));
-  const { error: packageError } = await db.from("content_packages")
-    .upsert(packageRows, { onConflict:"content_type,name" });
-  if (packageError) throw new Error("package upsert: " + JSON.stringify(packageError));
+  if (packageRows.length) {
+    const { error: packageError } = await db.from("content_packages")
+      .upsert(packageRows, { onConflict:"content_type,name" });
+    if (packageError) throw new Error("package upsert: " + JSON.stringify(packageError));
+  }
   const { data: packages, error: packagesError } = await db.from("content_packages")
     .select("id,name").like("name","قنوات تلقائية — %").eq("content_type","channel");
   if (packagesError) throw new Error("package lookup: " + JSON.stringify(packagesError));
@@ -609,6 +611,34 @@ async function syncChannels(db: any) {
     if (error) throw new Error("active source channel lookup: " + JSON.stringify(error));
     for (const row of data || []) if (row.channel_id) activeSourceChannelIds.add(String(row.channel_id));
     if (!data || data.length < 1000) break;
+  }
+
+  // The all-channels screen reads channels.is_published directly, so synchronize
+  // publication state as well as automatic package membership.
+  const importedChannelIds: string[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("channels")
+      .select("id")
+      .not("external_source_key","is",null)
+      .order("id")
+      .range(offset, offset + 999);
+    if (error) throw new Error("imported channel visibility lookup: " + JSON.stringify(error));
+    for (const row of data || []) importedChannelIds.push(String(row.id));
+    if (!data || data.length < 1000) break;
+  }
+  const visibleImportedIds = importedChannelIds.filter(id => activeSourceChannelIds.has(id));
+  const hiddenImportedIds = importedChannelIds.filter(id => !activeSourceChannelIds.has(id));
+  for (let i=0; i<visibleImportedIds.length; i+=500) {
+    const { error } = await db.from("channels")
+      .update({ is_published: true })
+      .in("id", visibleImportedIds.slice(i,i+500));
+    if (error) throw new Error("restore active channel visibility: " + JSON.stringify(error));
+  }
+  for (let i=0; i<hiddenImportedIds.length; i+=500) {
+    const { error } = await db.from("channels")
+      .update({ is_published: false })
+      .in("id", hiddenImportedIds.slice(i,i+500));
+    if (error) throw new Error("hide paused-only channels: " + JSON.stringify(error));
   }
 
   const autoPackageIds = [...packageIds.values()].map(String);
