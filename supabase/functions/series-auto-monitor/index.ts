@@ -239,11 +239,20 @@ Deno.serve(async (req: Request) => {
   const db = createClient(supabaseUrl,serviceKey,{auth:{autoRefreshToken:false,persistSession:false}});
   const {data:tokenValid,error:tokenError} = await db.rpc("verify_series_monitor_cron_secret",{candidate_secret:cronToken});
   if (tokenError || tokenValid !== true) return json({error:"Unauthorized"},401);
-  const {data:monitors,error:listError} = await db.from("series_source_monitors")
-    .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at,series!inner(source_monitor_enabled)")
-    .eq("is_active",true).eq("series.source_monitor_enabled",true)
-    .order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100);
-  if (listError) return json({error:listError.message},500);
+  // Avoid PostgREST embedded !inner relation filters here: in production they
+  // returned an empty monitor set despite active monitors and enabled series.
+  // Resolve enabled series IDs first, then query monitors by their FK directly.
+  const {data:enabledSeries,error:enabledSeriesError} = await db.from("series")
+    .select("id").eq("source_monitor_enabled",true);
+  if (enabledSeriesError) return json({error:enabledSeriesError.message,stage:"enabled_series"},500);
+  const enabledSeriesIds = (enabledSeries || []).map((row:any)=>row.id);
+  const {data:monitors,error:listError} = enabledSeriesIds.length
+    ? await db.from("series_source_monitors")
+        .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at")
+        .eq("is_active",true).in("series_id",enabledSeriesIds)
+        .order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100)
+    : {data:[],error:null};
+  if (listError) return json({error:listError.message,stage:"series_monitors"},500);
   const now = Date.now();
   const summary = {checked:0,added:0,skipped:0,failed:0,results:[] as unknown[]};
   for (const monitor of monitors ?? []) {
@@ -448,12 +457,19 @@ Deno.serve(async (req: Request) => {
 
   // Independently recheck saved episode pages, even if a provider removes
   // an episode from the current series listing.
-  const {data:episodePages,error:episodePagesError}=await db.from("episodes")
-    .select("id,episode_number,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes,seasons!inner(season_number,series_id,series!inner(source_monitor_enabled))")
-    .eq("source_monitor_enabled",true).eq("seasons.series.source_monitor_enabled",true)
-    .not("source_page_url","is",null)
-    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(200);
-  if(episodePagesError)return json({error:episodePagesError.message},500);
+  const {data:enabledSeasons,error:enabledSeasonsError}=enabledSeriesIds.length
+    ? await db.from("seasons").select("id,series_id").in("series_id",enabledSeriesIds)
+    : {data:[],error:null};
+  if(enabledSeasonsError)return json({error:enabledSeasonsError.message,stage:"enabled_seasons"},500);
+  const enabledSeasonIds=(enabledSeasons||[]).map((row:any)=>row.id);
+  const {data:episodePages,error:episodePagesError}=enabledSeasonIds.length
+    ? await db.from("episodes")
+        .select("id,episode_number,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes,season_id")
+        .eq("source_monitor_enabled",true).in("season_id",enabledSeasonIds)
+        .not("source_page_url","is",null)
+        .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(200)
+    : {data:[],error:null};
+  if(episodePagesError)return json({error:episodePagesError.message,stage:"episode_pages"},500);
   const dueEpisodes=(episodePages||[]).filter((row:any)=>{
     const last=row.source_page_checked_at?new Date(row.source_page_checked_at).getTime():0;
     const interval=Math.max(15,Number(row.source_monitor_interval_minutes)||60)*60000;
@@ -464,7 +480,7 @@ Deno.serve(async (req: Request) => {
     let pageError:string|null=null;
     try{
       const source=validateUrl(row.source_page_url);
-      const season=Array.isArray(row.seasons)?row.seasons[0]:row.seasons;
+      const season=(enabledSeasons||[]).find((item:any)=>item.id===row.season_id);
       const link={url:source.toString(),title:row.title||("الحلقة "+row.episode_number),number:Number(row.episode_number)};
       const episode=await inspectEpisode(link,source.hostname,Number(season?.season_number)||1);
       let primaryUrl:string|null=null;
