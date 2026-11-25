@@ -1,44 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-type PlaylistSource = { id: string; name: string; url: string; customId?: string };
+type PlaylistSource = { id: string; name: string; url: string; dbId: string };
 
-// iptv-org publishes dedicated country playlists. Read the Arab countries and Turkey
-// in addition to the global index so country grouping does not depend on index metadata.
-const IPTV_ORG_COUNTRY_CODES = [
-  "dz", "bh", "km", "eg", "iq", "jo", "kw", "lb", "ly", "mr",
-  "ma", "om", "ps", "qa", "sa", "so", "sd", "sy", "tn", "ae", "ye", "tr",
-];
-
-const BUILTIN_SOURCES: PlaylistSource[] = [
-  // Original core sources
-  { id: "iptv-org", name: "IPTV-ORG PRIMARY", url: "https://iptv-org.github.io/iptv/index.m3u" },
-  ...IPTV_ORG_COUNTRY_CODES.map((countryCode): PlaylistSource => ({
-    id: "iptv-org-country-" + countryCode,
-    name: "IPTV-ORG COUNTRY " + countryCode.toUpperCase(),
-    url: "https://iptv-org.github.io/iptv/countries/" + countryCode + ".m3u",
-  })),
-  { id: "free-tv", name: "FREE-TV", url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" },
-  { id: "nexus", name: "IPTV-NEXUS", url: "https://dearbulut.github.io/iptv/playlists/index.m3u" },
-  // Additional public playlists referenced by the Androidsis guide
-  { id: "tdtchannels", name: "TDTCHANNELS TV M3U8", url: "https://www.tdtchannels.com/lists/tv.m3u8" },
-  { id: "tdtchannels-m3u", name: "TDTCHANNELS TV M3U", url: "https://www.tdtchannels.com/lists/tv.m3u" },
-  { id: "m3ucl-total", name: "M3U.CL TOTAL", url: "https://www.m3u.cl/lista/total.m3u" },
-  { id: "m3ucl-music", name: "M3U.CL MUSIC", url: "https://www.m3u.cl/lista/musica.m3u" },
-  { id: "m3ucl-religious", name: "M3U.CL RELIGIOUS", url: "https://www.m3u.cl/lista/religiosos.m3u" },
-  { id: "m3ucl-ar", name: "M3U.CL ARGENTINA", url: "https://www.m3u.cl/lista/AR.m3u" },
-  { id: "m3ucl-bo", name: "M3U.CL BOLIVIA", url: "https://www.m3u.cl/lista/BO.m3u" },
-  { id: "m3ucl-br", name: "M3U.CL BRAZIL", url: "https://www.m3u.cl/lista/BR.m3u" },
-  { id: "m3ucl-cl", name: "M3U.CL CHILE", url: "https://www.m3u.cl/lista/CL.m3u" },
-  { id: "m3ucl-co", name: "M3U.CL COLOMBIA", url: "https://www.m3u.cl/lista/CO.m3u" },
-  { id: "m3ucl-ec", name: "M3U.CL ECUADOR", url: "https://www.m3u.cl/lista/EC.m3u" },
-  { id: "m3ucl-es", name: "M3U.CL SPAIN", url: "https://www.m3u.cl/lista/ES.m3u" },
-  { id: "m3ucl-mx", name: "M3U.CL MEXICO", url: "https://www.m3u.cl/lista/MX.m3u" },
-  { id: "m3ucl-py", name: "M3U.CL PARAGUAY", url: "https://www.m3u.cl/lista/PY.m3u" },
-  { id: "m3ucl-pe", name: "M3U.CL PERU", url: "https://www.m3u.cl/lista/PE.m3u" },
-  { id: "m3ucl-do", name: "M3U.CL DOMINICAN REPUBLIC", url: "https://www.m3u.cl/lista/DO.m3u" },
-  { id: "m3ucl-ve", name: "M3U.CL VENEZUELA", url: "https://www.m3u.cl/lista/VE.m3u" },
-];
-const MAX_CUSTOM_SOURCES = 20;
+// Sources are managed in public.tv_channel_sources so every built-in and custom\n// playlist can be enabled or paused independently from the admin panel.\nconst MAX_CUSTOM_SOURCES = 20;
 
 const MAX_PLAYLIST_BYTES = 24 * 1024 * 1024;
 const MAX_CHANNELS_PER_RUN = 6000;
@@ -352,24 +316,22 @@ async function verifyAdminBearer(db: any, req: Request): Promise<boolean> {
 }
 
 async function syncChannels(db: any) {
-  const { data: customRows, error: customSourcesError } = await db.from("tv_channel_sources")
-    .select("id,name,playlist_url")
-    .eq("is_active", true)
-    .order("created_at", { ascending: true })
-    .limit(MAX_CUSTOM_SOURCES + 1);
-  if (customSourcesError) throw new Error("custom source lookup: " + JSON.stringify(customSourcesError));
-  if ((customRows || []).length > MAX_CUSTOM_SOURCES) {
+  const { data: allSourceRows, error: sourceLookupError } = await db.from("tv_channel_sources")
+    .select("id,name,playlist_url,source_key,is_builtin,is_active")
+    .order("created_at", { ascending: true });
+  if (sourceLookupError) throw new Error("TV source lookup: " + JSON.stringify(sourceLookupError));
+  const customRows = (allSourceRows || []).filter((row: any) => row.is_builtin !== true);
+  if (customRows.length > MAX_CUSTOM_SOURCES) {
     throw new Error("Too many custom TV sources; maximum is " + MAX_CUSTOM_SOURCES);
   }
-  const sources: PlaylistSource[] = [
-    ...BUILTIN_SOURCES,
-    ...(customRows || []).map((row: any) => ({
-      id: "custom:" + row.id,
-      customId: String(row.id),
+  const sources: PlaylistSource[] = (allSourceRows || [])
+    .filter((row: any) => row.is_active === true)
+    .map((row: any) => ({
+      id: row.source_key ? String(row.source_key) : "custom:" + String(row.id),
+      dbId: String(row.id),
       name: clean(row.name).slice(0, 80),
       url: String(row.playlist_url),
-    })),
-  ];
+    }));
 
   // Each source is reconciled independently. A failed source must never affect its saved servers.
   const settledSources = await Promise.all(sources.map(async source => {
@@ -386,11 +348,11 @@ async function syncChannels(db: any) {
 
   const checkedAt = new Date().toISOString();
   for (const result of settledSources) {
-    if (!result.source.customId) continue;
+    if (!result.source.dbId) continue;
     const status = result.status === "fulfilled"
       ? { last_checked_at: checkedAt, last_error: null, last_entry_count: result.entries.filter(isArabicOrTurkishChannel).length }
       : { last_checked_at: checkedAt, last_error: String(result.reason instanceof Error ? result.reason.message : result.reason).slice(0, 1000) };
-    const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.customId);
+    const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.dbId);
     if (error) throw new Error("custom source status update: " + JSON.stringify(error));
   }
   if (!sourceResults.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
@@ -597,7 +559,7 @@ async function syncChannels(db: any) {
     retentionScope: "two latest URLs per channel, source, and quality",
     languageFilter: ["Arabic", "Turkish"],
     filteredEntries: sourceResults.reduce((n,x)=>n+x.entries.length,0),
-    customSources: customRows?.length || 0,
+    customSources: customRows.length,
   };
 }
 
