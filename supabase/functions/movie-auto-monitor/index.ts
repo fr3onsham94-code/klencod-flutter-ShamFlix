@@ -282,6 +282,10 @@ Deno.serve(async (req: Request) => {
           const movie = await inspectMovie(card,source.hostname,monitor.category || "");
           if (existsByUrl.data) {
             const movieId=existsByUrl.data.id;
+            const {error:monitorUpdateError}=await db.from("movies").update({
+              source_monitor_enabled:true,source_monitor_interval_minutes:monitor.check_interval_minutes,
+            }).eq("id",movieId);
+            if(monitorUpdateError)throw monitorUpdateError;
             if(movie.sources.length){
               const primaryUrl=await replaceMoviePageServers(db,movieId,card.url,movie.sources);
               const {error:updateMovie}=await db.from("movies").update({stream_url:primaryUrl}).eq("id",movieId);
@@ -303,8 +307,10 @@ Deno.serve(async (req: Request) => {
           let movieId: string;
           if (old?.id) {
             movieId = old.id;
-            await db.from("movies").update({source_page_url:card.url})
-              .eq("id",movieId).is("source_page_url",null);
+            await db.from("movies").update({
+              source_page_url:card.url,source_monitor_enabled:true,
+              source_monitor_interval_minutes:monitor.check_interval_minutes,
+            }).eq("id",movieId).is("source_page_url",null);
             const {error:linkError} = await db.from("content_package_items").upsert({
               package_id:monitor.package_id,content_type:"movie",content_id:movieId
             },{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
