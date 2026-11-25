@@ -123,7 +123,7 @@ async function hideInactiveImportedChannels(db: any) {
       for (const item of data || []) nonEmptyIds.add(String(item.package_id));
       if (!data || data.length < 1000) break;
     }
-    const emptyIds = automaticPackageIds.filter(id => !nonEmptyIds.has(id));
+    const emptyIds = automaticPackageIds.filter((id: string) => !nonEmptyIds.has(id));
     for (let i = 0; i < emptyIds.length; i += 500) {
       const { error } = await db.from("content_packages").delete().in("id", emptyIds.slice(i, i + 500));
       if (error) throw new Error("Empty automatic package deletion: " + JSON.stringify(error));
