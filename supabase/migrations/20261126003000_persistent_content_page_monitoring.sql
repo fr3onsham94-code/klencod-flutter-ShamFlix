@@ -43,8 +43,3 @@ create index if not exists idx_playback_servers_source_page
   on public.playback_servers (source_page_url)
   where source_page_url is not null;
 
--- The cloud movie monitor cannot currently fetch Akwam movie pages reliably.
--- Keep their source URLs, but avoid repeatedly scheduling known-unavailable pages.
-update public.movies
-set source_monitor_enabled = false
-where source_page_url ~* '^https?://([^/]+\.)?akwam\.ss(/|$)';
