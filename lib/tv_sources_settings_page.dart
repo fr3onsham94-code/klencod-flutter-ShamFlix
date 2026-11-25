@@ -27,6 +27,10 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
   String? _playlistFileName;
   bool _loading = true;
   bool _saving = false;
+  bool _builtinBusy = false;
+  bool _builtinImportEnabled = true;
+  bool _builtinControlAvailable = false;
+  bool _showBuiltinSources = false;
   String? _error;
 
   @override
@@ -65,6 +69,26 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           .order('created_at', ascending: false);
       if (!mounted) return;
       setState(() => _sources = rows.map((row) => Map<String, dynamic>.from(row)).toList());
+      try {
+        final accessToken = AuthService.client.auth.currentSession?.accessToken;
+        final status = await AuthService.client.functions.invoke(
+          'tv-builtins-control',
+          headers: {if (accessToken != null) 'Authorization': 'Bearer $accessToken'},
+          body: {'mode': 'status'},
+        );
+        final data = status.data;
+        if (status.status >= 200 && status.status < 300 &&
+            data is Map && data['ok'] == true && data['mode'] == 'status') {
+          setState(() {
+            _builtinControlAvailable = true;
+            _builtinImportEnabled = data['enabled'] != false;
+          });
+        } else {
+          setState(() => _builtinControlAvailable = false);
+        }
+      } catch (_) {
+        if (mounted) setState(() => _builtinControlAvailable = false);
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -368,6 +392,77 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     );
   }
 
+  Future<void> _setBuiltinImportEnabled(bool enabled) async {
+    if (_builtinBusy || !_builtinControlAvailable) return;
+    setState(() => _builtinBusy = true);
+    try {
+      final accessToken = AuthService.client.auth.currentSession?.accessToken;
+      final response = await AuthService.client.functions.invoke(
+        'tv-builtins-control',
+        headers: {if (accessToken != null) 'Authorization': 'Bearer $accessToken'},
+        body: {'mode': 'set', 'enabled': enabled},
+      );
+      final data = response.data;
+      if (response.status < 200 || response.status >= 300 ||
+          data is! Map || data['ok'] != true || data['mode'] != 'set') {
+        throw StateError(data is Map ? (data['error']?.toString() ?? 'تعذر تحديث إعداد المصادر المدمجة') : 'تعذر الاتصال بخدمة المصادر المدمجة');
+      }
+      if (!mounted) return;
+      setState(() => _builtinImportEnabled = enabled);
+      if (enabled) {
+        await _syncNow();
+        await _loadSources();
+      } else {
+        await _loadSources();
+        if (mounted) _message('تم إيقاف الاستيراد وإخفاء قنوات المصادر المدمجة فوراً');
+      }
+    } catch (e) {
+      if (mounted) _message('تعذر تغيير حالة المصادر المدمجة: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _builtinBusy = false);
+    }
+  }
+
+  Widget _sourceCard(Map<String, dynamic> source, Color textColor, Color muted) {
+    final active = source['is_active'] == true;
+    final sourceType = source['source_type']?.toString() ?? 'm3u_url';
+    final detail = sourceType == 'xtream'
+        ? 'Xtream • ${source['xtream_server_url'] ?? ''}'
+        : sourceType == 'm3u_file'
+            ? 'ملف M3U مرفوع'
+            : source['playlist_url']?.toString() ?? '';
+    return Card(
+      color: AppTheme.panel,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          children: [
+            SwitchListTile(
+              value: active,
+              activeColor: AppTheme.primary,
+              onChanged: (value) => _setActive(source, value),
+              title: Text(source['name']?.toString() ?? 'مصدر', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+              subtitle: Text('${source['is_builtin'] == true ? 'مصدر أساسي' : sourceType == 'xtream' ? 'مصدر Xtream' : sourceType == 'm3u_file' ? 'ملف M3U' : 'مصدر M3U'} • $detail', textDirection: TextDirection.ltr, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+              child: Row(
+                children: [
+                  Expanded(child: Text(_lastStatus(source), style: TextStyle(color: source['last_error'] == null ? muted : Colors.orangeAccent, fontSize: 11))),
+                  IconButton(
+                    tooltip: 'حذف المصدر',
+                    onPressed: source['is_builtin'] == true ? null : () => _deleteSource(source),
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _lastStatus(Map<String, dynamic> source) {
     final error = source['last_error']?.toString();
     if (error != null && error.isNotEmpty) return 'آخر فحص: فشل — $error';
@@ -381,6 +476,8 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
   Widget build(BuildContext context) {
     final textColor = AppTheme.text;
     final muted = AppTheme.secondaryText;
+    final builtinSources = _sources.where((source) => source['is_builtin'] == true).toList();
+    final customSources = _sources.where((source) => source['is_builtin'] != true).toList();
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -517,56 +614,52 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
+                        Card(
+                          color: AppTheme.panel,
+                          child: SwitchListTile(
+                            value: _builtinImportEnabled,
+                            onChanged: !_builtinControlAvailable || _builtinBusy ? null : _setBuiltinImportEnabled,
+                            activeColor: AppTheme.primary,
+                            secondary: _builtinBusy
+                                ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                                : Icon(Icons.public, color: AppTheme.primary),
+                            title: Text('استيراد المصادر المدمجة', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                            subtitle: Text(
+                              _builtinControlAvailable
+                                  ? (_builtinImportEnabled ? 'مفعّل — القنوات المدمجة تُحدّث تلقائياً' : 'متوقف — تختفي قنواتها فوراً مع الحفاظ على المصادر المخصصة')
+                                  : 'التحكم يحتاج تحديث خدمة الخادم قبل تفعيله',
+                              style: TextStyle(color: muted, fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        Card(
+                          color: AppTheme.panel,
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: Icon(Icons.list_alt, color: AppTheme.primary),
+                                title: Text('المصادر المدمجة', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                                subtitle: Text('${builtinSources.length} مصدر', style: TextStyle(color: muted, fontSize: 12)),
+                                trailing: Icon(_showBuiltinSources ? Icons.expand_less : Icons.expand_more, color: AppTheme.primary),
+                                onTap: () => setState(() => _showBuiltinSources = !_showBuiltinSources),
+                              ),
+                              if (_showBuiltinSources)
+                                ...builtinSources.map((source) => _sourceCard(source, textColor, muted)),
+                            ],
+                          ),
+                        ),
                         Row(
                           children: [
-                            Expanded(child: Text('المصادر', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 16))),
-                            Text('${_sources.length}', style: TextStyle(color: muted)),
+                            Expanded(child: Text('المصادر المخصصة', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 16))),
+                            Text('${customSources.length}', style: TextStyle(color: muted)),
                           ],
                         ),
-                        if (_sources.isEmpty)
+                        if (customSources.isEmpty)
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 28),
-                            child: Center(child: Text('لا توجد مصادر', style: TextStyle(color: muted))),
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: Center(child: Text('لا توجد مصادر مخصصة', style: TextStyle(color: muted))),
                           ),
-                        ..._sources.map((source) {
-                          final active = source['is_active'] == true;
-                          final sourceType = source['source_type']?.toString() ?? 'm3u_url';
-                          final detail = sourceType == 'xtream'
-                              ? 'Xtream • ${source['xtream_server_url'] ?? ''}'
-                              : sourceType == 'm3u_file'
-                                  ? 'ملف M3U مرفوع'
-                                  : source['playlist_url']?.toString() ?? '';
-                          return Card(
-                            color: AppTheme.panel,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Column(
-                                children: [
-                                  SwitchListTile(
-                                    value: active,
-                                    activeColor: AppTheme.primary,
-                                    onChanged: (value) => _setActive(source, value),
-                                    title: Text(source['name']?.toString() ?? 'مصدر', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                                    subtitle: Text('${source['is_builtin'] == true ? 'مصدر أساسي' : sourceType == 'xtream' ? 'مصدر Xtream' : sourceType == 'm3u_file' ? 'ملف M3U' : 'مصدر M3U'} • $detail', textDirection: TextDirection.ltr, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11)),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
-                                    child: Row(
-                                      children: [
-                                        Expanded(child: Text(_lastStatus(source), style: TextStyle(color: source['last_error'] == null ? muted : Colors.orangeAccent, fontSize: 11))),
-                                        IconButton(
-                                          tooltip: 'حذف المصدر',
-                                          onPressed: source['is_builtin'] == true ? null : () => _deleteSource(source),
-                                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
+                        ...customSources.map((source) => _sourceCard(source, textColor, muted)),
                       ],
                     ),
                   ),
