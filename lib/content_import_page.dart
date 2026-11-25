@@ -25,8 +25,8 @@ class _ContentImportPageState extends State<ContentImportPage> {
   bool loadingPackages = true, scanning = false, importing = false, publish = true;
   bool monitorSeries = true;
   bool monitorMovies = true;
-  int monitorInterval = 60;
-  int movieMonitorInterval = 60;
+  int monitorInterval = 15;
+  int movieMonitorInterval = 15;
   int movieMonitorCreated = 0;
   int movieMonitorFailures = 0;
   int monitorsCreated = 0;
@@ -878,6 +878,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
                     dropdownColor: panel,
                     decoration: const InputDecoration(labelText: 'فترة فحص قسم الأفلام'),
                     items: const [
+                      DropdownMenuItem(value: 15, child: Text('كل 15 دقيقة')),
                       DropdownMenuItem(value: 30, child: Text('كل 30 دقيقة')),
                       DropdownMenuItem(value: 60, child: Text('كل ساعة')),
                       DropdownMenuItem(value: 180, child: Text('كل 3 ساعات')),
