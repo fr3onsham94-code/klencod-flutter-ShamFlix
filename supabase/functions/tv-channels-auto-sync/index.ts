@@ -1,43 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-type PlaylistSource = { id: string; name: string; url: string; customId?: string };
+type PlaylistSource = { id: string; name: string; url: string; dbId: string; sourceType: string; storagePath?: string };
 
-// iptv-org publishes dedicated country playlists. Read the Arab countries and Turkey
-// in addition to the global index so country grouping does not depend on index metadata.
-const IPTV_ORG_COUNTRY_CODES = [
-  "dz", "bh", "km", "eg", "iq", "jo", "kw", "lb", "ly", "mr",
-  "ma", "om", "ps", "qa", "sa", "so", "sd", "sy", "tn", "ae", "ye", "tr",
-];
-
-const BUILTIN_SOURCES: PlaylistSource[] = [
-  // Original core sources
-  { id: "iptv-org", name: "IPTV-ORG PRIMARY", url: "https://iptv-org.github.io/iptv/index.m3u" },
-  ...IPTV_ORG_COUNTRY_CODES.map((countryCode): PlaylistSource => ({
-    id: "iptv-org-country-" + countryCode,
-    name: "IPTV-ORG COUNTRY " + countryCode.toUpperCase(),
-    url: "https://iptv-org.github.io/iptv/countries/" + countryCode + ".m3u",
-  })),
-  { id: "free-tv", name: "FREE-TV", url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" },
-  { id: "nexus", name: "IPTV-NEXUS", url: "https://dearbulut.github.io/iptv/playlists/index.m3u" },
-  // Additional public playlists referenced by the Androidsis guide
-  { id: "tdtchannels", name: "TDTCHANNELS TV M3U8", url: "https://www.tdtchannels.com/lists/tv.m3u8" },
-  { id: "tdtchannels-m3u", name: "TDTCHANNELS TV M3U", url: "https://www.tdtchannels.com/lists/tv.m3u" },
-  { id: "m3ucl-total", name: "M3U.CL TOTAL", url: "https://www.m3u.cl/lista/total.m3u" },
-  { id: "m3ucl-music", name: "M3U.CL MUSIC", url: "https://www.m3u.cl/lista/musica.m3u" },
-  { id: "m3ucl-religious", name: "M3U.CL RELIGIOUS", url: "https://www.m3u.cl/lista/religiosos.m3u" },
-  { id: "m3ucl-ar", name: "M3U.CL ARGENTINA", url: "https://www.m3u.cl/lista/AR.m3u" },
-  { id: "m3ucl-bo", name: "M3U.CL BOLIVIA", url: "https://www.m3u.cl/lista/BO.m3u" },
-  { id: "m3ucl-br", name: "M3U.CL BRAZIL", url: "https://www.m3u.cl/lista/BR.m3u" },
-  { id: "m3ucl-cl", name: "M3U.CL CHILE", url: "https://www.m3u.cl/lista/CL.m3u" },
-  { id: "m3ucl-co", name: "M3U.CL COLOMBIA", url: "https://www.m3u.cl/lista/CO.m3u" },
-  { id: "m3ucl-ec", name: "M3U.CL ECUADOR", url: "https://www.m3u.cl/lista/EC.m3u" },
-  { id: "m3ucl-es", name: "M3U.CL SPAIN", url: "https://www.m3u.cl/lista/ES.m3u" },
-  { id: "m3ucl-mx", name: "M3U.CL MEXICO", url: "https://www.m3u.cl/lista/MX.m3u" },
-  { id: "m3ucl-py", name: "M3U.CL PARAGUAY", url: "https://www.m3u.cl/lista/PY.m3u" },
-  { id: "m3ucl-pe", name: "M3U.CL PERU", url: "https://www.m3u.cl/lista/PE.m3u" },
-  { id: "m3ucl-do", name: "M3U.CL DOMINICAN REPUBLIC", url: "https://www.m3u.cl/lista/DO.m3u" },
-  { id: "m3ucl-ve", name: "M3U.CL VENEZUELA", url: "https://www.m3u.cl/lista/VE.m3u" },
-];
+// Sources are managed in public.tv_channel_sources so every built-in and custom
+// playlist can be enabled or paused independently from the admin panel.
 const MAX_CUSTOM_SOURCES = 20;
 
 const MAX_PLAYLIST_BYTES = 24 * 1024 * 1024;
@@ -119,7 +85,7 @@ function safeStreamUrl(raw: string): string | null {
         /^f[cd][0-9a-f]{2}:/i.test(ipHost) || /^fe80:/i.test(ipHost) ||
         /^::ffff:(127|10|192\.168|169\.254)\./i.test(ipHost)) return null;
     if (/youtube\.com|youtu\.be|twitch\.tv|facebook\.com|instagram\.com/i.test(host)) return null;
-    if (!/\.m3u8?(?:$|\?)|\.mpd(?:$|\?)/i.test(u.pathname + u.search)) return null;
+    if (!/\.m3u8?(?:$|\?)|\.mpd(?:$|\?)|\.ts(?:$|\?)/i.test(u.pathname + u.search)) return null;
     u.hash = "";
     return u.toString();
   } catch { return null; }
@@ -263,10 +229,10 @@ function isPublicIpAddress(address: string): boolean {
   return true;
 }
 
-async function validatePublicPlaylistUrl(url: URL) {
+async function validatePublicPlaylistUrl(url: URL, allowNonStandardPort = false) {
   const host = url.hostname.toLowerCase();
   if (url.protocol !== "https:" || url.username || url.password ||
-      (url.port && url.port !== "443") || !host || host === "localhost" ||
+      (url.port && url.port !== "443" && !allowNonStandardPort) || !host || host === "localhost" ||
       host.endsWith(".localhost") || host.endsWith(".local") ||
       host.endsWith(".internal") || host.endsWith(".test") ||
       host.includes(":") || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) {
@@ -280,11 +246,22 @@ async function validatePublicPlaylistUrl(url: URL) {
   }
 }
 
-async function fetchPlaylist(source: PlaylistSource) {
+async function fetchPlaylist(source: PlaylistSource, db: any) {
+  if (source.sourceType === "m3u_file") {
+    if (!source.storagePath) throw new Error(source.id + " has no uploaded playlist file");
+    const { data, error } = await db.storage.from("tv-source-playlists").download(source.storagePath);
+    if (error || !data) throw new Error(source.id + " playlist file could not be read");
+    if (data.size > MAX_PLAYLIST_BYTES) throw new Error(source.id + " playlist exceeds size limit");
+    const body = await data.text();
+    if (!body.trimStart().startsWith("#EXTM3U")) throw new Error(source.id + " uploaded file is not a valid M3U playlist");
+    const entries = parseM3u(body, source.id, source.name);
+    if (!entries.length) throw new Error(source.id + " contained no supported direct HLS/DASH streams");
+    return entries;
+  }
   let current = new URL(source.url);
   let response: Response | null = null;
   for (let hop = 0; hop <= 3; hop++) {
-    await validatePublicPlaylistUrl(current);
+    await validatePublicPlaylistUrl(current, source.sourceType === "xtream");
     response = await fetch(current.toString(), {
       redirect: "manual",
       signal: AbortSignal.timeout(45000),
@@ -352,29 +329,51 @@ async function verifyAdminBearer(db: any, req: Request): Promise<boolean> {
 }
 
 async function syncChannels(db: any) {
-  const { data: customRows, error: customSourcesError } = await db.from("tv_channel_sources")
-    .select("id,name,playlist_url")
-    .eq("is_active", true)
-    .order("created_at", { ascending: true })
-    .limit(MAX_CUSTOM_SOURCES + 1);
-  if (customSourcesError) throw new Error("custom source lookup: " + JSON.stringify(customSourcesError));
-  if ((customRows || []).length > MAX_CUSTOM_SOURCES) {
+  const { data: allSourceRows, error: sourceLookupError } = await db.from("tv_channel_sources")
+    .select("id,name,playlist_url,source_key,is_builtin,is_active,source_type,xtream_server_url,xtream_username,xtream_password,playlist_storage_path")
+    .order("created_at", { ascending: true });
+  if (sourceLookupError) throw new Error("TV source lookup: " + JSON.stringify(sourceLookupError));
+  const customRows = (allSourceRows || []).filter((row: any) => row.is_builtin !== true);
+  if (customRows.length > MAX_CUSTOM_SOURCES) {
     throw new Error("Too many custom TV sources; maximum is " + MAX_CUSTOM_SOURCES);
   }
-  const sources: PlaylistSource[] = [
-    ...BUILTIN_SOURCES,
-    ...(customRows || []).map((row: any) => ({
-      id: "custom:" + row.id,
-      customId: String(row.id),
-      name: clean(row.name).slice(0, 80),
-      url: String(row.playlist_url),
-    })),
-  ];
+  const sources: PlaylistSource[] = (allSourceRows || [])
+    .filter((row: any) => row.is_active === true)
+    .map((row: any) => {
+      const sourceType = String(row.source_type || "m3u_url");
+      let sourceUrl = String(row.playlist_url || "");
+      if (sourceType === "xtream") {
+        try {
+          const base = new URL(String(row.xtream_server_url || ""));
+          if (base.protocol !== "https:" || base.username || base.password) {
+            throw new Error("invalid Xtream URL");
+          }
+          base.pathname = base.pathname.replace(/\/$/, "") + "/get.php";
+          base.search = "";
+          base.searchParams.set("username", String(row.xtream_username || ""));
+          base.searchParams.set("password", String(row.xtream_password || ""));
+          base.searchParams.set("type", "m3u_plus");
+          base.searchParams.set("output", "m3u8");
+          sourceUrl = base.toString();
+        } catch {
+          // Keep this source isolated; its failure is recorded without aborting other sources.
+          sourceUrl = "invalid://xtream-source";
+        }
+      }
+      return {
+        id: row.source_key ? String(row.source_key) : (sourceType === "xtream" ? "xtream:" : "custom:") + String(row.id),
+        dbId: String(row.id),
+        name: clean(row.name).slice(0, 80),
+        url: sourceUrl,
+        sourceType,
+        storagePath: row.playlist_storage_path ? String(row.playlist_storage_path) : undefined,
+      };
+    });
 
   // Each source is reconciled independently. A failed source must never affect its saved servers.
   const settledSources = await Promise.all(sources.map(async source => {
     try {
-      return { status: "fulfilled" as const, source, entries: await fetchPlaylist(source) };
+      return { status: "fulfilled" as const, source, entries: await fetchPlaylist(source, db) };
     } catch (reason) {
       return { status: "rejected" as const, source, reason };
     }
@@ -386,12 +385,12 @@ async function syncChannels(db: any) {
 
   const checkedAt = new Date().toISOString();
   for (const result of settledSources) {
-    if (!result.source.customId) continue;
+    if (!result.source.dbId) continue;
     const status = result.status === "fulfilled"
       ? { last_checked_at: checkedAt, last_error: null, last_entry_count: result.entries.filter(isArabicOrTurkishChannel).length }
       : { last_checked_at: checkedAt, last_error: String(result.reason instanceof Error ? result.reason.message : result.reason).slice(0, 1000) };
-    const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.customId);
-    if (error) throw new Error("custom source status update: " + JSON.stringify(error));
+    const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.dbId);
+    if (error) throw new Error("TV source status update: " + JSON.stringify(error));
   }
   if (!sourceResults.length) throw new Error("All playlist sources failed; existing catalogue was left untouched");
   const grouped = new Map<string, typeof sourceResults[number]["entries"]>();
@@ -459,7 +458,7 @@ async function syncChannels(db: any) {
       streamRows.push({
         channel_id: null,
         channel_key: key,
-        server_name: stream.sourceName + " • " + qualityLabel(stream.name, stream.url) + " • " + (stream.url.includes(".m3u8") ? "HLS" : "DASH"),
+        server_name: stream.sourceName + " • " + qualityLabel(stream.name, stream.url) + " • " + (stream.url.includes(".m3u8") ? "HLS" : stream.url.includes(".ts") ? "MPEG-TS" : "DASH"),
         stream_url: stream.url,
         source_key: stream.sourceId + ":" + await hash(key + "|" + stream.url),
         source_id: stream.sourceId,
@@ -571,14 +570,9 @@ async function syncChannels(db: any) {
       if (packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
     }
   }
-  if (sourceErrors.length === 0) {
-    const automaticPackageIds = (packages || []).map((x:any) => x.id);
-    for (let i=0; i<automaticPackageIds.length; i+=100) {
-      const { error: clearAutomaticMemberships } = await db.from("content_package_items")
-        .delete().eq("content_type","channel").in("package_id",automaticPackageIds.slice(i,i+100));
-      if (clearAutomaticMemberships) throw new Error("automatic package rebuild cleanup: " + JSON.stringify(clearAutomaticMemberships));
-    }
-  }
+  // Add/update automatic package memberships, but do not remove existing ones.
+  // Pausing a source stops future imports from it without hiding or deleting channels
+  // and links that were already imported from that source.
   for (let i=0; i<itemRows.length; i+=500) {
     const { error } = await db.from("content_package_items")
       .upsert(itemRows.slice(i,i+500), { onConflict:"package_id,content_type,content_id", ignoreDuplicates:true });
@@ -597,7 +591,7 @@ async function syncChannels(db: any) {
     retentionScope: "two latest URLs per channel, source, and quality",
     languageFilter: ["Arabic", "Turkish"],
     filteredEntries: sourceResults.reduce((n,x)=>n+x.entries.length,0),
-    customSources: customRows?.length || 0,
+    customSources: customRows.length,
   };
 }
 
