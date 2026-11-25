@@ -411,14 +411,18 @@ class _ContentImportPageState extends State<ContentImportPage> {
         String episodeId;
         final episodeData = <String, dynamic>{
           'title': 'الحلقة $number',
-          'stream_url': firstUrl,
           'is_published': publish,
+          'source_page_url': emptyNull(episode['source_page_url']),
+          'source_monitor_enabled': monitorSeries,
+          'source_monitor_interval_minutes': monitorInterval,
         };
+        if (firstUrl.isNotEmpty) episodeData['stream_url'] = firstUrl;
         if (existing == null) {
           final saved = await AuthService.client.from('episodes').insert({
             'season_id': seasonId,
             'episode_number': number,
             ...episodeData,
+            'stream_url': firstUrl,
             'description': null,
           }).select('id').single();
           episodeId = saved['id'].toString();
@@ -444,6 +448,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
           if (!knownUrls.add(serverUrl)) continue;
           newRows.add({
             'episode_id': episodeId,
+            'source_page_url': emptyNull(episode['source_page_url']),
             'server_name':
                 (server['name']?.toString().trim().isNotEmpty == true)
                     ? server['name'].toString().trim()
@@ -521,6 +526,13 @@ class _ContentImportPageState extends State<ContentImportPage> {
             final targetSeasonNumber = choice['season_number'] as int;
             try {
               await _ensureSeriesInPackage(targetSeriesId);
+              await AuthService.client.from('series').update({
+                'source_monitor_enabled': monitorSeries,
+                'source_monitor_interval_minutes': monitorInterval,
+              }).eq('id', targetSeriesId);
+              await AuthService.client.from('series').update({
+                'source_page_url': emptyNull(item['page_url']),
+              }).eq('id', targetSeriesId).isFilter('source_page_url', null);
               if (_isAkwamPage(item['page_url'])) {
                 akwamSeriesCount++;
                 final stats = await _saveAkwamSeriesEpisodes(
@@ -533,7 +545,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
                 episodesWithoutServers += stats['without_servers'] ?? 0;
               }
               final sourceUri = Uri.tryParse(item['page_url']?.toString() ?? '');
-              if (sourceUri != null &&
+              if (monitorSeries && sourceUri != null &&
                   (sourceUri.scheme == 'https' || sourceUri.scheme == 'http') &&
                   sourceUri.host.isNotEmpty) {
                 await AuthService.client.from('series_source_monitors').upsert({
@@ -569,7 +581,12 @@ class _ContentImportPageState extends State<ContentImportPage> {
             'cast': emptyNull(item['cast']),
             'is_published': publish,
           };
-          if (type == 'movie') data['source_page_url'] = emptyNull(item['page_url']);
+          data['source_page_url'] = emptyNull(item['page_url']);
+          data['source_monitor_enabled'] = type == 'movie'
+              ? (monitorMovies && !_isAkwamPage(item['page_url']))
+              : monitorSeries;
+          data['source_monitor_interval_minutes'] =
+              type == 'movie' ? movieMonitorInterval : monitorInterval;
           final saved = await AuthService.client.from(table).insert(data).select('id').single();
           final id = saved['id'].toString();
           await _ensureContentInPackages(type, id);
@@ -621,6 +638,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
               final source = sources[i];
               serverRows.add({
                 'movie_id': id,
+                'source_page_url': emptyNull(item['page_url']),
                 'server_name': (source['name']?.toString().trim().isNotEmpty == true)
                     ? source['name'].toString().trim() : 'السيرفر ' + (i + 1).toString(),
                 'stream_url': source['url'].toString(), 'sort_order': i, 'is_active': true,

@@ -230,6 +230,7 @@ class ContentPageImportService {
       return {
         'episode_number': resolvedEpisodeNumber,
         'title': resolvedEpisodeTitle,
+        'source_page_url': episodeUri.toString(),
         'watch_url': watchUrl,
         'servers': servers,
       };

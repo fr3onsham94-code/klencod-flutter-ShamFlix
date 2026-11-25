@@ -144,6 +144,7 @@ async function inspectEpisode(link: {url:string;title:string;number:number}, hos
     number: link.number,
     seasonNumber: parseSeason(title + " " + link.url, fallbackSeason),
     title,
+    sourcePageUrl: link.url,
     streamUrl: unique[0]?.url ?? null,
     sources: unique,
   };
@@ -178,10 +179,10 @@ function seriesMetadata(html:string,page:URL,fallbackTitle:string,fallbackPoster
   try{const parsed=JSON.parse(m[1].trim());const visit=(v:unknown)=>{if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==="object"){const o=v as Record<string,unknown>;if(!Object.keys(structured).length&&o.name)structured=o;if(o["@graph"])visit(o["@graph"]);}};visit(parsed);}catch{}
  }
  const titleTag=/<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]||"";
- const title=clean(structured.name||structured.headline||meta["og:title"]||meta["twitter:title"]||titleTag||fallbackTitle);
+ const title=clean(String(structured.name||structured.headline||meta["og:title"]||meta["twitter:title"]||titleTag||fallbackTitle));
  const iv=structured.image,ir=typeof iv==="string"?iv:Array.isArray(iv)?String(iv[0]||""):iv&&typeof iv==="object"?String((iv as Record<string,unknown>).url||""):"";
  const pr=ir||meta["og:image"]||meta["twitter:image"]||fallbackPoster;
- const description=clean(structured.description||meta["og:description"]||meta.description||"");
+ const description=clean(String(structured.description||meta["og:description"]||meta.description||""));
  const date=String(structured.datePublished||structured.dateCreated||meta["article:published_time"]||"");
  const year=Number(/\b(19|20)\d{2}\b/.exec(date)?.[0]||/\b(19|20)\d{2}\b/.exec(title)?.[0]||0)||null;
  const genre=structured.genre||meta.genre||fallbackCategory;
@@ -196,6 +197,37 @@ function findSeriesNext(html:string,base:URL):string|null{
  }return null;
 }
 
+async function replaceEpisodePageServers(db: any, episodeId: string, pageUrl: string, sources: {url:string;name:string}[]) {
+  if (!sources.length) return null;
+  const {data:oldServers,error:readError} = await db.from("playback_servers")
+    .select("id,stream_url").eq("episode_id",episodeId).eq("source_page_url",pageUrl);
+  if (readError) throw readError;
+  const nextUrls = new Set(sources.map(source => source.url));
+  const oldUrls = new Set((oldServers || []).map((server:any) => server.stream_url));
+  for (const server of oldServers || []) {
+    const matchIndex = sources.findIndex(source => source.url === server.stream_url);
+    const match = matchIndex >= 0 ? sources[matchIndex] : null;
+    const updates:any = {is_active:match !== null};
+    if (match) {
+      updates.sort_order = matchIndex;
+      updates.server_name = match.name || ("السيرفر " + (matchIndex + 1));
+    }
+    const {error:updateError} = await db.from("playback_servers")
+      .update(updates).eq("id",server.id);
+    if (updateError) throw updateError;
+  }
+  const rows = sources.filter(source => !oldUrls.has(source.url)).map((source,index) => ({
+    episode_id:episodeId, source_page_url:pageUrl,
+    server_name:source.name || ("السيرفر " + (index + 1)),
+    stream_url:source.url, sort_order:index, is_active:true,
+  }));
+  if (rows.length) {
+    const {error:insertError} = await db.from("playback_servers").insert(rows);
+    if (insertError) throw insertError;
+  }
+  return sources[0].url;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok",{headers:corsHeaders});
   if (req.method !== "POST") return json({error:"Method not allowed"},405);
@@ -208,8 +240,9 @@ Deno.serve(async (req: Request) => {
   const {data:tokenValid,error:tokenError} = await db.rpc("verify_series_monitor_cron_secret",{candidate_secret:cronToken});
   if (tokenError || tokenValid !== true) return json({error:"Unauthorized"},401);
   const {data:monitors,error:listError} = await db.from("series_source_monitors")
-    .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at")
-    .eq("is_active",true).order("created_at",{ascending:true}).limit(100);
+    .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at,series!inner(source_monitor_enabled)")
+    .eq("is_active",true).eq("series.source_monitor_enabled",true)
+    .order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100);
   if (listError) return json({error:listError.message},500);
   const now = Date.now();
   const summary = {checked:0,added:0,skipped:0,failed:0,results:[] as unknown[]};
@@ -235,6 +268,15 @@ Deno.serve(async (req: Request) => {
       const links=[...allLinks.values()].sort((a,b)=>a.number-b.number);
       if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة خلال أول 100 صفحة");
       const defaultSeason = parseSeason(listingTitle+" "+listingHtml,Number(monitor.season_number)||1);
+      const seriesMeta = seriesMetadata(listingHtml,source,listingTitle,"","");
+      const seriesUpdates: Record<string,unknown> = {source_page_checked_at:new Date().toISOString(),source_page_last_error:null};
+      if (seriesMeta.title) seriesUpdates.title = seriesMeta.title;
+      if (seriesMeta.poster_url) seriesUpdates.poster_url = seriesMeta.poster_url;
+      if (seriesMeta.description) seriesUpdates.description = seriesMeta.description;
+      if (seriesMeta.category) seriesUpdates.category = seriesMeta.category;
+      if (seriesMeta.release_year) seriesUpdates.release_year = seriesMeta.release_year;
+      const {error:seriesUpdateError} = await db.from("series").update(seriesUpdates).eq("id",monitor.series_id);
+      if (seriesUpdateError) throw seriesUpdateError;
       for (const link of links) {
         try {
           const episode = await inspectEpisode(link,source.hostname,defaultSeason);
@@ -254,26 +296,29 @@ Deno.serve(async (req: Request) => {
             .eq("season_id",seasonId).eq("episode_number",episode.number).maybeSingle();
           if (duplicateError) throw duplicateError;
           if (oldEpisode) {
-            const {data:oldServers,error:oldServerError}=await db.from("playback_servers").select("stream_url").eq("episode_id",oldEpisode.id);
-            if(oldServerError)throw oldServerError;
-            const oldUrls=new Set((oldServers||[]).map((x:any)=>x.stream_url));
-            const fresh=episode.sources.filter(x=>!oldUrls.has(x.url));
-            if(fresh.length){
-              const rows=fresh.map((server,index)=>({episode_id:oldEpisode.id,server_name:server.name||("السيرفر "+(index+1)),stream_url:server.url,sort_order:(oldServers||[]).length+index,is_active:true}));
-              const {error:saveNew}=await db.from("playback_servers").insert(rows);if(saveNew)throw saveNew;
-            }
-            const {error:updateEpisode}=await db.from("episodes").update({stream_url:episode.streamUrl}).eq("id",oldEpisode.id);
+            const primaryUrl = await replaceEpisodePageServers(db,oldEpisode.id,episode.sourcePageUrl,episode.sources);
+            const {error:updateEpisode}=await db.from("episodes").update({
+              stream_url:primaryUrl || episode.streamUrl,
+              source_page_url:episode.sourcePageUrl,
+              source_monitor_enabled:true,
+              source_monitor_interval_minutes:monitor.check_interval_minutes,
+              source_page_checked_at:new Date().toISOString(),
+              source_page_last_error:null,
+            }).eq("id",oldEpisode.id);
             if(updateEpisode)throw updateEpisode;
             summary.skipped++; continue;
           }
           const {data:saved,error:saveError} = await db.from("episodes").insert({
             season_id:seasonId,episode_number:episode.number,title:episode.title||("الحلقة "+episode.number),
-            stream_url:episode.streamUrl,is_published:true,
+            stream_url:episode.streamUrl,is_published:true,source_page_url:episode.sourcePageUrl,
+            source_monitor_enabled:true,source_monitor_interval_minutes:monitor.check_interval_minutes,
+            source_page_checked_at:new Date().toISOString(),
           }).select("id").single();
           if (saveError) throw saveError;
           if (episode.sources.length) {
             const rows = episode.sources.map((server,index)=>({
-              episode_id:saved.id,server_name:server.name||("السيرفر "+(index+1)),
+              episode_id:saved.id,source_page_url:episode.sourcePageUrl,
+              server_name:server.name||("السيرفر "+(index+1)),
               stream_url:server.url,sort_order:index,is_active:true,
             }));
             const {error:serverError} = await db.from("playback_servers").insert(rows);
@@ -292,13 +337,16 @@ Deno.serve(async (req: Request) => {
     await db.from("series_source_monitors").update({
       last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString(),
     }).eq("id",monitor.id);
+    await db.from("series").update({
+      source_page_checked_at:new Date().toISOString(),source_page_last_error:errorMessage,
+    }).eq("id",monitor.series_id);
     summary.checked++;
     summary.results.push({monitor_id:monitor.id,added,error:errorMessage});
   }
 
   const {data:sectionMonitors,error:sectionListError}=await db.from("series_section_monitors")
     .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at")
-    .eq("is_active",true).order("created_at",{ascending:true}).limit(100);
+    .eq("is_active",true).order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100);
   if(sectionListError)return json({error:sectionListError.message},500);
   for(const monitor of sectionMonitors||[]){
     const last=monitor.last_checked_at?new Date(monitor.last_checked_at).getTime():0;
@@ -331,10 +379,32 @@ Deno.serve(async (req: Request) => {
             const {data:old,error:dupError}=await q.limit(1).maybeSingle();if(dupError)throw dupError;
             if(old?.id){seriesId=old.id;const {error:u}=await db.from("series").update({source_page_url:card.url}).eq("id",seriesId).is("source_page_url",null);if(u)throw u;}
             else{
-              const {data:saved,error:ins}=await db.from("series").insert({title:meta.title,poster_url:meta.poster_url,description:meta.description,category:meta.category,release_year:meta.release_year,is_published:true,source_page_url:card.url}).select("id").single();
+              const {data:saved,error:ins}=await db.from("series").insert({
+                title:meta.title,poster_url:meta.poster_url,description:meta.description,category:meta.category,
+                release_year:meta.release_year,is_published:true,source_page_url:card.url,
+                source_monitor_enabled:true,source_monitor_interval_minutes:monitor.check_interval_minutes,
+              }).select("id").single();
               if(ins)throw ins;seriesId=saved.id;
             }
           }
+          const metadataUpdates:Record<string,unknown>={
+            source_monitor_enabled:true,source_monitor_interval_minutes:monitor.check_interval_minutes,
+            source_page_checked_at:new Date().toISOString(),source_page_last_error:null,
+          };
+          if(meta.title)metadataUpdates.title=meta.title;
+          if(meta.poster_url)metadataUpdates.poster_url=meta.poster_url;
+          if(meta.description)metadataUpdates.description=meta.description;
+          if(meta.category)metadataUpdates.category=meta.category;
+          if(meta.release_year)metadataUpdates.release_year=meta.release_year;
+          const {error:metadataUpdateError}=await db.from("series").update(metadataUpdates).eq("id",seriesId);
+          if(metadataUpdateError)throw metadataUpdateError;
+          await db.from("series").update({source_page_url:card.url})
+            .eq("id",seriesId).is("source_page_url",null);
+          const {error:sourceMonitorError}=await db.from("series_source_monitors").upsert({
+            series_id:seriesId,source_url:card.url,source_host:source.hostname,
+            season_number:1,check_interval_minutes:monitor.check_interval_minutes,is_active:true,
+          },{onConflict:"series_id,source_url"});
+          if(sourceMonitorError)throw sourceMonitorError;
           const {error:pkg}=await db.from("content_package_items").upsert({package_id:monitor.package_id,content_type:"series",content_id:seriesId},{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
           if(pkg)throw pkg;
           const links=extractEpisodeLinks(page.html,page.url);
@@ -347,16 +417,24 @@ Deno.serve(async (req: Request) => {
               if(!seasonId){const {data:s,error:si}=await db.from("seasons").insert({series_id:seriesId,season_number:episode.seasonNumber,name:"الموسم "+episode.seasonNumber}).select("id").single();if(si)throw si;seasonId=s.id;}
               const {data:oldEpisode,error:de}=await db.from("episodes").select("id").eq("season_id",seasonId).eq("episode_number",episode.number).maybeSingle();if(de)throw de;
               if(oldEpisode){
-                const {data:oldServers,error:oldServerError}=await db.from("playback_servers").select("stream_url").eq("episode_id",oldEpisode.id);
-                if(oldServerError)throw oldServerError;
-                const oldUrls=new Set((oldServers||[]).map((x:any)=>x.stream_url));
-                const fresh=episode.sources.filter(x=>!oldUrls.has(x.url));
-                if(fresh.length){const rows=fresh.map((server,index)=>({episode_id:oldEpisode.id,server_name:server.name||("السيرفر "+(index+1)),stream_url:server.url,sort_order:(oldServers||[]).length+index,is_active:true}));const {error:saveNew}=await db.from("playback_servers").insert(rows);if(saveNew)throw saveNew;}
-                const {error:updateEpisode}=await db.from("episodes").update({stream_url:episode.streamUrl}).eq("id",oldEpisode.id);if(updateEpisode)throw updateEpisode;
+                const primaryUrl=await replaceEpisodePageServers(db,oldEpisode.id,episode.sourcePageUrl,episode.sources);
+                const {error:updateEpisode}=await db.from("episodes").update({
+                  stream_url:primaryUrl||episode.streamUrl,source_page_url:episode.sourcePageUrl,
+                  source_monitor_enabled:true,source_monitor_interval_minutes:monitor.check_interval_minutes,
+                  source_page_checked_at:new Date().toISOString(),source_page_last_error:null,
+                }).eq("id",oldEpisode.id);if(updateEpisode)throw updateEpisode;
                 summary.skipped++;continue;
               }
-              const {data:savedEpisode,error:ei}=await db.from("episodes").insert({season_id:seasonId,episode_number:episode.number,title:episode.title||("الحلقة "+episode.number),stream_url:episode.streamUrl,is_published:true}).select("id").single();if(ei)throw ei;
-              if(episode.sources.length){const rows=episode.sources.map((server,index)=>({episode_id:savedEpisode.id,server_name:server.name||("السيرفر "+(index+1)),stream_url:server.url,sort_order:index,is_active:true}));const {error:se}=await db.from("playback_servers").insert(rows);if(se)throw se;}
+              const {data:savedEpisode,error:ei}=await db.from("episodes").insert({
+                season_id:seasonId,episode_number:episode.number,title:episode.title||("الحلقة "+episode.number),
+                stream_url:episode.streamUrl,is_published:true,source_page_url:episode.sourcePageUrl,
+                source_monitor_enabled:true,source_monitor_interval_minutes:monitor.check_interval_minutes,
+                source_page_checked_at:new Date().toISOString(),
+              }).select("id").single();if(ei)throw ei;
+              if(episode.sources.length){const rows=episode.sources.map((server,index)=>({
+                episode_id:savedEpisode.id,source_page_url:episode.sourcePageUrl,
+                server_name:server.name||("السيرفر "+(index+1)),stream_url:server.url,sort_order:index,is_active:true
+              }));const {error:se}=await db.from("playback_servers").insert(rows);if(se)throw se;}
               added++;summary.added++;
             }catch(e){summary.failed++;errorMessage=e instanceof Error?e.message:"تعذر استيراد حلقة";}
           }
@@ -366,6 +444,47 @@ Deno.serve(async (req: Request) => {
     }catch(e){errorMessage=e instanceof Error?e.message:"تعذر فحص قسم المسلسلات";summary.failed++;}
     await db.from("series_section_monitors").update({last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString()}).eq("id",monitor.id);
     summary.checked++;summary.results.push({monitor_id:monitor.id,added,error:errorMessage,mode:"section"});
+  }
+
+  // Independently recheck saved episode pages, even if a provider removes
+  // an episode from the current series listing.
+  const {data:episodePages,error:episodePagesError}=await db.from("episodes")
+    .select("id,episode_number,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes,seasons!inner(season_number,series_id,series!inner(source_monitor_enabled))")
+    .eq("source_monitor_enabled",true).eq("seasons.series.source_monitor_enabled",true)
+    .not("source_page_url","is",null)
+    .order("source_page_checked_at",{ascending:true,nullsFirst:true}).limit(200);
+  if(episodePagesError)return json({error:episodePagesError.message},500);
+  const dueEpisodes=(episodePages||[]).filter((row:any)=>{
+    const last=row.source_page_checked_at?new Date(row.source_page_checked_at).getTime():0;
+    const interval=Math.max(15,Number(row.source_monitor_interval_minutes)||60)*60000;
+    return !last||now-last>=interval;
+  }).slice(0,20);
+  for(let start=0;start<dueEpisodes.length;start+=10){
+    await Promise.all(dueEpisodes.slice(start,start+10).map(async (row:any)=>{
+    let pageError:string|null=null;
+    try{
+      const source=validateUrl(row.source_page_url);
+      const season=Array.isArray(row.seasons)?row.seasons[0]:row.seasons;
+      const link={url:source.toString(),title:row.title||("الحلقة "+row.episode_number),number:Number(row.episode_number)};
+      const episode=await inspectEpisode(link,source.hostname,Number(season?.season_number)||1);
+      let primaryUrl:string|null=null;
+      if(episode.sources.length)primaryUrl=await replaceEpisodePageServers(db,row.id,source.toString(),episode.sources);
+      const updates:Record<string,unknown>={
+        source_page_checked_at:new Date().toISOString(),source_page_last_error:null,
+      };
+      if(primaryUrl)updates.stream_url=primaryUrl;
+      const {error:updateError}=await db.from("episodes").update(updates).eq("id",row.id);
+      if(updateError)throw updateError;
+      summary.checked++;
+    }catch(error){
+      pageError=error instanceof Error?error.message:"تعذر تحديث صفحة الحلقة";
+      await db.from("episodes").update({
+        source_page_checked_at:new Date().toISOString(),source_page_last_error:pageError,
+      }).eq("id",row.id);
+      summary.failed++;
+    }
+    summary.results.push({episode_id:row.id,mode:"individual_episode_page",error:pageError});
+    }));
   }
 
   return json({success:true,...summary});
