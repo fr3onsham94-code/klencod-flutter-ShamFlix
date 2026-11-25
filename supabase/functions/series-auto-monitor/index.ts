@@ -233,8 +233,9 @@ Deno.serve(async (req: Request) => {
   const {data:tokenValid,error:tokenError} = await db.rpc("verify_series_monitor_cron_secret",{candidate_secret:cronToken});
   if (tokenError || tokenValid !== true) return json({error:"Unauthorized"},401);
   const {data:monitors,error:listError} = await db.from("series_source_monitors")
-    .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at")
-    .eq("is_active",true).order("created_at",{ascending:true}).limit(100);
+    .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at,series!inner(source_monitor_enabled)")
+    .eq("is_active",true).eq("series.source_monitor_enabled",true)
+    .order("created_at",{ascending:true}).limit(100);
   if (listError) return json({error:listError.message},500);
   const now = Date.now();
   const summary = {checked:0,added:0,skipped:0,failed:0,results:[] as unknown[]};
@@ -376,6 +377,17 @@ Deno.serve(async (req: Request) => {
               if(ins)throw ins;seriesId=saved.id;
             }
           }
+          const {error:sourceMonitorError}=await db.from("series_source_monitors").upsert({
+            series_id:seriesId,source_url:card.url,source_host:source.hostname,
+            season_number:1,check_interval_minutes:monitor.check_interval_minutes,is_active:true,
+          },{onConflict:"series_id,source_url"});
+          if(sourceMonitorError)throw sourceMonitorError;
+          const {error:seriesPageUpdateError}=await db.from("series").update({
+            source_page_url:card.url,source_monitor_enabled:true,
+            source_monitor_interval_minutes:monitor.check_interval_minutes,
+            source_page_checked_at:new Date().toISOString(),source_page_last_error:null,
+          }).eq("id",seriesId);
+          if(seriesPageUpdateError)throw seriesPageUpdateError;
           const {error:pkg}=await db.from("content_package_items").upsert({package_id:monitor.package_id,content_type:"series",content_id:seriesId},{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
           if(pkg)throw pkg;
           const links=extractEpisodeLinks(page.html,page.url);
