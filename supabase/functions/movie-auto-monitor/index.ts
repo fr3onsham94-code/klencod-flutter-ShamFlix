@@ -82,7 +82,8 @@ function extractCards(html: string, base: URL) {
     const posterRaw = image["data-src"] || image["data-lazy-src"] || image.src || image["data-original"] || "";
     let poster = "";
     try { if (posterRaw) poster = new URL(posterRaw,base).toString(); } catch {}
-    const title = clean(a.title || (imageTag ? match[0].replace(imageTag,"") : match[0]));
+    const title = clean(a.title || a["aria-label"] || image.alt || image["data-title"] ||
+      image.title || (imageTag ? match[0].replace(imageTag,"") : match[0]));
     const looksLikeContent = /\/(movie|movies|film|films|series|tv|show|shows|anime|watch|content)\//i.test(path);
     const descriptive = path.split("/").filter(Boolean).length >= 2 && !/\/(page|category|tag|genre|author|login|register)\//i.test(path);
     if (title.length < 2 || (!looksLikeContent && !poster && !descriptive)) continue;
