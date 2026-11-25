@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-type PlaylistSource = { id: string; name: string; url: string; dbId: string; sourceType: string; storagePath?: string };
+type PlaylistSource = { id: string; name: string; url: string; dbId: string; sourceType: string; isBuiltin: boolean; storagePath?: string };
 
 // Sources are managed in public.tv_channel_sources so every built-in and custom
 // playlist can be enabled or paused independently from the admin panel.
@@ -366,12 +366,25 @@ async function syncChannels(db: any) {
         name: clean(row.name).slice(0, 80),
         url: sourceUrl,
         sourceType,
+        isBuiltin: row.is_builtin === true,
         storagePath: row.playlist_storage_path ? String(row.playlist_storage_path) : undefined,
       };
     });
 
-  // Each source is reconciled independently. A failed source must never affect its saved servers.
-  const settledSources = await Promise.all(sources.map(async source => {
+  // Pausing a source immediately disables its previously imported stream rows.
+  // A channel remains visible if another active source still provides a stream for it.
+  const pausedSourceIds = (allSourceRows || [])
+    .filter((row: any) => row.is_active !== true)
+    .map((row: any) => row.source_key ? String(row.source_key) :
+      (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id));
+  if (pausedSourceIds.length) {
+    const { error } = await db.from("playback_servers")
+      .update({ is_active: false })
+      .in("source_id", pausedSourceIds);
+    if (error) throw new Error("paused source stream update: " + JSON.stringify(error));
+  }
+
+  // Each source is reconciled independently. A failed source must never affect its saved servers.\n  const settledSources = await Promise.all(sources.map(async source => {
     try {
       return { status: "fulfilled" as const, source, entries: await fetchPlaylist(source, db) };
     } catch (reason) {
@@ -380,14 +393,19 @@ async function syncChannels(db: any) {
   }));
   const sourceResults = settledSources
     .filter((x): x is {status:"fulfilled";source:PlaylistSource;entries:ReturnType<typeof parseM3u>} => x.status === "fulfilled")
-    .map(x => ({ source: x.source, entries: x.entries.filter(isArabicOrTurkishChannel) }));
+    .map(x => ({
+      source: x.source,
+      // Built-in public catalogues keep their Arabic/Turkish focus.
+      // User-added Xtream and M3U sources are imported in every language.
+      entries: x.source.isBuiltin ? x.entries.filter(isArabicOrTurkishChannel) : x.entries,
+    }));
   const sourceErrors = settledSources.filter((x): x is {status:"rejected";source:PlaylistSource;reason:unknown} => x.status === "rejected");
 
   const checkedAt = new Date().toISOString();
   for (const result of settledSources) {
     if (!result.source.dbId) continue;
     const status = result.status === "fulfilled"
-      ? { last_checked_at: checkedAt, last_error: null, last_entry_count: result.entries.filter(isArabicOrTurkishChannel).length }
+      ? { last_checked_at: checkedAt, last_error: null, last_entry_count: result.source.isBuiltin ? result.entries.filter(isArabicOrTurkishChannel).length : result.entries.length }
       : { last_checked_at: checkedAt, last_error: String(result.reason instanceof Error ? result.reason.message : result.reason).slice(0, 1000) };
     const { error } = await db.from("tv_channel_sources").update({ ...status, updated_at: checkedAt }).eq("id", result.source.dbId);
     if (error) throw new Error("TV source status update: " + JSON.stringify(error));
@@ -570,13 +588,50 @@ async function syncChannels(db: any) {
       if (packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
     }
   }
-  // Add/update automatic package memberships, but do not remove existing ones.
-  // Pausing a source stops future imports from it without hiding or deleting channels
-  // and links that were already imported from that source.
+  // Add/update automatic package memberships for channels supplied by active sources.
   for (let i=0; i<itemRows.length; i+=500) {
     const { error } = await db.from("content_package_items")
       .upsert(itemRows.slice(i,i+500), { onConflict:"package_id,content_type,content_id", ignoreDuplicates:true });
     if (error) throw error;
+  }
+
+  // Hide channels that no longer have any active source stream from automatic channel
+  // packages. If another active source still provides the same channel, it stays visible.
+  const activeSourceChannelIds = new Set<string>();
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db.from("playback_servers")
+      .select("channel_id")
+      .not("source_id","is",null)
+      .eq("is_active",true)
+      .order("channel_id")
+      .range(offset, offset + 999);
+    if (error) throw new Error("active source channel lookup: " + JSON.stringify(error));
+    for (const row of data || []) if (row.channel_id) activeSourceChannelIds.add(String(row.channel_id));
+    if (!data || data.length < 1000) break;
+  }
+
+  const autoPackageIds = [...packageIds.values()].map(String);
+  if (autoPackageIds.length) {
+    const staleMembershipIds: string[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await db.from("content_package_items")
+        .select("id,content_id")
+        .in("package_id", autoPackageIds)
+        .eq("content_type","channel")
+        .order("id")
+        .range(offset, offset + 999);
+      if (error) throw new Error("automatic package membership lookup: " + JSON.stringify(error));
+      for (const item of data || []) {
+        if (!activeSourceChannelIds.has(String(item.content_id))) staleMembershipIds.push(String(item.id));
+      }
+      if (!data || data.length < 1000) break;
+    }
+    for (let i=0; i<staleMembershipIds.length; i+=500) {
+      const { error } = await db.from("content_package_items")
+        .delete()
+        .in("id", staleMembershipIds.slice(i,i+500));
+      if (error) throw new Error("automatic package membership cleanup: " + JSON.stringify(error));
+    }
   }
 
   return {
@@ -589,7 +644,7 @@ async function syncChannels(db: any) {
     ],
     retainedServerLimit: 2,
     retentionScope: "two latest URLs per channel, source, and quality",
-    languageFilter: ["Arabic", "Turkish"],
+    languageFilter: { builtIn: ["Arabic", "Turkish"], custom: "all" },
     filteredEntries: sourceResults.reduce((n,x)=>n+x.entries.length,0),
     customSources: customRows.length,
   };
