@@ -227,6 +227,31 @@ class ShamFlixBackgroundImportService {
               (year == null || oldYear == null || year == oldYear);
         });
         if (duplicate) {
+          if (type == 'series') {
+            final existingSeries = known.firstWhere((row) =>
+              _normalize(row['title']?.toString() ?? '') == norm &&
+              (year == null ||
+               int.tryParse(row['release_year']?.toString() ?? '') == null ||
+               int.tryParse(row['release_year']?.toString() ?? '') == year));
+            final sourceUri = Uri.tryParse(item['page_url']?.toString() ?? '');
+            if (job['monitor_series'] == true && sourceUri != null &&
+                (sourceUri.scheme == 'http' || sourceUri.scheme == 'https') &&
+                sourceUri.host.isNotEmpty && sourceUri.userInfo.isEmpty) {
+              await AuthService.client.from('series').update({
+                'source_page_url': sourceUri.toString(),
+                'source_monitor_enabled': true,
+                'source_monitor_interval_minutes': job['series_monitor_interval'] ?? 60,
+              }).eq('id', existingSeries['id'].toString());
+              await AuthService.client.from('series_source_monitors').upsert({
+                'series_id': existingSeries['id'].toString(),
+                'source_url': sourceUri.toString(),
+                'source_host': sourceUri.host,
+                'season_number': 1,
+                'check_interval_minutes': job['series_monitor_interval'] ?? 60,
+                'is_active': true,
+              }, onConflict: 'series_id,source_url');
+            }
+          }
           if (type == 'series' &&
               (Uri.tryParse(item['page_url']?.toString() ?? '')?.host.toLowerCase() == 'akwam.ss' ||
                (Uri.tryParse(item['page_url']?.toString() ?? '')?.host.toLowerCase() ?? '').endsWith('.akwam.ss'))) {
@@ -255,7 +280,16 @@ class ShamFlixBackgroundImportService {
             'cast': _nullIfEmpty(item['cast']),
             'is_published': job['publish'] == true,
           };
-          if (type == 'movie') data['source_page_url'] = _nullIfEmpty(item['page_url']);
+          final sourcePageUrl = _nullIfEmpty(item['page_url']);
+          data['source_page_url'] = sourcePageUrl;
+          if (type == 'series') {
+            data['source_monitor_enabled'] = job['monitor_series'] == true;
+            data['source_monitor_interval_minutes'] = job['series_monitor_interval'] ?? 60;
+          }
+          if (type == 'movie') {
+            data['source_monitor_enabled'] = job['monitor_movies'] == true;
+            data['source_monitor_interval_minutes'] = job['movie_monitor_interval'] ?? 60;
+          }
           final saved = await AuthService.client.from(table).insert(data).select('id').single();
           final id = saved['id'].toString();
           for (final packageId in packages) {
