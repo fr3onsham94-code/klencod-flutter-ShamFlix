@@ -416,27 +416,36 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
   };
   const channelResponse = await fetch(apiUrl, { headers, signal: AbortSignal.timeout(15000) });
   if (!channelResponse.ok) throw new Error("Aloula channel API returned HTTP " + channelResponse.status);
-  const channelRows = await channelResponse.json();
-  if (!Array.isArray(channelRows)) throw new Error("Aloula channel API response format changed");
+  const channelPayload = await channelResponse.json();
+  const channelRows = Array.isArray(channelPayload) ? channelPayload
+    : Array.isArray(channelPayload?.channels) ? channelPayload.channels
+    : Array.isArray(channelPayload?.data) ? channelPayload.data : [];
+  if (!channelRows.length) throw new Error("Aloula channel API response format changed");
   const channel = channelRows.find((row: any) => String(row?.url || "") === slug);
-  if (!channel || channel.has_live !== true) {
+  const hasLive = channel && [true, 1, "1", "true"].includes(channel.has_live);
+  if (!channel || !hasLive) {
     throw new Error("Aloula channel was not found or is not currently live");
   }
   let streamUrl = typeof channel?.streams?.hls === "string" ? channel.streams.hls : "";
   if (!streamUrl) {
+    const channelId = channel.id ?? channel.channel_id;
+    if (channelId == null || String(channelId).trim().isEmpty) {
+      throw new Error("Aloula response is missing the channel identifier");
+    }
     const playerUrl = new URL(
-      "https://aloula.faulio.com/api/v1.1/channels/" + encodeURIComponent(String(channel.id)) + "/player",
+      "https://aloula.faulio.com/api/v1.1/channels/" + encodeURIComponent(String(channelId)) + "/player",
     );
     await validatePublicPlaylistUrl(playerUrl);
     const playerResponse = await fetch(playerUrl, { headers, signal: AbortSignal.timeout(15000) });
     if (!playerResponse.ok) throw new Error("Aloula player API returned HTTP " + playerResponse.status);
     const playerData = await playerResponse.json();
-    streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls : "";
+    streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls
+      : typeof playerData?.data?.streams?.hls === "string" ? playerData.data.streams.hls : "";
   }
   const safeUrl = safeStreamUrl(streamUrl);
   if (!safeUrl) throw new Error("Aloula did not return a supported direct HLS stream");
   await validatePublicPlaylistUrl(new URL(safeUrl));
-  const title = clean(channel.title || source.name).slice(0, 100);
+  const title = clean(channel.title || channel.name || source.name).slice(0, 100);
   return [{
     sourceId: source.id,
     sourceName: source.name,
