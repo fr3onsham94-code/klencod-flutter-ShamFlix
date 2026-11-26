@@ -4640,6 +4640,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final server = _runtimeServers[index];
     final rawUrl = valueOf(server['stream_url']).trim();
     final uri = Uri.tryParse(rawUrl);
+    // Embed pages are opened in WebView and may depend on browser cookies/referer.
+    // Probe only direct media URLs here; embed links are never removed by this HTTP check.
+    if (!StreamSourceDetector.isDirectMediaUrl(rawUrl)) return false;
     final host = uri?.host.toLowerCase() ?? '';
     if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') ||
         host.isEmpty || uri.userInfo.isNotEmpty ||
@@ -4665,9 +4668,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           ..maxRedirects = 5;
         request.headers['Accept'] = '*/*';
         if (userAgent.isNotEmpty) request.headers['User-Agent'] = userAgent;
-        if (StreamSourceDetector.isDirectMediaUrl(rawUrl)) {
-          request.headers['Range'] = 'bytes=0-0';
-        }
+        request.headers['Range'] = 'bytes=0-0';
         final response = await client.send(request).timeout(const Duration(seconds: 7));
         final unavailable = response.statusCode == 404 || response.statusCode == 410;
         await response.stream.listen((_) {}).cancel();
