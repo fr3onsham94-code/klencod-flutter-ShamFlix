@@ -163,6 +163,8 @@ type PlaybackServerRow = {
   referer?: string | null;
   origin?: string | null;
   cookie?: string | null;
+  drm_key?: string | null;
+  license_url?: string | null;
   sort_order?: number | null;
 };
 
@@ -260,7 +262,7 @@ Deno.serve(async (req: Request) => {
     try {
       const foreignKey = contentType === "movie" ? "movie_id" : "episode_id";
       const { data: activeServers, error: activeReadError } = await db.from("playback_servers")
-        .select("id,server_name,stream_url,source_page_url,user_agent,referer,origin,cookie,sort_order")
+        .select("id,server_name,stream_url,source_page_url,user_agent,referer,origin,cookie,drm_key,license_url,sort_order")
         .eq(foreignKey, contentId).eq("is_active", true)
         .order("sort_order", { ascending: true }).limit(60);
       if (activeReadError) throw activeReadError;
@@ -269,10 +271,15 @@ Deno.serve(async (req: Request) => {
       const preserveServerId = String(body.preserveServerId || "");
       const checked = await Promise.all(rows.map(async (row) => ({
         row,
-        healthy: row.id === preserveServerId || await probePlaybackUrl(row),
+        // DRM-protected rows cannot be reliably checked without the licensed
+        // playback flow; keep them untouched and do not count them as fallbacks.
+        healthy: !row.drm_key?.trim() && !row.license_url?.trim() &&
+          (row.id === preserveServerId || await probePlaybackUrl(row)),
       })));
       const failedManaged = checked
-        .filter(item => !item.healthy && item.row.source_page_url === sourcePageUrl)
+        .filter(item => !item.healthy &&
+          !item.row.drm_key?.trim() && !item.row.license_url?.trim() &&
+          item.row.source_page_url === sourcePageUrl)
         .map(item => item.row);
       let addedServers: PlaybackServerRow[] = [];
 
