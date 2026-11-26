@@ -200,12 +200,20 @@ async function probePlaybackUrl(server: PlaybackServerRow): Promise<boolean> {
           url = nextUrl;
           continue;
         }
-        if (response.status >= 200 && response.status < 300) {
-          if (method === "GET" && response.body) {
-            const reader = response.body.getReader();
-            try { await reader.read(); } finally { await reader.cancel().catch(() => {}); }
+        if (response.status >= 200 && response.status < 300 && response.status !== 204) {
+          const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+          const directMediaPath = /\\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd|ts)$/i.test(url.pathname);
+          if (directMediaPath && contentType.includes("text/html")) return false;
+          if (!response.body) return false;
+          const reader = response.body.getReader();
+          let hasBody = false;
+          try {
+            const chunk = await reader.read();
+            hasBody = !chunk.done && Boolean(chunk.value?.byteLength);
+          } finally {
+            await reader.cancel().catch(() => {});
           }
-          return true;
+          return hasBody;
         }
         return false;
       }
@@ -264,18 +272,22 @@ Deno.serve(async (req: Request) => {
       const { data: activeServers, error: activeReadError } = await db.from("playback_servers")
         .select("id,server_name,stream_url,source_page_url,user_agent,referer,origin,cookie,drm_key,license_url,sort_order")
         .eq(foreignKey, contentId).eq("is_active", true)
-        .order("sort_order", { ascending: true }).limit(60);
+        .order("sort_order", { ascending: true }).limit(30);
       if (activeReadError) throw activeReadError;
 
       const rows = (activeServers || []) as PlaybackServerRow[];
       const preserveServerId = String(body.preserveServerId || "");
-      const checked = await Promise.all(rows.map(async (row) => ({
-        row,
-        // DRM-protected rows cannot be reliably checked without the licensed
-        // playback flow; keep them untouched and do not count them as fallbacks.
-        healthy: !row.drm_key?.trim() && !row.license_url?.trim() &&
-          (row.id === preserveServerId || await probePlaybackUrl(row)),
-      })));
+      const checked: Array<{ row: PlaybackServerRow; healthy: boolean }> = [];
+      for (let index = 0; index < rows.length; index += 6) {
+        const batch = await Promise.all(rows.slice(index, index + 6).map(async (row) => ({
+          row,
+          // DRM-protected rows cannot be reliably checked without the licensed
+          // playback flow; keep them untouched and do not count them as fallbacks.
+          healthy: !row.drm_key?.trim() && !row.license_url?.trim() &&
+            (row.id === preserveServerId || await probePlaybackUrl(row)),
+        })));
+        checked.push(...batch);
+      }
       const failedManaged = checked
         .filter(item => !item.healthy &&
           !item.row.drm_key?.trim() && !item.row.license_url?.trim() &&
@@ -293,10 +305,14 @@ Deno.serve(async (req: Request) => {
           const candidates = inspected.sources
             .filter(source => !existingUrls.has(source.url))
             .slice(0, 30);
-          const probed = await Promise.all(candidates.map(async source => ({
-            source,
-            healthy: await probePlaybackUrl({ id: "", stream_url: source.url, referer: sourcePageUrl }),
-          })));
+          const probed: Array<{ source: Source; healthy: boolean }> = [];
+          for (let index = 0; index < candidates.length; index += 6) {
+            const batch = await Promise.all(candidates.slice(index, index + 6).map(async source => ({
+              source,
+              healthy: await probePlaybackUrl({ id: "", stream_url: source.url, referer: sourcePageUrl }),
+            })));
+            probed.push(...batch);
+          }
           const valid = probed.filter(item => item.healthy);
           if (valid.length) {
             const inserts = valid.map((item, index) => ({
