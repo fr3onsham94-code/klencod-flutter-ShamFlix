@@ -4477,6 +4477,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     if (value is String) await prefs.setString('${_settingsPrefix}_$key', value);
   }
 
+  Future<void> _waitForPlaybackStart() async {
+    if (player.state.playing) return;
+    await player.stream.playing
+        .firstWhere((playing) => playing)
+        .timeout(const Duration(seconds: 15));
+  }
+
   Future<void> _handlePlaybackError(String message) async {
     if (!mounted || _failoverInProgress) return;
     if (currentServerIndex >= 0 && currentServerIndex < _runtimeServers.length) {
@@ -4514,7 +4521,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
         }
         try {
+          await player.stop();
           await player.open(Media(nextUrl, httpHeaders: _headersForServer(next))).timeout(const Duration(seconds: 20));
+          await _waitForPlaybackStart();
           if (!mounted) return;
           final playbackPrefs = await SharedPreferences.getInstance();
           await _restoreTrackPreferences(playbackPrefs);
@@ -4582,9 +4591,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               });
             }
             try {
+              await player.stop();
               await player.open(
                 Media(nextUrl, httpHeaders: _headersForServer(index)),
               ).timeout(const Duration(seconds: 20));
+              await _waitForPlaybackStart();
               if (!mounted) return;
               final playbackPrefs = await SharedPreferences.getInstance();
               await _restoreTrackPreferences(playbackPrefs);
