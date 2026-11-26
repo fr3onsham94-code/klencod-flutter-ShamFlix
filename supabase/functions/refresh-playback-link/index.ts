@@ -197,7 +197,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: oldManaged, error: oldError } = await db.from("playback_servers")
-      .select("id,stream_url").eq(foreignKey, contentId).not("source_page_url", "is", null);
+      .select("id,stream_url").eq(foreignKey, contentId).eq("source_page_url", sourcePageUrl);
     if (oldError) throw oldError;
 
     const oldUrls = new Set((oldManaged || []).map((row: any) => String(row.stream_url || "")));
