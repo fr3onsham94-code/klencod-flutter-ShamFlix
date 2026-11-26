@@ -349,34 +349,33 @@ function decodeWebsiteText(value: string): string {
 
 async function fetchGenericWebsite(source: PlaylistSource) {
   const sourceUri = new URL(source.url);
-  if (/\\.(?:m3u8?|mpd)$/i.test(sourceUri.pathname)) {
+  if (/\.(?:m3u8?|mpd)$/i.test(sourceUri.pathname)) {
     throw new Error("This is a playlist URL, not a website page; add it as an M3U source");
   }
 
   const root = await fetchWebsitePage(source.url);
   const pages: Array<{url: URL; body: string; title: string}> = [];
-  const rootTitleMatch = root.body.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) ||
+  const rootTitleMatch = root.body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
     root.body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
   const rootTitle = rootTitleMatch ? decodeWebsiteText(rootTitleMatch[1]).slice(0, 100) : source.name;
   pages.push({url: root.finalUrl, body: root.body, title: rootTitle || source.name});
 
-  // Many channel sites expose their live pages as links from a catalogue page.
-  // Crawl only a small set of same-host public channel routes; do not follow
-  // login pages, arbitrary external embeds, or protected player endpoints.
+  // Crawl a small set of same-host public channel pages linked from the catalogue.
+  // Do not follow login pages, external embeds, or protected player endpoints.
   const pageCandidates = new Map<string,string>();
-  for (const match of root.body.matchAll(/<a\\b[^>]*>[\\s\\S]*?<\\/a>/gi)) {
-    const opening = /^<a\\b[^>]*>/i.exec(match[0])?.[0];
+  for (const match of root.body.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)) {
+    const opening = /^<a\b[^>]*>/i.exec(match[0])?.[0];
     if (!opening) continue;
-    const attrsValue = attrs(opening);
-    if (!attrsValue.href) continue;
+    const linkAttrs = attrs(opening);
+    if (!linkAttrs.href) continue;
     try {
-      const target = new URL(decodeWebsiteText(attrsValue.href), root.finalUrl);
+      const target = new URL(decodeWebsiteText(linkAttrs.href), root.finalUrl);
       if (target.protocol !== "https:" || target.hostname !== root.finalUrl.hostname ||
           target.username || target.password) continue;
-      if (!/^\\/(?:[a-z]{2}\\/)?(?:live|channel|channels|tv|stream)\\//i.test(target.pathname)) continue;
+      if (!/^\/(?:[a-z]{2}\/)?(?:live|channel|channels|tv|stream)\//i.test(target.pathname)) continue;
       if (target.pathname.split("/").filter(Boolean).length > 4) continue;
       target.hash = "";
-      const label = decodeWebsiteText(attrsValue.title || match[0].replace(/<[^>]*>/g," ")).slice(0,100);
+      const label = decodeWebsiteText(linkAttrs.title || match[0].replace(/<[^>]*>/g," ")).slice(0,100);
       if (!pageCandidates.has(target.toString())) pageCandidates.set(target.toString(),label);
     } catch {}
     if (pageCandidates.size >= 24) break;
@@ -386,7 +385,7 @@ async function fetchGenericWebsite(source: PlaylistSource) {
     try {
       const page = await fetchWebsitePage(pageUrl);
       if (page.finalUrl.hostname !== root.finalUrl.hostname) continue;
-      const titleMatch = page.body.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i) ||
+      const titleMatch = page.body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
         page.body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
       const title = titleMatch ? decodeWebsiteText(titleMatch[1]).slice(0,100) : label;
       pages.push({url:page.finalUrl,body:page.body,title:title || label || source.name});
@@ -400,24 +399,24 @@ async function fetchGenericWebsite(source: PlaylistSource) {
   let position = 0;
   for (const page of pages) {
     const normalized = page.body
-      .replaceAll("\\\\/", "/")
-      .replaceAll("\\\\u0026", "&")
+      .replaceAll("\\/", "/")
+      .replaceAll("\\u0026", "&")
       .replaceAll("&amp;", "&")
-      .replaceAll("\\\\u003a", ":");
+      .replaceAll("\\u003a", ":");
     const candidates = new Set<string>();
     const patterns = [
-      /(?:href|src|data-src|data-hls|data-stream|data-file)\\s*=\\s*["']([^"']+)["']/gi,
-      /(?:file|src|source|hls|hlsUrl|hls_url|streamUrl|stream_url|playlist|manifest)\\s*[:=]\\s*["']([^"']+)["']/gi,
-      /https?:\\/\\/[^"']+?\\.(?:m3u8|mpd)(?:\\?[^"'\\s<>]*)?/gi,
+      /(?:href|src|data-src|data-hls|data-stream|data-file)\s*=\s*["']([^"']+)["']/gi,
+      /(?:file|src|source|hls|hlsUrl|hls_url|streamUrl|stream_url|playlist|manifest)\s*[:=]\s*["']([^"']+)["']/gi,
+      /https?:\/\/[^"'\s<>\\]+?\.(?:m3u8|mpd)(?:\?[^"'\s<>]*)?/gi,
     ];
     for (let index = 0; index < patterns.length; index++) {
       for (const match of normalized.matchAll(patterns[index])) {
-        const raw = decodeWebsiteText(match[1] ?? match[0]).replace(/[),;\\]}]+$/g, "");
+        const raw = decodeWebsiteText(match[1] ?? match[0]).replace(/[),;\]}]+$/g, "");
         try {
           const resolved = new URL(raw, page.url);
           if (resolved.hostname !== page.url.hostname) continue;
           const safe = safeStreamUrl(resolved.toString());
-          if (safe && /\\.(?:m3u8|mpd)(?:$|[?])/i.test(new URL(safe).pathname + new URL(safe).search)) {
+          if (safe && /\.(?:m3u8|mpd)(?:$|[?])/i.test(new URL(safe).pathname + new URL(safe).search)) {
             candidates.add(safe);
           }
         } catch {}
