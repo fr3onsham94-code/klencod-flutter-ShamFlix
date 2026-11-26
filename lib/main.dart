@@ -4274,6 +4274,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   final Set<int> _failedServers = <int>{};
   bool _failoverInProgress = false;
   bool _sourceRefreshAttempted = false;
+  bool _serverHealthCheckAttempted = false;
   String? _embedFallbackUrl;
   String? _embedFallbackName;
   StreamSubscription<Duration>? _positionSubscription;
@@ -4377,6 +4378,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       await _restorePlaybackPosition(prefs);
       await _restoreTrackPreferences(prefs);
       if (mounted) _showControls();
+      unawaited(_runPlaybackServerHealthCheck());
     } catch (e) {
       _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
     }
@@ -4506,6 +4508,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           setState(() => opening = false);
           _failoverInProgress = false;
           _showControls();
+          unawaited(_runPlaybackServerHealthCheck());
           return;
         } catch (_) {
           _failedServers.add(next);
@@ -4593,6 +4596,62 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       opening = false;
       controlsVisible = true;
     });
+  }
+
+  Future<void> _runPlaybackServerHealthCheck() async {
+    if (_serverHealthCheckAttempted ||
+        (widget.contentType != 'movie' && widget.contentType != 'episode') ||
+        widget.contentId.isEmpty) {
+      return;
+    }
+    _serverHealthCheckAttempted = true;
+
+    final currentServer = _runtimeServers.isNotEmpty &&
+            currentServerIndex >= 0 &&
+            currentServerIndex < _runtimeServers.length
+        ? _runtimeServers[currentServerIndex]
+        : <String, dynamic>{};
+    final currentServerId = valueOf(currentServer['id']).trim();
+
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'refresh-playback-link',
+        body: {
+          'contentType': widget.contentType,
+          'contentId': widget.contentId,
+          'mode': 'health_check',
+          'preserveServerId': currentServerId,
+        },
+      );
+      final payload = response.data;
+      final rawServers = payload is Map ? payload['servers'] : null;
+      if (payload is! Map || payload['success'] != true || rawServers is! List) {
+        return;
+      }
+
+      final refreshed = rawServers
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      if (!mounted || refreshed.isEmpty) return;
+
+      final selectedIndex = currentServerId.isNotEmpty
+          ? refreshed.indexWhere((server) => valueOf(server['id']) == currentServerId)
+          : refreshed.indexWhere((server) =>
+              valueOf(server['stream_url']) == valueOf(currentServer['stream_url']));
+      setState(() {
+        _runtimeServers = refreshed;
+        if (selectedIndex >= 0) {
+          currentServerIndex = selectedIndex;
+        } else {
+          currentServerIndex = currentServerIndex
+              .clamp(0, _runtimeServers.length - 1)
+              .toInt();
+        }
+      });
+    } catch (_) {
+      // A failed health check must never interrupt the currently playing stream.
+    }
   }
 
   Future<void> _openEmbedFallback() async {
