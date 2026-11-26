@@ -467,14 +467,6 @@ function aloulaRows(payload: any): any[] {
   return candidates.find(Array.isArray) || [];
 }
 
-function aloulaIsLive(channel: any): boolean {
-  const values = [channel?.has_live, channel?.is_live, channel?.isLive, channel?.live, channel?.live_status];
-  const live = values.some(value => [true, 1, "1", "true", "yes", "live", "on", "active"].includes(
-    typeof value === "string" ? value.trim().toLowerCase() : value,
-  ));
-  return live || Boolean(aloulaStreamUrl(channel));
-}
-
 function aloulaStreamUrl(value: any): string {
   const candidates = [
     value?.streams?.hls,
@@ -497,6 +489,14 @@ function aloulaStreamUrl(value: any): string {
   return "";
 }
 
+function aloulaIsLive(channel: any): boolean {
+  const values = [channel?.has_live, channel?.is_live, channel?.isLive, channel?.live, channel?.live_status];
+  const live = values.some(value => [true, 1, "1", "true", "yes", "live", "on", "active"].includes(
+    typeof value === "string" ? value.trim().toLowerCase() : value,
+  ));
+  return live || Boolean(aloulaStreamUrl(channel));
+}
+
 function aloulaSlugMatches(channel: any, requestedSlug: string): boolean {
   if (!requestedSlug) return true;
   const candidates = [channel?.slug, channel?.url, channel?.path, channel?.permalink, channel?.link]
@@ -512,12 +512,12 @@ function aloulaSlugMatches(channel: any, requestedSlug: string): boolean {
 
 async function fetchAloulaWebsite(source: PlaylistSource) {
   const pageUrl = new URL(source.url);
-  if (!/(^|\\.)aloula\\.(?:sba\\.sa|sa)$/i.test(pageUrl.hostname) ||
+  if (!/(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(pageUrl.hostname) ||
       !(pageUrl.pathname === "/" || pageUrl.pathname === "" ||
-        /^\\/(?:[a-z]{2}\\/)?live\\/[^/]+\\/?$/i.test(pageUrl.pathname))) {
+        /^\/(?:[a-z]{2}\/)?live\/[^/]+\/?$/i.test(pageUrl.pathname))) {
     throw new Error("Aloula adapter accepts the official website root or official live-channel pages");
   }
-  const slugMatch = pageUrl.pathname.match(/\\/(?:[a-z]{2}\\/)?live\\/([^/]+)\\/?$/i);
+  const slugMatch = pageUrl.pathname.match(/\/(?:[a-z]{2}\/)?live\/([^/]+)\/?$/i);
   const requestedSlug = slugMatch?.[1] || "";
   const apiUrl = new URL("https://aloula.faulio.com/api/v1/channels");
   await validatePublicPlaylistUrl(apiUrl);
@@ -529,8 +529,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
   };
   const channelResponse = await fetch(apiUrl, { headers, signal: AbortSignal.timeout(20000) });
   if (!channelResponse.ok) throw new Error("Aloula channel API returned HTTP " + channelResponse.status);
-  const channelPayload = await channelResponse.json();
-  const channelRows = aloulaRows(channelPayload);
+  const channelRows = aloulaRows(await channelResponse.json());
   if (!channelRows.length) throw new Error("Aloula channel API response format changed");
   const liveChannels = channelRows.filter((row: any) => aloulaIsLive(row) && aloulaSlugMatches(row, requestedSlug));
   if (!liveChannels.length) {
@@ -554,7 +553,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         streamUrl = aloulaStreamUrl(await playerResponse.json());
       }
       const safeUrl = safeStreamUrl(streamUrl);
-      if (!safeUrl || !/\\.m3u8(?:$|[?])/i.test(new URL(safeUrl).pathname + new URL(safeUrl).search)) return null;
+      if (!safeUrl || !/\.m3u8(?:$|[?])/i.test(new URL(safeUrl).pathname + new URL(safeUrl).search)) return null;
       await validatePublicPlaylistUrl(new URL(safeUrl));
       const title = clean(channel.title || channel.name || channel.label || source.name).slice(0, 100);
       if (!title) return null;
