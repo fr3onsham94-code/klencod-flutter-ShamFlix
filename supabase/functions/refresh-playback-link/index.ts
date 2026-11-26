@@ -240,12 +240,12 @@ Deno.serve(async (req: Request) => {
     }).eq("id", contentId);
     if (contentUpdateError) throw contentUpdateError;
 
-    const { data: refreshedServers, error: serverReadError } = await db.from("playback_servers")
+    const { data: verifiedServers, error: serverReadError } = await db.from("playback_servers")
       .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url")
       .eq(foreignKey, contentId).eq("source_page_url", sourcePageUrl).eq("is_active", true)
       .order("sort_order", { ascending: true });
     if (serverReadError) throw serverReadError;
-    if (!refreshedServers?.length) throw new Error("لم يتم حفظ أي رابط مشاهدة صالح");
+    if (!verifiedServers?.length) throw new Error("لم يتم حفظ أي رابط مشاهدة صالح");
 
     // Delete only stale rows owned by this exact source page, and only after
     // the replacement links and the content's primary URL were saved/read back.
@@ -261,12 +261,21 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Read the final active list after cleanup so deleted links are never
+    // returned to the player as if they were still available.
+    const { data: finalServers, error: finalReadError } = await db.from("playback_servers")
+      .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url")
+      .eq(foreignKey, contentId).eq("source_page_url", sourcePageUrl).eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    if (finalReadError) throw finalReadError;
+    if (!finalServers?.length) throw new Error("لم يتبق أي رابط مشاهدة فعال بعد التنظيف");
+
     return json({
       success: true,
       refreshed: true,
       changed: sources.some(source => !oldUrls.has(source.url)) || staleIds.length > 0,
       removedOldServers: staleIds.length,
-      servers: refreshedServers,
+      servers: finalServers,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر تحديث روابط المصدر";
