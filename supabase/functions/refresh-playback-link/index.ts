@@ -264,11 +264,79 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, refreshed: false, reason: "no_managed_source", servers: [] });
   }
 
-  // Inspect every active server independently after playback has started.
-  // Manual rows are checked as possible fallbacks, but are never auto-deleted.
+  // Fetch and validate new public candidates without deleting existing servers.
+  // Old failed rows are removed only after the player confirms a replacement.
+  if (body.mode === "refresh_candidates") {
+    try {
+      const { data: allContentServers, error: allServersReadError } = await db.from("playback_servers")
+        .select("stream_url").eq(foreignKey, contentId);
+      if (allServersReadError) throw allServersReadError;
+      const allKnownUrls = new Set((allContentServers || []).map((row: any) => String(row.stream_url || "")));
+
+      const inspected = await inspectSourcePage(sourcePageUrl);
+      const candidates = inspected.sources.filter(source => !allKnownUrls.has(source.url)).slice(0, 30);
+      const probed: Array<{ source: Source; healthy: boolean }> = [];
+      for (let index = 0; index < candidates.length; index += 6) {
+        const batch = await Promise.all(candidates.slice(index, index + 6).map(async source => ({
+          source,
+          healthy: await probePlaybackUrl({ id: "", stream_url: source.url, referer: sourcePageUrl }),
+        })));
+        probed.push(...batch);
+      }
+
+      const valid = probed.filter(item => item.healthy);
+      if (!valid.length) {
+        await db.from(table).update({
+          source_page_last_error: "لم يتم العثور على سيرفرات بديلة يمكن الوصول إليها",
+        }).eq("id", contentId);
+        return json({ success: false, refreshed: false, reason: "no_healthy_new_sources", newServers: [], servers: [] });
+      }
+
+      const inserts = valid.map((item, index) => ({
+        [foreignKey]: contentId,
+        source_page_url: sourcePageUrl,
+        server_name: item.source.name || ("السيرفر الجديد " + (index + 1)),
+        stream_url: item.source.url,
+        user_agent: "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
+        referer: sourcePageUrl,
+        sort_order: allKnownUrls.size + index,
+        is_active: true,
+      }));
+      const { data: saved, error: insertError } = await db.from("playback_servers")
+        .insert(inserts)
+        .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url");
+      if (insertError) throw insertError;
+      if (!saved || saved.length !== inserts.length) throw new Error("لم يتم التحقق من حفظ كل السيرفرات البديلة");
+
+      const { data: managedServers, error: finalReadError } = await db.from("playback_servers")
+        .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url")
+        .eq(foreignKey, contentId).eq("source_page_url", sourcePageUrl).eq("is_active", true)
+        .order("sort_order", { ascending: true });
+      if (finalReadError) throw finalReadError;
+      const savedIds = new Set((managedServers || []).map((row: any) => row.id));
+      if (!(saved as PlaybackServerRow[]).every(server => savedIds.has(server.id))) {
+        throw new Error("لم يتم التحقق من ظهور كل السيرفرات الجديدة ضمن قائمة التشغيل");
+      }
+
+      return json({
+        success: true,
+        refreshed: true,
+        addedServers: saved.length,
+        newServers: saved,
+        servers: managedServers || [],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "تعذر جلب سيرفرات بديلة";
+      await db.from(table).update({ source_page_last_error: message }).eq("id", contentId);
+      return json({ success: false, refreshed: false, error: message, newServers: [], servers: [] }, 502);
+    }
+  }
+
+  // Probe every saved server independently after playback starts.
+  // Only a server that failed the probe is eligible for cleanup; manual and
+  // DRM-configured rows are never deleted by this automatic process.
   if (body.mode === "health_check") {
     try {
-      const foreignKey = contentType === "movie" ? "movie_id" : "episode_id";
       const { data: activeServers, error: activeReadError } = await db.from("playback_servers")
         .select("id,server_name,stream_url,source_page_url,user_agent,referer,origin,cookie,drm_key,license_url,sort_order")
         .eq(foreignKey, contentId).eq("is_active", true)
@@ -276,83 +344,38 @@ Deno.serve(async (req: Request) => {
       if (activeReadError) throw activeReadError;
 
       const rows = (activeServers || []) as PlaybackServerRow[];
-      const { data: allContentServers, error: allServersReadError } = await db.from("playback_servers")
-        .select("stream_url").eq(foreignKey, contentId);
-      if (allServersReadError) throw allServersReadError;
-      const allKnownUrls = new Set((allContentServers || []).map((row: any) => String(row.stream_url || "")));
       const preserveServerId = String(body.preserveServerId || "");
       const checked: Array<{ row: PlaybackServerRow; healthy: boolean }> = [];
       for (let index = 0; index < rows.length; index += 6) {
-        const batch = await Promise.all(rows.slice(index, index + 6).map(async (row) => ({
+        const batch = await Promise.all(rows.slice(index, index + 6).map(async row => ({
           row,
-          // DRM-protected rows cannot be reliably checked without the licensed
-          // playback flow; keep them untouched and do not count them as fallbacks.
           healthy: !row.drm_key?.trim() && !row.license_url?.trim() &&
             (row.id === preserveServerId || await probePlaybackUrl(row)),
         })));
         checked.push(...batch);
       }
+
       const failedManaged = checked
         .filter(item => !item.healthy &&
           !item.row.drm_key?.trim() && !item.row.license_url?.trim() &&
           item.row.source_page_url === sourcePageUrl)
         .map(item => item.row);
-      let addedServers: PlaybackServerRow[] = [];
-
-      if (failedManaged.length) {
-        // Discover additional public links, then probe them before saving.
-        // If the source is unavailable, existing healthy servers can still
-        // protect playback, but no unverified candidate is ever inserted.
-        try {
-          const inspected = await inspectSourcePage(sourcePageUrl);
-          const candidates = inspected.sources
-            .filter(source => !allKnownUrls.has(source.url))
-            .slice(0, 30);
-          const probed: Array<{ source: Source; healthy: boolean }> = [];
-          for (let index = 0; index < candidates.length; index += 6) {
-            const batch = await Promise.all(candidates.slice(index, index + 6).map(async source => ({
-              source,
-              healthy: await probePlaybackUrl({ id: "", stream_url: source.url, referer: sourcePageUrl }),
-            })));
-            probed.push(...batch);
-          }
-          const valid = probed.filter(item => item.healthy);
-          if (valid.length) {
-            const inserts = valid.map((item, index) => ({
-              [foreignKey]: contentId,
-              source_page_url: sourcePageUrl,
-              server_name: item.source.name || ("السيرفر الجديد " + (index + 1)),
-              stream_url: item.source.url,
-              user_agent: "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
-              referer: sourcePageUrl,
-              sort_order: rows.length + index,
-              is_active: true,
-            }));
-            const { data: saved, error: insertError } = await db.from("playback_servers")
-              .insert(inserts)
-              .select("id,server_name,stream_url,source_page_url,user_agent,referer,origin,cookie,sort_order");
-            if (insertError) throw insertError;
-            if (!saved || saved.length !== inserts.length) throw new Error("لم يتم التحقق من حفظ كل السيرفرات البديلة");
-            addedServers = saved as PlaybackServerRow[];
-          }
-        } catch {
-          // No unverified candidate is added; a separately verified existing
-          // server can still serve as the replacement for a failed managed row.
-        }
-      }
-
-      const healthyExisting = checked.filter(item => item.healthy).map(item => item.row);
-      const replacements = [...healthyExisting, ...addedServers];
+      const healthyReplacements = checked
+        .filter(item => item.healthy)
+        .map(item => item.row);
       const staleIds = failedManaged
-        .filter(failed => replacements.some(replacement =>
+        .filter(failed => healthyReplacements.some(replacement =>
           replacement.id !== failed.id && replacement.stream_url !== failed.stream_url))
         .map(server => server.id);
 
       if (staleIds.length) {
-        const staleUrls = new Set(failedManaged.filter(server => staleIds.includes(server.id)).map(server => server.stream_url));
-        const replacement = replacements
+        const staleUrls = new Set(failedManaged
+          .filter(server => staleIds.includes(server.id))
+          .map(server => server.stream_url));
+        const replacement = healthyReplacements
           .filter(server => !staleUrls.has(server.stream_url))
           .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
+
         if (replacement && staleUrls.has(String(content.stream_url || ""))) {
           const { error: contentUpdateError } = await db.from(table).update({
             stream_url: replacement.stream_url,
@@ -362,13 +385,12 @@ Deno.serve(async (req: Request) => {
           if (contentUpdateError) throw contentUpdateError;
         }
 
-        // Read back active replacements before deleting only failed managed IDs.
+        // Verify a healthy replacement still exists in the database before deletion.
         const { data: verified, error: verifyError } = await db.from("playback_servers")
-          .select("id,stream_url,source_page_url")
-          .eq(foreignKey, contentId).eq("is_active", true);
+          .select("id").eq(foreignKey, contentId).eq("is_active", true);
         if (verifyError) throw verifyError;
         const verifiedIds = new Set((verified || []).map((row: any) => row.id));
-        if (!replacements.some(server => verifiedIds.has(server.id))) {
+        if (!healthyReplacements.some(server => verifiedIds.has(server.id))) {
           throw new Error("لم يتم التحقق من وجود سيرفر بديل محفوظ");
         }
 
@@ -388,10 +410,10 @@ Deno.serve(async (req: Request) => {
 
       return json({
         success: true,
-        checkedServers: checked.length,
+        checkedServers: checked.filter(item =>
+          !item.row.drm_key?.trim() && !item.row.license_url?.trim()).length,
         failedServers: checked.filter(item => !item.healthy &&
           !item.row.drm_key?.trim() && !item.row.license_url?.trim()).length,
-        addedServers: addedServers.length,
         removedOldServers: staleIds.length,
         servers: finalServers || [],
       });
