@@ -4630,19 +4630,31 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final server = _runtimeServers[index];
     final rawUrl = valueOf(server['stream_url']).trim();
     final uri = Uri.tryParse(rawUrl);
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
+    final host = uri?.host.toLowerCase() ?? '';
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') ||
+        host.isEmpty || uri.userInfo.isNotEmpty ||
+        (uri.hasPort && uri.port != 80 && uri.port != 443) ||
+        host == 'localhost' || host.endsWith('.localhost') ||
+        host == '::1' || host == '0.0.0.0' ||
+        RegExp(r'^127\\.').hasMatch(host) ||
+        RegExp(r'^10\\.').hasMatch(host) ||
+        RegExp(r'^192\\.168\\.').hasMatch(host) ||
+        RegExp(r'^172\\.(1[6-9]|2[0-9]|3[01])\\.').hasMatch(host)) {
       return false;
     }
 
     // Only a repeated, explicit 404/410 is considered conclusive.
     // Timeouts, 401/403, 5xx and network errors are inconclusive and never delete a link.
+    // Do not send stored cookies or referer values while probing arbitrary server hosts.
+    final userAgent = valueOf(server['user_agent']).trim();
     for (int attempt = 0; attempt < 2; attempt++) {
       final client = http.Client();
       try {
         final request = http.Request('GET', uri)
           ..followRedirects = true
           ..maxRedirects = 5;
-        request.headers.addAll(_headersForServer(index));
+        request.headers['Accept'] = '*/*';
+        if (userAgent.isNotEmpty) request.headers['User-Agent'] = userAgent;
         if (StreamSourceDetector.isDirectMediaUrl(rawUrl)) {
           request.headers['Range'] = 'bytes=0-0';
         }
