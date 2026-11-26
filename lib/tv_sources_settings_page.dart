@@ -786,7 +786,11 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                     onChanged: _saving ? null : (v) => setState(() => _websitePackageId = v),
                                   ),
                                 ] else Padding(padding: const EdgeInsets.only(top: 8),
-                                  child: Text('لا توجد باقات قنوات مخصصة حالياً؛ ستُصنّف قنوات Aloula تلقائياً ضمن السعودية.', style: TextStyle(color: muted, fontSize: 11))),
+                                  child: Text(
+                                    _websiteAdapter == 'aloula'
+                                        ? 'لا توجد باقات مخصصة؛ ستُصنّف قنوات Aloula تلقائياً ضمن السعودية.'
+                                        : 'لا توجد باقات مخصصة؛ ستُصنّف القنوات حسب بيانات الموقع.',
+                                    style: TextStyle(color: muted, fontSize: 11))),
                                 const SizedBox(height: 14),
                                 FilledButton.icon(
                                   onPressed: _saving ? null : _addWebsiteSource,
