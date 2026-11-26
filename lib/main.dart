@@ -3271,7 +3271,22 @@ class _DetailsPageState extends State<DetailsPage> {
       return;
     }
     if (!_isDirectMediaUrl(url)) {
-      if (uri.scheme == 'http' || uri.scheme == 'https') {
+      if ((contentType == 'movie' || contentType == 'episode') &&
+          (uri.scheme == 'http' || uri.scheme == 'https')) {
+        // Keep source identity in the internal player so a failed embed/page
+        // link can trigger the same managed-source refresh flow.
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => ShamFlixPlayerPage(
+            url: url,
+            title: title,
+            servers: servers,
+            initialServerIndex: initialServerIndex,
+            progressKey: progressKey,
+            contentType: contentType,
+            contentId: contentId,
+          ),
+        ));
+      } else if (uri.scheme == 'http' || uri.scheme == 'https') {
         Navigator.push(context, MaterialPageRoute(
           builder: (_) => ShamFlixWebPage(url: url, title: title, playerOnly: true),
         ));
@@ -4277,6 +4292,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     player = Player();
     controller = VideoController(player);
     landscape = !widget.embedded;
+    if ((widget.contentType == 'movie' || widget.contentType == 'episode') &&
+        !StreamSourceDetector.isDirectMediaUrl(widget.url)) {
+      _embedFallbackUrl = widget.url;
+      _embedFallbackName = 'صفحة المصدر الأصلية';
+    }
     if (!widget.embedded) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       _setLandscape(true);
