@@ -4312,6 +4312,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   _HlsQualityVariant? _selectedQualityVariant;
   int _qualityMasterServerIndex = -1;
   bool _qualityLoading = false;
+  StreamSubscription<Tracks>? _tracksSubscription;
+  List<VideoTrack> _dashQualityTracks = const [];
 
   String get _settingsPrefix =>
       ShamFlixLocalStore.playerPrefix(widget.progressKey, widget.title);
@@ -4337,6 +4339,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     }
     player.stream.error.listen(_handlePlaybackError);
     _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
+    _tracksSubscription = player.stream.tracks.listen(_handleDashTracks);
     _open();
   }
 
@@ -4392,6 +4395,97 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       }
     }
     return result;
+  }
+
+  bool get _isDashPlayback {
+    final rawUrl = _qualityMasterUrl ?? _currentPlaybackUrl ?? widget.url;
+    final uri = Uri.tryParse(rawUrl);
+    return uri != null && uri.path.toLowerCase().endsWith('.mpd');
+  }
+
+  void _handleDashTracks(Tracks tracks) {
+    if (!mounted) return;
+    if (!_isDashPlayback) {
+      if (_dashQualityTracks.isNotEmpty) {
+        setState(() => _dashQualityTracks = const []);
+      }
+      return;
+    }
+    final available = tracks.video.where((track) {
+      final id = track.id.toLowerCase();
+      return id != 'auto' && id != 'no' &&
+          (track.h != null || (track.title ?? '').trim().isNotEmpty || track.bitrate != null);
+    }).toList();
+    setState(() => _dashQualityTracks = available);
+  }
+
+  String _dashQualityLabel(VideoTrack track) {
+    if (track.h != null && track.h! > 0) return '${track.h}p';
+    final title = (track.title ?? '').trim();
+    if (title.isNotEmpty) return title;
+    if (track.bitrate != null && track.bitrate! > 0) {
+      return '${(track.bitrate! / 1000).round()} kbps';
+    }
+    return 'مسار ${track.id}';
+  }
+
+  Future<void> _pickDashQuality() async {
+    final tracks = _dashQualityTracks;
+    if (tracks.length < 2) return;
+    final selected = await showModalBottomSheet<Object?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: const Color(0xF2171717), borderRadius: BorderRadius.circular(14)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text('جودة البث', style: TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+              ListTile(
+                dense: true,
+                title: Text(appText('تلقائي', 'Auto', 'Otomatik'), textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white)),
+                trailing: player.state.track.video.id == 'auto' ? Icon(Icons.check_circle, color: gold) : null,
+                onTap: () => Navigator.pop(sheetContext, 'auto'),
+              ),
+              for (final track in tracks)
+                ListTile(
+                  dense: true,
+                  title: Text(_dashQualityLabel(track), textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white)),
+                  trailing: player.state.track.video.id == track.id ? Icon(Icons.check_circle, color: gold) : null,
+                  onTap: () => Navigator.pop(sheetContext, track),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null) return;
+    try {
+      if (selected == 'auto') {
+        await player.setVideoTrack(VideoTrack.auto());
+      } else if (selected is VideoTrack) {
+        await player.setVideoTrack(selected);
+      }
+      if (mounted) setState(() {});
+      _showControls();
+    } catch (_) {
+      _message('تعذر تغيير جودة بث DASH');
+    }
+  }
+
+  Future<void> _pickQuality() async {
+    if (_qualityVariants.length > 1) {
+      await _pickHlsQuality();
+    } else if (_dashQualityTracks.length > 1) {
+      await _pickDashQuality();
+    }
   }
 
   Future<void> _open([String? url]) async {
@@ -5447,6 +5541,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   void dispose() {
     controlsTimer?.cancel();
     _positionSubscription?.cancel();
+    _tracksSubscription?.cancel();
     _saveProgressAtPosition(player.state.position);
     _savePlayerSetting('rate', player.state.rate);
     _savePlayerSetting('fit', videoFitMode);
@@ -5739,11 +5834,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                           );
                                                         },
                                                       ),
-                                                      if (_qualityVariants.length > 1)
+                                                      if (_qualityVariants.length > 1 || _dashQualityTracks.length > 1)
                                                         _toolButton(
                                                           icon: Icons.hd_rounded,
-                                                          label: _selectedQualityVariant?.label ?? appText('تلقائي', 'Auto', 'Otomatik'),
-                                                          onTap: _pickHlsQuality,
+                                                          label: _selectedQualityVariant?.label ??
+                                                              (_isDashPlayback && player.state.track.video.id != 'auto'
+                                                                  ? _dashQualityLabel(player.state.track.video)
+                                                                  : appText('تلقائي', 'Auto', 'Otomatik')),
+                                                          onTap: _pickQuality,
                                                         ),
                                                       _toolButton(
                                                         icon: Icons.audiotrack_rounded,
