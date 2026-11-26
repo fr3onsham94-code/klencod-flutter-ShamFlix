@@ -153,6 +153,65 @@ async function inspectSourcePage(sourceUrl: string): Promise<{ pageUrl: string; 
   return { pageUrl: sourceUrl, sources: unique };
 }
 
+
+type PlaybackServerRow = {
+  id: string;
+  server_name?: string | null;
+  stream_url: string;
+  source_page_url?: string | null;
+  user_agent?: string | null;
+  referer?: string | null;
+  origin?: string | null;
+  cookie?: string | null;
+  sort_order?: number | null;
+};
+
+async function probePlaybackUrl(server: PlaybackServerRow): Promise<boolean> {
+  try {
+    const original = validateUrl(server.stream_url);
+    const headers: Record<string, string> = {
+      "User-Agent": server.user_agent?.trim() || "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
+      "Range": "bytes=0-1023",
+      "Accept": "*/*",
+    };
+    if (server.referer?.trim()) headers["Referer"] = server.referer.trim();
+    if (server.origin?.trim()) headers["Origin"] = server.origin.trim();
+    if (server.cookie?.trim()) headers["Cookie"] = server.cookie.trim();
+
+    const request = async (method: "HEAD" | "GET"): Promise<boolean> => {
+      let url = original;
+      for (let redirect = 0; redirect <= 4; redirect++) {
+        const response = await fetch(url, {
+          method,
+          redirect: "manual",
+          signal: AbortSignal.timeout(7000),
+          headers,
+        });
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          const location = response.headers.get("location");
+          if (!location || redirect === 4) return false;
+          url = validateUrl(new URL(location, url).toString());
+          continue;
+        }
+        if (response.status >= 200 && response.status < 300) {
+          if (method === "GET" && response.body) {
+            const reader = response.body.getReader();
+            try { await reader.read(); } finally { await reader.cancel().catch(() => {}); }
+          }
+          return true;
+        }
+        return false;
+      }
+      return false;
+    };
+
+    if (await request("HEAD")) return true;
+    return await request("GET");
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -180,13 +239,130 @@ Deno.serve(async (req: Request) => {
   const table = contentType === "movie" ? "movies" : "episodes";
   const foreignKey = contentType === "movie" ? "movie_id" : "episode_id";
   const { data: content, error: contentError } = await db.from(table)
-    .select("id,is_published,source_page_url,source_monitor_enabled")
+    .select("id,is_published,source_page_url,source_monitor_enabled,stream_url")
     .eq("id", contentId).maybeSingle();
   if (contentError) return json({ error: contentError.message }, 500);
   if (!content || content.is_published !== true) return json({ error: "Content not found" }, 404);
   const sourcePageUrl = String(content.source_page_url || "").trim();
   if (content.source_monitor_enabled !== true || !sourcePageUrl) {
     return json({ success: false, refreshed: false, reason: "no_managed_source", servers: [] });
+  }
+
+  // Inspect every active server independently after playback has started.
+  // Manual rows are checked as possible fallbacks, but are never auto-deleted.
+  if (body.mode === "health_check") {
+    try {
+      const foreignKey = contentType === "movie" ? "movie_id" : "episode_id";
+      const { data: activeServers, error: activeReadError } = await db.from("playback_servers")
+        .select("id,server_name,stream_url,source_page_url,user_agent,referer,origin,cookie,sort_order")
+        .eq(foreignKey, contentId).eq("is_active", true)
+        .order("sort_order", { ascending: true }).limit(60);
+      if (activeReadError) throw activeReadError;
+
+      const rows = (activeServers || []) as PlaybackServerRow[];
+      const preserveServerId = String(body.preserveServerId || "");
+      const checked = await Promise.all(rows.map(async (row) => ({
+        row,
+        healthy: row.id === preserveServerId || await probePlaybackUrl(row),
+      })));
+      const failedManaged = checked
+        .filter(item => !item.healthy && item.row.source_page_url === sourcePageUrl)
+        .map(item => item.row);
+      let addedServers: PlaybackServerRow[] = [];
+
+      if (failedManaged.length) {
+        // Discover additional public links, then probe them before saving.
+        // If the source is unavailable, existing healthy servers can still
+        // protect playback, but no unverified candidate is ever inserted.
+        try {
+          const inspected = await inspectSourcePage(sourcePageUrl);
+          const existingUrls = new Set(rows.map(row => row.stream_url));
+          const candidates = inspected.sources
+            .filter(source => !existingUrls.has(source.url))
+            .slice(0, 30);
+          const probed = await Promise.all(candidates.map(async source => ({
+            source,
+            healthy: await probePlaybackUrl({ id: "", stream_url: source.url }),
+          })));
+          const valid = probed.filter(item => item.healthy);
+          if (valid.length) {
+            const inserts = valid.map((item, index) => ({
+              [foreignKey]: contentId,
+              source_page_url: sourcePageUrl,
+              server_name: item.source.name || ("السيرفر الجديد " + (index + 1)),
+              stream_url: item.source.url,
+              sort_order: rows.length + index,
+              is_active: true,
+            }));
+            const { data: saved, error: insertError } = await db.from("playback_servers")
+              .insert(inserts)
+              .select("id,server_name,stream_url,source_page_url,user_agent,referer,origin,cookie,sort_order");
+            if (insertError) throw insertError;
+            if (!saved || saved.length !== inserts.length) throw new Error("لم يتم التحقق من حفظ كل السيرفرات البديلة");
+            addedServers = saved as PlaybackServerRow[];
+          }
+        } catch {
+          // Do not delete anything when source inspection or candidate saving fails.
+        }
+      }
+
+      const healthyExisting = checked.filter(item => item.healthy).map(item => item.row);
+      const replacements = [...healthyExisting, ...addedServers];
+      const staleIds = failedManaged
+        .filter(failed => replacements.some(replacement =>
+          replacement.id !== failed.id && replacement.stream_url !== failed.stream_url))
+        .map(server => server.id);
+
+      if (staleIds.length) {
+        const staleUrls = new Set(failedManaged.filter(server => staleIds.includes(server.id)).map(server => server.stream_url));
+        const replacement = replacements
+          .filter(server => !staleUrls.has(server.stream_url))
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
+        if (replacement && staleUrls.has(String(content.stream_url || ""))) {
+          const { error: contentUpdateError } = await db.from(table).update({
+            stream_url: replacement.stream_url,
+            source_page_checked_at: new Date().toISOString(),
+            source_page_last_error: null,
+          }).eq("id", contentId);
+          if (contentUpdateError) throw contentUpdateError;
+        }
+
+        // Read back active replacements before deleting only failed managed IDs.
+        const { data: verified, error: verifyError } = await db.from("playback_servers")
+          .select("id,stream_url,source_page_url")
+          .eq(foreignKey, contentId).eq("is_active", true);
+        if (verifyError) throw verifyError;
+        const verifiedIds = new Set((verified || []).map((row: any) => row.id));
+        if (!replacements.some(server => verifiedIds.has(server.id))) {
+          throw new Error("لم يتم التحقق من وجود سيرفر بديل محفوظ");
+        }
+
+        const { data: deleted, error: deleteError } = await db.from("playback_servers")
+          .delete().in("id", staleIds).eq("source_page_url", sourcePageUrl).select("id");
+        if (deleteError) throw deleteError;
+        if ((deleted || []).length !== staleIds.length) {
+          throw new Error("لم يكتمل حذف السيرفرات المعطّلة");
+        }
+      }
+
+      const { data: finalServers, error: finalReadError } = await db.from("playback_servers")
+        .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url")
+        .eq(foreignKey, contentId).eq("is_active", true)
+        .order("sort_order", { ascending: true });
+      if (finalReadError) throw finalReadError;
+
+      return json({
+        success: true,
+        checkedServers: checked.length,
+        failedServers: checked.filter(item => !item.healthy).length,
+        addedServers: addedServers.length,
+        removedOldServers: staleIds.length,
+        servers: finalServers || [],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "تعذر فحص سيرفرات التشغيل";
+      return json({ success: false, refreshed: false, error: message, servers: [] }, 502);
+    }
   }
 
   try {
