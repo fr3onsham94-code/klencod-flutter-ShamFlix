@@ -4774,7 +4774,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       final removedIds = (payload['removedFailedServerIds'] is List)
           ? (payload['removedFailedServerIds'] as List).map((id) => id.toString()).toSet()
           : <String>{};
-      _failedManagedServerIds.removeAll(removedIds);
+      _failedManagedServerIds.removeAll(failedServerIds.toSet());
       if (removedIds.isNotEmpty) {
         _message('تم حذف ${removedIds.length} سيرفر معطّل بعد التأكد من بديل شغّال');
       }
