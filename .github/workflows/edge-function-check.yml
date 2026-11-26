@@ -1,6 +1,9 @@
 name: Check playback refresh Edge Function
 
 on:
+  push:
+    branches:
+      - fix/cleanup-stale-managed-playback-links
   pull_request:
     branches:
       - main
