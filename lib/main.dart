@@ -4447,7 +4447,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       final response = await request.close().timeout(const Duration(seconds: 8));
       if (response.statusCode < 200 || response.statusCode >= 300 ||
           response.contentLength > 2 * 1024 * 1024) return;
+      final baseUri = response.redirects.isNotEmpty ? response.redirects.last.location : uri;
       final body = await response.transform(utf8.decoder).join();
+      if (body.length > 2 * 1024 * 1024) return;
       final variants = <_HlsQualityVariant>[];
       Map<String, String>? pending;
       for (final rawLine in body.split(RegExp(r'\r?\n'))) {
@@ -4458,8 +4460,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           continue;
         }
         if (pending == null || line.startsWith('#')) continue;
-        final variantUri = uri.resolve(line);
+        var variantUri = baseUri.resolve(line);
         if (!{'http', 'https'}.contains(variantUri.scheme)) { pending = null; continue; }
+        if (variantUri.host == baseUri.host && !variantUri.hasQuery && baseUri.hasQuery) {
+          variantUri = variantUri.replace(queryParameters: baseUri.queryParameters);
+        }
         final resolution = pending['RESOLUTION'] ?? '';
         final height = int.tryParse(resolution.split('x').last);
         final bandwidth = int.tryParse(pending['AVERAGE-BANDWIDTH'] ?? pending['BANDWIDTH'] ?? '');
@@ -4658,10 +4663,15 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     try {
       final servers = await SupabaseService.getPlaybackServers(contentType: 'episode', contentId: id);
       if (!mounted) return;
-      final url = servers.isNotEmpty ? valueOf(servers.first['stream_url']) : valueOf(episode['stream_url']);
+      final playableServers = servers.where((server) =>
+        StreamSourceDetector.isDirectMediaUrl(valueOf(server['stream_url']).trim())).toList();
+      final orderedServers = playableServers.isNotEmpty ? playableServers : servers;
+      final url = orderedServers.isNotEmpty
+          ? valueOf(orderedServers.first['stream_url'])
+          : valueOf(episode['stream_url']);
       if (url.isEmpty) { setState(() { opening = false; controlsVisible = true; }); return; }
       await Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(
-        url: url, title: title, servers: servers, progressKey: 'episode-$id',
+        url: url, title: title, servers: orderedServers, progressKey: 'episode-$id',
         contentType: 'episode', contentId: id,
         episodeQueue: widget.episodeQueue, episodeIndex: targetIndex,
       )));
