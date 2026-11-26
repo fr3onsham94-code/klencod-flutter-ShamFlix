@@ -309,7 +309,7 @@ Deno.serve(async (req: Request) => {
       if (!saved || saved.length !== inserts.length) throw new Error("لم يتم التحقق من حفظ كل السيرفرات البديلة");
 
       const { data: managedServers, error: finalReadError } = await db.from("playback_servers")
-        .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url")
+        .select("*")
         .eq(foreignKey, contentId).eq("source_page_url", sourcePageUrl).eq("is_active", true)
         .order("sort_order", { ascending: true });
       if (finalReadError) throw finalReadError;
@@ -403,7 +403,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const { data: finalServers, error: finalReadError } = await db.from("playback_servers")
-        .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url")
+        .select("*")
         .eq(foreignKey, contentId).eq("is_active", true)
         .order("sort_order", { ascending: true });
       if (finalReadError) throw finalReadError;
