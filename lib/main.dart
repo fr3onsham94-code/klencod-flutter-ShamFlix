@@ -4533,20 +4533,34 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       try {
         final response = await Supabase.instance.client.functions.invoke(
           'refresh-playback-link',
-          body: {'contentType': widget.contentType, 'contentId': widget.contentId},
+          body: {
+            'contentType': widget.contentType,
+            'contentId': widget.contentId,
+            'mode': 'refresh_candidates',
+          },
         );
         final payload = response.data;
         final rawServers = payload is Map ? payload['servers'] : null;
+        final rawNewServers = payload is Map ? payload['newServers'] : null;
         final refreshed = rawServers is List
             ? rawServers.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
             : <Map<String, dynamic>>[];
-        if (payload is Map && payload['success'] == true && refreshed.isNotEmpty) {
+        final newServers = rawNewServers is List
+            ? rawNewServers.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
+            : <Map<String, dynamic>>[];
+        if (payload is Map && payload['success'] == true &&
+            refreshed.isNotEmpty && newServers.isNotEmpty) {
           final manualServers = _runtimeServers
               .where((server) => valueOf(server['source_page_url']).trim().isEmpty)
               .toList();
           _runtimeServers = [...manualServers, ...refreshed];
           _failedServers.clear();
-          for (int index = manualServers.length; index < _runtimeServers.length; index++) {
+          final newServerIds = newServers
+              .map((server) => valueOf(server['id']).trim())
+              .where((id) => id.isNotEmpty)
+              .toSet();
+          for (int index = 0; index < _runtimeServers.length; index++) {
+            if (!newServerIds.contains(valueOf(_runtimeServers[index]['id']).trim())) continue;
             final nextUrl = valueOf(_runtimeServers[index]['stream_url']).trim();
             if (nextUrl.isEmpty) continue;
             if (!StreamSourceDetector.isDirectMediaUrl(nextUrl)) {
@@ -4577,6 +4591,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               _failoverInProgress = false;
               _message('تم تحديث رابط المشاهدة وتشغيل المحتوى بنجاح');
               _showControls();
+              unawaited(_runPlaybackServerHealthCheck());
               return;
             } catch (_) {
               _failedServers.add(index);
