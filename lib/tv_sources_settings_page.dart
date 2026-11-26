@@ -225,6 +225,10 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     final nameController = TextEditingController(text: source['name']?.toString() ?? '');
     final urlController = TextEditingController(text: source['playlist_url']?.toString() ?? '');
     var adapter = _websiteAdapterOf(source);
+    final existingUri = Uri.tryParse(source['playlist_url']?.toString() ?? '');
+    if (adapter == 'auto' && existingUri != null && _isAloulaSourceUrl(existingUri)) {
+      adapter = 'aloula';
+    }
     var packageId = _websitePackageOf(source);
     if (!_channelPackages.any((p) => p['id'].toString() == packageId)) packageId = null;
     final saved = await showDialog<bool>(
@@ -243,8 +247,8 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
             DropdownButtonFormField<String>(
               value: adapter, decoration: const InputDecoration(labelText: 'طريقة الاستخراج'),
               items: const [
-                DropdownMenuItem(value: 'auto', child: Text('استخراج تلقائي')),
-                DropdownMenuItem(value: 'aloula', child: Text('Aloula')),
+                DropdownMenuItem(value: 'auto', child: Text('صفحة قناة عامة')),
+                DropdownMenuItem(value: 'aloula', child: Text('كتالوج Aloula – قنوات الهيئة')),
               ],
               onChanged: (value) => setDialogState(() {
                 adapter = value ?? 'auto';
@@ -759,8 +763,8 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                 DropdownButtonFormField<String>(
                                   value: _websiteAdapter, decoration: InputDecoration(labelText: 'طريقة الاستخراج', labelStyle: TextStyle(color: muted)),
                                   items: const [
-                                    DropdownMenuItem(value: 'auto', child: Text('استخراج تلقائي للمواقع العامة')),
-                                    DropdownMenuItem(value: 'aloula', child: Text('Aloula – القنوات السعودية')),
+                                    DropdownMenuItem(value: 'auto', child: Text('صفحة قناة عامة – استخراج تلقائي')),
+                                    DropdownMenuItem(value: 'aloula', child: Text('كتالوج Aloula – القنوات السعودية')),
                                   ],
                                   onChanged: _saving ? null : (v) => setState(() {
                                     final next = v ?? 'auto';
