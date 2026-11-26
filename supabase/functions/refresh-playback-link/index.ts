@@ -190,7 +190,12 @@ async function probePlaybackUrl(server: PlaybackServerRow): Promise<boolean> {
         if ([301, 302, 303, 307, 308].includes(response.status)) {
           const location = response.headers.get("location");
           if (!location || redirect === 4) return false;
-          url = validateUrl(new URL(location, url).toString());
+          const nextUrl = validateUrl(new URL(location, url).toString());
+          if (nextUrl.hostname !== url.hostname) {
+            // Never forward a source-specific cookie to a different CDN host.
+            delete headers["Cookie"];
+          }
+          url = nextUrl;
           continue;
         }
         if (response.status >= 200 && response.status < 300) {
@@ -305,7 +310,8 @@ Deno.serve(async (req: Request) => {
             addedServers = saved as PlaybackServerRow[];
           }
         } catch {
-          // Do not delete anything when source inspection or candidate saving fails.
+          // No unverified candidate is added; a separately verified existing
+          // server can still serve as the replacement for a failed managed row.
         }
       }
 
