@@ -169,11 +169,25 @@ Deno.serve(async (req: Request) => {
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body" }, 400); }
+  const action = String(body.action || "refresh");
   const contentType = String(body.contentType || "");
   const contentId = String(body.contentId || "");
-  if (!["movie", "episode"].includes(contentType) ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(contentId)) {
-    return json({ error: "Invalid content reference" }, 400);
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const failedServerIds = Array.isArray(body.failedServerIds)
+    ? body.failedServerIds.map((id: unknown) => String(id))
+    : [];
+  const replacementServerId = String(body.replacementServerId || "");
+  if (!["refresh", "refresh_failed_servers"].includes(action) ||
+      !["movie", "episode"].includes(contentType) ||
+      !uuidPattern.test(contentId)) {
+    return json({ error: "Invalid content reference or action" }, 400);
+  }
+  if (action === "refresh_failed_servers" &&
+      (!failedServerIds.length || failedServerIds.length > 30 ||
+       failedServerIds.some((id: string) => !uuidPattern.test(id)) ||
+       !uuidPattern.test(replacementServerId) ||
+       failedServerIds.includes(replacementServerId))) {
+    return json({ error: "Invalid failed or replacement server reference" }, 400);
   }
 
   const db = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -197,7 +211,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: oldManaged, error: oldError } = await db.from("playback_servers")
-      .select("id,stream_url").eq(foreignKey, contentId).eq("source_page_url", sourcePageUrl);
+      .select("id,stream_url,source_page_url").eq(foreignKey, contentId).eq("source_page_url", sourcePageUrl);
     if (oldError) throw oldError;
 
     const oldUrls = new Set((oldManaged || []).map((row: any) => String(row.stream_url || "")));
@@ -232,7 +246,24 @@ Deno.serve(async (req: Request) => {
       if (error) throw error;
     }
 
-    const primaryUrl = sources[0].url;
+    let primaryUrl = sources[0].url;
+    let replacementServer: { id: string; stream_url: string } | null = null;
+    if (action === "refresh_failed_servers") {
+      const { data: replacement, error: replacementError } = await db.from("playback_servers")
+        .select("id,stream_url")
+        .eq(foreignKey, contentId)
+        .eq("id", replacementServerId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (replacementError) throw replacementError;
+      if (!replacement || failedServerIds.includes(String(replacement.id))) {
+        throw new Error("لم يتم التحقق من وجود سيرفر بديل فعّال");
+      }
+      replacementServer = { id: String(replacement.id), stream_url: String(replacement.stream_url || "") };
+      if (!replacementServer.stream_url) throw new Error("رابط السيرفر البديل فارغ");
+      primaryUrl = replacementServer.stream_url;
+    }
+
     const { error: contentUpdateError } = await db.from(table).update({
       stream_url: primaryUrl,
       source_page_checked_at: new Date().toISOString(),
@@ -247,8 +278,49 @@ Deno.serve(async (req: Request) => {
     if (serverReadError) throw serverReadError;
     if (!verifiedServers?.length) throw new Error("لم يتم حفظ أي رابط مشاهدة صالح");
 
-    // Delete only stale rows owned by this exact source page, and only after
-    // the replacement links and the content's primary URL were saved/read back.
+    if (action === "refresh_failed_servers") {
+      // Only delete IDs reported as failed by the player, and only when a
+      // different active server for this same content has actually started.
+      const failedRows = (oldManaged || []).filter((row: any) =>
+        failedServerIds.includes(String(row.id)) &&
+        String(row.stream_url || "") !== replacementServer!.stream_url
+      );
+      const failedIdsToDelete = failedRows.map((row: any) => String(row.id));
+      let removedFailedServerIds: string[] = [];
+      if (failedIdsToDelete.length) {
+        const { data: deletedRows, error: deleteError } = await db.from("playback_servers")
+          .delete()
+          .eq(foreignKey, contentId)
+          .eq("source_page_url", sourcePageUrl)
+          .in("id", failedIdsToDelete)
+          .select("id");
+        if (deleteError) throw deleteError;
+        removedFailedServerIds = (deletedRows || []).map((row: any) => String(row.id));
+        if (removedFailedServerIds.length !== failedIdsToDelete.length) {
+          throw new Error("لم يكتمل حذف السيرفرات المعطّلة");
+        }
+      }
+
+      // Return all active rows (including manual ones) so the player and admin
+      // remain in sync with the database after the targeted cleanup.
+      const { data: finalServers, error: finalReadError } = await db.from("playback_servers")
+        .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url")
+        .eq(foreignKey, contentId).eq("is_active", true)
+        .order("sort_order", { ascending: true });
+      if (finalReadError) throw finalReadError;
+      if (!finalServers?.length) throw new Error("لم يتبق أي رابط مشاهدة فعال بعد التحديث");
+
+      return json({
+        success: true,
+        refreshed: true,
+        changed: sources.some(source => !oldUrls.has(source.url)) || removedFailedServerIds.length > 0,
+        removedFailedServers: removedFailedServerIds.length,
+        removedFailedServerIds,
+        servers: finalServers,
+      });
+    }
+
+    // Legacy full refresh: delete only stale rows owned by this exact source page.
     const staleIds = (oldManaged || [])
       .filter((row: any) => !sourceUrls.has(String(row.stream_url || "")))
       .map((row: any) => row.id);
