@@ -159,36 +159,55 @@ function parseMetadata(html: string, page: URL, fallbackTitle: string, fallbackP
     release_year:year,rating:Number.isFinite(rating) && rating > 0 ? rating : null,
     category:category || fallbackCategory || null,director:director || null,cast:cast || null};
 }
+
+function isDirectMediaUrl(url: URL): boolean {
+  return /\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mpd)(?:$)/i.test(url.pathname);
+}
+function isGenericPageUrl(url: URL): boolean {
+  return url.pathname === "/" ||
+    /\.(?:jpe?g|png|gif|webp|svg|css|js|pdf|zip|woff2?|ico)$/i.test(url.pathname) ||
+    /\/(?:movies?|films?|series|shows?|episodes?|episode|seasons?|profile|favorite|favorites|contactus|recent|category|categories|tag|genre|login|register|search|about)(?:\/|$)/i.test(url.pathname);
+}
+function isPlayerEmbedUrl(raw: string, page: URL): boolean {
+  try {
+    const url = validateUrl(new URL(raw, page).toString());
+    if (isDirectMediaUrl(url) || isGenericPageUrl(url)) return isDirectMediaUrl(url);
+    const playerPath = /\/(?:embed|player|video|stream|e|d|v)\/(?:[^/]+)(?:\/|$)/i.test(url.pathname) ||
+      /\/(?:embed|player)\.php$/i.test(url.pathname);
+    if (!playerPath) return false;
+    if (url.hostname === page.hostname && !/\/(?:embed|player|video|stream)\//i.test(url.pathname)) return false;
+    if (/(?:facebook\.com|fbcdn\.net|instagram\.com|twitter\.com|x\.com|tiktok\.com|pinterest\.com)$/i.test(url.hostname)) return false;
+    return true;
+  } catch { return false; }
+}
+
 function extractSources(html: string, page: URL) {
   const found = new Map<string,{url:string;name:string}>();
-  const add = (raw: string | undefined, name: string) => {
+  const add = (raw: string | undefined, name: string, tag: "embed" | "media") => {
     if (!raw) return;
     try {
-      let value = raw.replace(/&amp;/g,"&").replace(/\\\//g,"/").replace(/\\u0026/g,"&").trim();
-      if (value.startsWith("//")) value = page.protocol + value;
+      const value = raw.replace(/&amp;/g,"&").replace(/\\\//g,"/").replace(/\\u0026/g,"&").trim();
       const url = validateUrl(new URL(value,page).toString());
+      if (tag === "media" ? !isDirectMediaUrl(url) : !isPlayerEmbedUrl(url.toString(),page)) return;
       found.set(url.toString(),{url:url.toString(),name});
     } catch {}
   };
-
-  // Match the manual importer: accept only actual player elements and media files.
-  for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)) {
-    const a = attrs(m[0]);
-    const raw = a.src || a["data-src"] || a["data-lazy-src"] || a["data-url"] ||
-      a["data-embed"] || a["data-video"] || a["data-href"] || a["data-file"] || a.data;
-    if (raw) add(raw,"مشغل الفيلم");
+  for (const match of html.matchAll(/<(?:iframe|frame|embed)\b[^>]*>/gi)) {
+    const a = attrs(match[0]);
+    for (const key of ["src","data-src","data-lazy-src","data-url","data-embed","data-video","data-href","data-file"]) {
+      add(a[key],"مشغل الفيلم","embed");
+    }
   }
-
-  // Some Akwam player pages place the media URL inside inline scripts.
-  const normalizedHtml = html.replace(/\\\//g,"/").replace(/\\u0026/g,"&");
-  const directMedia = /https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd)(?:\?[^\s"'<>]*)?/gi;
-  for (const m of normalizedHtml.matchAll(directMedia)) {
-    add(m[0],"رابط تشغيل مباشر");
-    if (found.size >= 60) break;
+  for (const match of html.matchAll(/<(?:video|source)\b[^>]*>/gi)) {
+    const a = attrs(match[0]);
+    for (const key of ["src","data-src","data-lazy-src","data-url","data-file"]) add(a[key],"رابط فيديو مباشر","media");
   }
-
+  const normalized = html.replace(/\\\//g,"/").replace(/\\u0026/g,"&").replace(/&amp;/g,"&");
+  const directMedia = /https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mpd)(?:\?[^\s"'<>]*)?/gi;
+  for (const match of normalized.matchAll(directMedia)) add(match[0],"رابط تشغيل مباشر","media");
   return [...found.values()].slice(0,60);
 }
+
 function findPublicWatchUrls(html: string, page: URL, allowedHost: string): string[] {
   const normalized = html.replaceAll("\\/", "/").replaceAll("\\u0026", "&").replaceAll("&amp;", "&");
   const candidates = new Set<string>();
