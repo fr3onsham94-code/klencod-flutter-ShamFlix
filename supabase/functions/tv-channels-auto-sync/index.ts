@@ -437,44 +437,45 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
   }
 
   const entries = await Promise.all(liveChannels.map(async (channel: any, position: number) => {
-    let streamUrl = typeof channel?.streams?.hls === "string" ? channel.streams.hls : "";
-    if (!streamUrl) {
-      const channelId = channel?.id ?? channel?.channel_id;
-      if (channelId == null || String(channelId).trim().length === 0) return null;
-      const playerUrl = new URL(
-        "https://aloula.faulio.com/api/v1.1/channels/" + encodeURIComponent(String(channelId)) + "/player",
-      );
-      await validatePublicPlaylistUrl(playerUrl);
-      const playerResponse = await fetch(playerUrl, { headers, signal: AbortSignal.timeout(20000) });
-      if (!playerResponse.ok) return null;
-      const playerData = await playerResponse.json();
-      streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls
-        : typeof playerData?.data?.streams?.hls === "string" ? playerData.data.streams.hls : "";
-    }
-    const safeUrl = safeStreamUrl(streamUrl);
-    if (!safeUrl) return null;
     try {
+      let streamUrl = typeof channel?.streams?.hls === "string" ? channel.streams.hls : "";
+      if (!streamUrl) {
+        const channelId = channel?.id ?? channel?.channel_id;
+        if (channelId == null || String(channelId).trim().length === 0) return null;
+        const playerUrl = new URL(
+          "https://aloula.faulio.com/api/v1.1/channels/" + encodeURIComponent(String(channelId)) + "/player",
+        );
+        await validatePublicPlaylistUrl(playerUrl);
+        const playerResponse = await fetch(playerUrl, { headers, signal: AbortSignal.timeout(20000) });
+        if (!playerResponse.ok) return null;
+        const playerData = await playerResponse.json();
+        streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls
+          : typeof playerData?.data?.streams?.hls === "string" ? playerData.data.streams.hls : "";
+      }
+      const safeUrl = safeStreamUrl(streamUrl);
+      if (!safeUrl) return null;
       await validatePublicPlaylistUrl(new URL(safeUrl));
+      const title = clean(channel.title || channel.name || source.name).slice(0, 100);
+      if (!title) return null;
+      return {
+        sourceId: source.id,
+        sourceName: source.name,
+        key: canonicalKey("", title, source.id),
+        name: title,
+        nameEn: title,
+        tvgId: String(channel.id || ""),
+        logo: "",
+        category: categoryOf("قنوات سعودية", title),
+        url: safeUrl,
+        position,
+        tvgLanguage: "Arabic",
+        tvgCountry: "sa",
+        groupTitle: "قنوات سعودية",
+      };
     } catch {
+      // A single unavailable channel must not fail the entire Aloula catalogue.
       return null;
     }
-    const title = clean(channel.title || channel.name || source.name).slice(0, 100);
-    if (!title) return null;
-    return {
-      sourceId: source.id,
-      sourceName: source.name,
-      key: canonicalKey("", title, source.id),
-      name: title,
-      nameEn: title,
-      tvgId: String(channel.id || ""),
-      logo: "",
-      category: categoryOf("قنوات سعودية", title),
-      url: safeUrl,
-      position,
-      tvgLanguage: "Arabic",
-      tvgCountry: "sa",
-      groupTitle: "قنوات سعودية",
-    };
   }));
   const supportedEntries = entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
   if (!supportedEntries.length) {
@@ -822,7 +823,7 @@ async function syncChannels(db: any) {
       // User-added Xtream and M3U sources are imported in every language.
       entries: x.source.isBuiltin ? x.entries.filter(isArabicOrTurkishChannel) : x.entries,
     }));
-  const websitePlaybackHeaders = new Map<string, { user_agent: string; referer: string; origin: string }>();
+  const websitePlaybackHeaders = new Map<string, { user_agent?: string; referer: string; origin: string }>();
   for (const source of sources) {
     if (source.sourceType !== "website") continue;
     if (source.websiteAdapter === "aloula") {
@@ -835,7 +836,6 @@ async function syncChannels(db: any) {
       try {
         const pageUrl = new URL(source.url);
         websitePlaybackHeaders.set(source.id, {
-          user_agent: "Mozilla/5.0 (compatible; ShamFlix-TV/1.0)",
           referer: source.url,
           origin: pageUrl.origin,
         });
