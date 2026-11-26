@@ -4285,7 +4285,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   @override
   void initState() {
     super.initState();
-    _runtimeServers = _runtimeServers.map((server) => Map<String, dynamic>.from(server)).toList();
+    _runtimeServers = widget.servers.map((server) => Map<String, dynamic>.from(server)).toList();
     currentServerIndex = _runtimeServers.isEmpty
         ? 0
         : widget.initialServerIndex.clamp(0, _runtimeServers.length - 1).toInt();
