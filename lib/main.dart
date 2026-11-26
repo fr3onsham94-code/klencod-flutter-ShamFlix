@@ -4643,6 +4643,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     // Embed pages are opened in WebView and may depend on browser cookies/referer.
     // Probe only direct media URLs here; embed links are never removed by this HTTP check.
     if (!StreamSourceDetector.isDirectMediaUrl(rawUrl)) return false;
+    final rawHeaders = server['request_headers'];
+    if (valueOf(server['cookie']).trim().isNotEmpty ||
+        valueOf(server['referer']).trim().isNotEmpty ||
+        valueOf(server['origin']).trim().isNotEmpty ||
+        (rawHeaders is Map && rawHeaders.isNotEmpty)) {
+      return false;
+    }
     final host = uri?.host.toLowerCase() ?? '';
     if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') ||
         host.isEmpty || uri.userInfo.isNotEmpty ||
