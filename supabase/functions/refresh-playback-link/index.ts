@@ -205,7 +205,8 @@ async function probePlaybackUrl(server: PlaybackServerRow): Promise<boolean> {
       return false;
     };
 
-    if (await request("HEAD")) return true;
+    // GET with a small byte range is more representative than HEAD:
+    // many media hosts allow HEAD even when the actual stream is unavailable.
     return await request("GET");
   } catch {
     return false;
@@ -282,7 +283,7 @@ Deno.serve(async (req: Request) => {
             .slice(0, 30);
           const probed = await Promise.all(candidates.map(async source => ({
             source,
-            healthy: await probePlaybackUrl({ id: "", stream_url: source.url }),
+            healthy: await probePlaybackUrl({ id: "", stream_url: source.url, referer: sourcePageUrl }),
           })));
           const valid = probed.filter(item => item.healthy);
           if (valid.length) {
