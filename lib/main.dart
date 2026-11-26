@@ -4244,7 +4244,8 @@ class _HlsQualityVariant {
   final String url;
   final int? height;
   final int? bandwidth;
-  const _HlsQualityVariant({required this.label, required this.url, this.height, this.bandwidth});
+  final int? serverIndex;
+  const _HlsQualityVariant({required this.label, required this.url, this.height, this.bandwidth, this.serverIndex});
 }
 
 class ShamFlixPlayerPage extends StatefulWidget {
@@ -4309,6 +4310,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   String? _qualityMasterUrl;
   List<_HlsQualityVariant> _qualityVariants = const [];
   _HlsQualityVariant? _selectedQualityVariant;
+  int _qualityMasterServerIndex = -1;
   bool _qualityLoading = false;
 
   String get _settingsPrefix =>
@@ -4396,6 +4398,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     try {
       _currentPlaybackUrl = url ?? widget.url;
       _qualityMasterUrl = _currentPlaybackUrl;
+      _qualityMasterServerIndex = currentServerIndex;
       _selectedQualityVariant = null;
       _qualityVariants = const [];
       await player.open(Media(_currentPlaybackUrl!, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
@@ -4480,11 +4483,43 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
             variant.bandwidth != null ? 'b:${variant.bandwidth}' : variant.url;
         unique.putIfAbsent(key, () => variant);
       }
-      final result = unique.values.toList()..sort((a, b) {
+      final result = unique.values.toList();
+      final currentSourceId = currentServerIndex >= 0 && currentServerIndex < _runtimeServers.length
+          ? valueOf(_runtimeServers[currentServerIndex]['source_id']).trim()
+          : '';
+      if (currentSourceId.isNotEmpty) {
+        final sourceVariants = <_HlsQualityVariant>[];
+        for (int index = 0; index < _runtimeServers.length; index++) {
+          final server = _runtimeServers[index];
+          if (valueOf(server['source_id']).trim() != currentSourceId) continue;
+          final streamUrl = valueOf(server['stream_url']).trim();
+          if (!StreamSourceDetector.isDirectMediaUrl(streamUrl)) continue;
+          final rawName = valueOf(server['server_name']).toUpperCase();
+          final match = RegExp(r'\b(8K|4K|FHD|HD|SD|[0-9]{3,4}P)\b').firstMatch(rawName);
+          if (match == null) continue;
+          final rawQuality = match.group(1)!;
+          final height = rawQuality == '8K' ? 4320 :
+              rawQuality == '4K' ? 2160 :
+              rawQuality == 'FHD' ? 1080 :
+              rawQuality == 'HD' ? 720 :
+              rawQuality == 'SD' ? 480 :
+              int.tryParse(rawQuality.replaceAll('P', ''));
+          if (height == null) continue;
+          final label = '${height}p';
+          if (!result.any((item) => item.label == label)) {
+            sourceVariants.add(_HlsQualityVariant(
+              label: label, url: streamUrl, height: height, serverIndex: index,
+            ));
+          }
+        }
+        final distinctServerQualities = sourceVariants.map((item) => item.label).toSet();
+        if (distinctServerQualities.length > 1) result.addAll(sourceVariants);
+      }
+      final ordered = result..sort((a, b) {
         final byHeight = (b.height ?? 0).compareTo(a.height ?? 0);
         return byHeight != 0 ? byHeight : (b.bandwidth ?? 0).compareTo(a.bandwidth ?? 0);
       });
-      if (mounted) setState(() => _qualityVariants = result);
+      if (mounted) setState(() => _qualityVariants = ordered);
     } catch (_) {
       if (mounted) setState(() => _qualityVariants = const []);
     } finally {
@@ -4495,17 +4530,28 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _changeHlsQuality(_HlsQualityVariant? variant) async {
     final targetUrl = variant?.url ?? _qualityMasterUrl ?? widget.url;
+    final targetServerIndex = variant?.serverIndex ?? _qualityMasterServerIndex;
     final previousUrl = _currentPlaybackUrl ?? widget.url;
+    final previousServerIndex = currentServerIndex;
     final previousVariant = _selectedQualityVariant;
-    if (targetUrl == previousUrl) {
+    if (targetUrl == previousUrl && targetServerIndex == previousServerIndex) {
       if (mounted) setState(() => _selectedQualityVariant = variant);
       return;
     }
     final savedPosition = player.state.position;
-    if (mounted) setState(() { opening = true; _selectedQualityVariant = variant; });
+    if (mounted) setState(() {
+      opening = true;
+      _selectedQualityVariant = variant;
+      if (targetServerIndex >= 0 && targetServerIndex < _runtimeServers.length) {
+        currentServerIndex = targetServerIndex;
+      }
+    });
     try {
-      await player.open(Media(targetUrl, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
+      final headers = targetServerIndex >= 0 && targetServerIndex < _runtimeServers.length
+          ? _headersForServer(targetServerIndex) : _headersForServer();
+      await player.open(Media(targetUrl, httpHeaders: headers)).timeout(const Duration(seconds: 20));
       _currentPlaybackUrl = targetUrl;
+      await _savePreferredServer();
       for (int attempt = 0; attempt < 8 && player.state.duration <= Duration.zero; attempt++) {
         await Future.delayed(const Duration(milliseconds: 250));
       }
@@ -4516,9 +4562,14 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       _showControls();
     } catch (_) {
       _currentPlaybackUrl = previousUrl;
-      if (mounted) setState(() => _selectedQualityVariant = previousVariant);
+      if (mounted) setState(() {
+        currentServerIndex = previousServerIndex;
+        _selectedQualityVariant = previousVariant;
+      });
       try {
-        await player.open(Media(previousUrl, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
+        final headers = previousServerIndex >= 0 && previousServerIndex < _runtimeServers.length
+            ? _headersForServer(previousServerIndex) : _headersForServer();
+        await player.open(Media(previousUrl, httpHeaders: headers)).timeout(const Duration(seconds: 20));
       } catch (_) {}
       if (mounted) setState(() => opening = false);
       _message('تعذر تغيير جودة البث');
@@ -4711,6 +4762,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         try {
           _currentPlaybackUrl = nextUrl;
           _qualityMasterUrl = nextUrl;
+          _qualityMasterServerIndex = next;
           _selectedQualityVariant = null;
           _qualityVariants = const [];
           await player.open(Media(nextUrl, httpHeaders: _headersForServer(next))).timeout(const Duration(seconds: 20));
@@ -4792,6 +4844,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
             try {
               _currentPlaybackUrl = nextUrl;
               _qualityMasterUrl = nextUrl;
+              _qualityMasterServerIndex = index;
               _selectedQualityVariant = null;
               _qualityVariants = const [];
               await player.open(
