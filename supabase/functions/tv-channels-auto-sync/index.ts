@@ -367,7 +367,7 @@ async function fetchGenericWebsite(source: PlaylistSource) {
       try {
         const resolved = new URL(raw, finalUrl);
         const safe = safeStreamUrl(resolved.toString());
-        if (safe) candidates.add(safe);
+        if (safe && /\.(?:m3u8|mpd)$/i.test(new URL(safe).pathname)) candidates.add(safe);
       } catch {}
       if (candidates.size >= 40) break;
     }
