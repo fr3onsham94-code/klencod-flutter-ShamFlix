@@ -4619,6 +4619,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       return;
     }
 
+    // Let the stream begin before treating the selected server as a confirmed fallback.
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted || !player.state.playing) return;
+
     final currentServer = _runtimeServers.isNotEmpty &&
             currentServerIndex >= 0 &&
             currentServerIndex < _runtimeServers.length
