@@ -403,33 +403,86 @@ async function fetchGenericWebsite(source: PlaylistSource) {
   return entries;
 }
 
+function aloulaRows(payload: any): any[] {
+  const candidates = [
+    payload,
+    payload?.channels,
+    payload?.data,
+    payload?.data?.channels,
+    payload?.data?.items,
+    payload?.result?.channels,
+    payload?.result?.items,
+    payload?.items,
+  ];
+  return candidates.find(Array.isArray) || [];
+}
+
+function aloulaIsLive(channel: any): boolean {
+  const values = [channel?.has_live, channel?.is_live, channel?.isLive, channel?.live, channel?.live_status];
+  const live = values.some(value => [true, 1, "1", "true", "yes", "live", "on", "active"].includes(
+    typeof value === "string" ? value.trim().toLowerCase() : value,
+  ));
+  return live || Boolean(aloulaStreamUrl(channel));
+}
+
+function aloulaStreamUrl(value: any): string {
+  const candidates = [
+    value?.streams?.hls,
+    value?.data?.streams?.hls,
+    value?.stream?.hls,
+    value?.hls,
+    value?.hls_url,
+    value?.hlsUrl,
+    value?.stream_url,
+    value?.streamUrl,
+    value?.playlist_url,
+    value?.url,
+    value?.data?.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const safe = safeStreamUrl(candidate);
+    if (safe && /\.m3u8(?:$|[?])/i.test(new URL(safe).pathname + new URL(safe).search)) return safe;
+  }
+  return "";
+}
+
+function aloulaSlugMatches(channel: any, requestedSlug: string): boolean {
+  if (!requestedSlug) return true;
+  const candidates = [channel?.slug, channel?.url, channel?.path, channel?.permalink, channel?.link]
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  return candidates.some(value => {
+    if (value.replace(/\/+$/, "") === requestedSlug) return true;
+    try {
+      const url = new URL(value, "https://aloula.sba.sa/");
+      return url.pathname.split("/").filter(Boolean).pop() === requestedSlug;
+    } catch { return false; }
+  });
+}
+
 async function fetchAloulaWebsite(source: PlaylistSource) {
   const pageUrl = new URL(source.url);
-  if (!/(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(pageUrl.hostname) ||
+  if (!/(^|\\.)aloula\\.(?:sba\\.sa|sa)$/i.test(pageUrl.hostname) ||
       !(pageUrl.pathname === "/" || pageUrl.pathname === "" ||
-        /^\/(?:[a-z]{2}\/)?live\/[^/]+\/?$/i.test(pageUrl.pathname))) {
+        /^\\/(?:[a-z]{2}\\/)?live\\/[^/]+\\/?$/i.test(pageUrl.pathname))) {
     throw new Error("Aloula adapter accepts the official website root or official live-channel pages");
   }
-  const slugMatch = pageUrl.pathname.match(/\/(?:[a-z]{2}\/)?live\/([^/]+)\/?$/i);
+  const slugMatch = pageUrl.pathname.match(/\\/(?:[a-z]{2}\\/)?live\\/([^/]+)\\/?$/i);
   const requestedSlug = slugMatch?.[1] || "";
   const apiUrl = new URL("https://aloula.faulio.com/api/v1/channels");
   await validatePublicPlaylistUrl(apiUrl);
   const headers = {
-    "User-Agent": "Mozilla/5.0 (compatible; ShamFlix-TV-Sync/1.0)",
-    "Origin": "https://www.aloula.sa",
-    "Referer": "https://www.aloula.sa/",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+    "Origin": "https://aloula.sba.sa",
+    "Referer": "https://aloula.sba.sa/",
     "Accept": "application/json",
   };
   const channelResponse = await fetch(apiUrl, { headers, signal: AbortSignal.timeout(20000) });
   if (!channelResponse.ok) throw new Error("Aloula channel API returned HTTP " + channelResponse.status);
   const channelPayload = await channelResponse.json();
-  const channelRows = Array.isArray(channelPayload) ? channelPayload
-    : Array.isArray(channelPayload?.channels) ? channelPayload.channels
-    : Array.isArray(channelPayload?.data) ? channelPayload.data : [];
+  const channelRows = aloulaRows(channelPayload);
   if (!channelRows.length) throw new Error("Aloula channel API response format changed");
-  const liveChannels = channelRows.filter((row: any) =>
-    [true, 1, "1", "true"].includes(row?.has_live) &&
-    (!requestedSlug || String(row?.url || "").replace(/\/+$/, "") === requestedSlug));
+  const liveChannels = channelRows.filter((row: any) => aloulaIsLive(row) && aloulaSlugMatches(row, requestedSlug));
   if (!liveChannels.length) {
     throw new Error(requestedSlug
       ? "Aloula channel was not found or is not currently live"
@@ -438,7 +491,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
 
   const entries = await Promise.all(liveChannels.map(async (channel: any, position: number) => {
     try {
-      let streamUrl = typeof channel?.streams?.hls === "string" ? channel.streams.hls : "";
+      let streamUrl = aloulaStreamUrl(channel);
       if (!streamUrl) {
         const channelId = channel?.id ?? channel?.channel_id;
         if (channelId == null || String(channelId).trim().length === 0) return null;
@@ -448,14 +501,12 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         await validatePublicPlaylistUrl(playerUrl);
         const playerResponse = await fetch(playerUrl, { headers, signal: AbortSignal.timeout(20000) });
         if (!playerResponse.ok) return null;
-        const playerData = await playerResponse.json();
-        streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls
-          : typeof playerData?.data?.streams?.hls === "string" ? playerData.data.streams.hls : "";
+        streamUrl = aloulaStreamUrl(await playerResponse.json());
       }
       const safeUrl = safeStreamUrl(streamUrl);
-      if (!safeUrl) return null;
+      if (!safeUrl || !/\\.m3u8(?:$|[?])/i.test(new URL(safeUrl).pathname + new URL(safeUrl).search)) return null;
       await validatePublicPlaylistUrl(new URL(safeUrl));
-      const title = clean(channel.title || channel.name || source.name).slice(0, 100);
+      const title = clean(channel.title || channel.name || channel.label || source.name).slice(0, 100);
       if (!title) return null;
       return {
         sourceId: source.id,
@@ -463,8 +514,8 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         key: canonicalKey("", title, source.id),
         name: title,
         nameEn: title,
-        tvgId: String(channel.id || ""),
-        logo: "",
+        tvgId: String(channel.id || channel.channel_id || ""),
+        logo: String(channel.logo || channel.logo_url || channel.image || ""),
         category: categoryOf("قنوات سعودية", title),
         url: safeUrl,
         position,
@@ -473,7 +524,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         groupTitle: "قنوات سعودية",
       };
     } catch {
-      // A single unavailable channel must not fail the entire Aloula catalogue.
+      // One unavailable public channel must not prevent the rest of the catalogue.
       return null;
     }
   }));
@@ -829,8 +880,8 @@ async function syncChannels(db: any) {
     if (source.websiteAdapter === "aloula") {
       websitePlaybackHeaders.set(source.id, {
         user_agent: "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
-        referer: "https://www.aloula.sa/",
-        origin: "https://www.aloula.sa",
+        referer: "https://aloula.sba.sa/",
+        origin: "https://aloula.sba.sa",
       });
     } else {
       try {
