@@ -3140,7 +3140,8 @@ class _DetailsPageState extends State<DetailsPage> {
         return;
       }
       await _startPlayback(fallback, title,
-        progressKey: '$contentType-$contentId');
+        progressKey: '$contentType-$contentId',
+        contentType: contentType, contentId: contentId);
       return;
     }
 
@@ -3152,13 +3153,15 @@ class _DetailsPageState extends State<DetailsPage> {
         title,
         servers: servers,
         progressKey: '$contentType-$contentId',
+        contentType: contentType, contentId: contentId,
       );
       return;
     }
 
     if (servers.length == 1) {
       await _startPlayback(servers.first['stream_url'].toString(), title,
-        progressKey: '$contentType-$contentId');
+        progressKey: '$contentType-$contentId',
+        contentType: contentType, contentId: contentId);
       return;
     }
 
@@ -3216,6 +3219,7 @@ class _DetailsPageState extends State<DetailsPage> {
       servers: servers,
       initialServerIndex: selectedIndex < 0 ? 0 : selectedIndex,
       progressKey: '$contentType-$contentId',
+      contentType: contentType, contentId: contentId,
     );
   }
 
@@ -3246,6 +3250,8 @@ class _DetailsPageState extends State<DetailsPage> {
     List<Map<String, dynamic>> servers = const [],
     int initialServerIndex = 0,
     String progressKey = '',
+    String contentType = '',
+    String contentId = '',
   }) async {
     final prefsForNetwork = await SharedPreferences.getInstance();
     if (prefsForNetwork.getBool('shamflix_wifi_only') == true) {
@@ -3265,7 +3271,22 @@ class _DetailsPageState extends State<DetailsPage> {
       return;
     }
     if (!_isDirectMediaUrl(url)) {
-      if (uri.scheme == 'http' || uri.scheme == 'https') {
+      if ((contentType == 'movie' || contentType == 'episode') &&
+          (uri.scheme == 'http' || uri.scheme == 'https')) {
+        // Keep source identity in the internal player so a failed embed/page
+        // link can trigger the same managed-source refresh flow.
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => ShamFlixPlayerPage(
+            url: url,
+            title: title,
+            servers: servers,
+            initialServerIndex: initialServerIndex,
+            progressKey: progressKey,
+            contentType: contentType,
+            contentId: contentId,
+          ),
+        ));
+      } else if (uri.scheme == 'http' || uri.scheme == 'https') {
         Navigator.push(context, MaterialPageRoute(
           builder: (_) => ShamFlixWebPage(url: url, title: title, playerOnly: true),
         ));
@@ -3287,6 +3308,8 @@ class _DetailsPageState extends State<DetailsPage> {
           servers: servers,
           initialServerIndex: initialServerIndex,
           progressKey: progressKey,
+          contentType: contentType,
+          contentId: contentId,
         ),
       ));
       return;
@@ -3323,6 +3346,8 @@ class _DetailsPageState extends State<DetailsPage> {
                 servers: servers,
                 initialServerIndex: initialServerIndex,
                 progressKey: progressKey,
+                contentType: contentType,
+                contentId: contentId,
               ),
             )),
           ),
@@ -4206,6 +4231,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
   final List<Map<String, dynamic>> servers;
   final int initialServerIndex;
   final String progressKey;
+  final String contentType;
+  final String contentId;
   final bool embedded;
   final VoidCallback? onClose;
   final Map<String, String> headers;
@@ -4217,6 +4244,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
     this.servers = const [],
     this.initialServerIndex = 0,
     this.progressKey = '',
+    this.contentType = '',
+    this.contentId = '',
     this.embedded = false,
     this.onClose,
     this.headers = const {},
@@ -4241,8 +4270,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   bool controlsLocked = false;
   int videoFitMode = 0; // 0: احتواء، 1: ملء مع قص، 2: تمديد.
   late int currentServerIndex;
+  late List<Map<String, dynamic>> _runtimeServers;
   final Set<int> _failedServers = <int>{};
   bool _failoverInProgress = false;
+  bool _sourceRefreshAttempted = false;
   String? _embedFallbackUrl;
   String? _embedFallbackName;
   StreamSubscription<Duration>? _positionSubscription;
@@ -4254,12 +4285,18 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   @override
   void initState() {
     super.initState();
-    currentServerIndex = widget.servers.isEmpty
+    _runtimeServers = widget.servers.map((server) => Map<String, dynamic>.from(server)).toList();
+    currentServerIndex = _runtimeServers.isEmpty
         ? 0
-        : widget.initialServerIndex.clamp(0, widget.servers.length - 1).toInt();
+        : widget.initialServerIndex.clamp(0, _runtimeServers.length - 1).toInt();
     player = Player();
     controller = VideoController(player);
     landscape = !widget.embedded;
+    if ((widget.contentType == 'movie' || widget.contentType == 'episode') &&
+        !StreamSourceDetector.isDirectMediaUrl(widget.url)) {
+      _embedFallbackUrl = widget.url;
+      _embedFallbackName = 'صفحة المصدر الأصلية';
+    }
     if (!widget.embedded) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       _setLandscape(true);
@@ -4289,8 +4326,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   Map<String, String> _headersForServer([int? serverIndex]) {
     final result = serverIndex == null ? Map<String, String>.from(widget.headers) : <String, String>{};
     final index = serverIndex ?? currentServerIndex;
-    if (index >= 0 && index < widget.servers.length) {
-      final server = widget.servers[index];
+    if (index >= 0 && index < _runtimeServers.length) {
+      final server = _runtimeServers[index];
       final rawHeaders = server['request_headers'];
       if (rawHeaders is Map) {
         for (final entry in rawHeaders.entries) {
@@ -4346,8 +4383,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Future<void> _savePreferredServer() async {
-    if (widget.servers.isEmpty || currentServerIndex < 0 || currentServerIndex >= widget.servers.length || widget.progressKey.isEmpty) return;
-    final server = widget.servers[currentServerIndex];
+    if (_runtimeServers.isEmpty || currentServerIndex < 0 || currentServerIndex >= _runtimeServers.length || widget.progressKey.isEmpty) return;
+    final server = _runtimeServers[currentServerIndex];
     final key = valueOf(server['id'] ?? server['server_name']);
     if (key.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
@@ -4432,13 +4469,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _handlePlaybackError(String message) async {
     if (!mounted || _failoverInProgress) return;
-    if (widget.servers.length > 1) {
+    if (_runtimeServers.length > 1) {
       _failoverInProgress = true;
       _failedServers.add(currentServerIndex);
-      for (int offset = 1; offset <= widget.servers.length; offset++) {
-        final next = (currentServerIndex + offset) % widget.servers.length;
+      for (int offset = 1; offset <= _runtimeServers.length; offset++) {
+        final next = (currentServerIndex + offset) % _runtimeServers.length;
         if (_failedServers.contains(next)) continue;
-        final nextUrl = valueOf(widget.servers[next]['stream_url']).trim();
+        final nextUrl = valueOf(_runtimeServers[next]['stream_url']).trim();
         if (nextUrl.isEmpty) {
           _failedServers.add(next);
           continue;
@@ -4447,7 +4484,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         if (!StreamSourceDetector.isDirectMediaUrl(nextUrl)) {
           _failedServers.add(next);
           _embedFallbackUrl ??= nextUrl;
-          _embedFallbackName ??= valueOf(widget.servers[next]['server_name'], 'سيرفر مضمّن');
+          _embedFallbackName ??= valueOf(_runtimeServers[next]['server_name'], 'سيرفر مضمّن');
           continue;
         }
         if (mounted) {
@@ -4476,6 +4513,80 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       }
       _failoverInProgress = false;
     }
+    if (!mounted) return;
+
+    // Refresh only source-managed links after all saved servers fail.
+    if (!_sourceRefreshAttempted &&
+        (widget.contentType == 'movie' || widget.contentType == 'episode') &&
+        widget.contentId.isNotEmpty) {
+      _sourceRefreshAttempted = true;
+      _failoverInProgress = true;
+      setState(() {
+        opening = true;
+        error = null;
+        controlsVisible = true;
+      });
+      _message('تعذر تشغيل الروابط الحالية، جارٍ جلب أحدث روابط من المصدر…');
+      try {
+        final response = await Supabase.instance.client.functions.invoke(
+          'refresh-playback-link',
+          body: {'contentType': widget.contentType, 'contentId': widget.contentId},
+        );
+        final payload = response.data;
+        final rawServers = payload is Map ? payload['servers'] : null;
+        final refreshed = rawServers is List
+            ? rawServers.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
+            : <Map<String, dynamic>>[];
+        if (payload is Map && payload['success'] == true && refreshed.isNotEmpty) {
+          final manualServers = _runtimeServers
+              .where((server) => valueOf(server['source_page_url']).trim().isEmpty)
+              .toList();
+          _runtimeServers = [...manualServers, ...refreshed];
+          _failedServers.clear();
+          for (int index = manualServers.length; index < _runtimeServers.length; index++) {
+            final nextUrl = valueOf(_runtimeServers[index]['stream_url']).trim();
+            if (nextUrl.isEmpty) continue;
+            if (!StreamSourceDetector.isDirectMediaUrl(nextUrl)) {
+              _embedFallbackUrl ??= nextUrl;
+              _embedFallbackName ??= valueOf(_runtimeServers[index]['server_name'], 'سيرفر محدث');
+              continue;
+            }
+            if (mounted) {
+              setState(() {
+                currentServerIndex = index;
+                opening = true;
+                error = null;
+              });
+            }
+            try {
+              await player.open(
+                Media(nextUrl, httpHeaders: _headersForServer(index)),
+              ).timeout(const Duration(seconds: 20));
+              if (!mounted) return;
+              final playbackPrefs = await SharedPreferences.getInstance();
+              await _restoreTrackPreferences(playbackPrefs);
+              await _savePreferredServer();
+              _failedServers.clear();
+              setState(() {
+                opening = false;
+                error = null;
+              });
+              _failoverInProgress = false;
+              _message('تم تحديث رابط المشاهدة وتشغيل المحتوى بنجاح');
+              _showControls();
+              return;
+            } catch (_) {
+              _failedServers.add(index);
+            }
+          }
+        }
+      } catch (_) {
+        // Preserve existing links when refresh is unavailable or fails.
+      } finally {
+        _failoverInProgress = false;
+      }
+    }
+
     if (!mounted) return;
     setState(() {
       error = 'تعذر تشغيل الفيديو. جرّب سيرفراً آخر.\n$message';
@@ -4853,9 +4964,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Future<void> _switchServer(int index) async {
-    if (index < 0 || index >= widget.servers.length ||
+    if (index < 0 || index >= _runtimeServers.length ||
         index == currentServerIndex) return;
-    final url = valueOf(widget.servers[index]['stream_url']).trim();
+    final url = valueOf(_runtimeServers[index]['stream_url']).trim();
     if (url.isEmpty) {
       _message('رابط هذا السيرفر غير متوفر');
       return;
@@ -4881,7 +4992,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Widget _serverButton(int index) {
     final active = index == currentServerIndex;
-    final name = valueOf(widget.servers[index]['server_name'], 'السيرفر ${index + 1}');
+    final name = valueOf(_runtimeServers[index]['server_name'], 'السيرفر ${index + 1}');
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Tooltip(
@@ -5121,7 +5232,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                             ],
                                           ),
                                         ),
-                                        if (widget.servers.length > 1)
+                                        if (_runtimeServers.length > 1)
                                           SizedBox(
                                             width: 150,
                                             height: 42,
@@ -5130,7 +5241,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  for (int index = 0; index < widget.servers.length; index++)
+                                                  for (int index = 0; index < _runtimeServers.length; index++)
                                                     _serverButton(index),
                                                 ],
                                               ),
