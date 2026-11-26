@@ -4239,6 +4239,14 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
 
 
 
+class _HlsQualityVariant {
+  final String label;
+  final String url;
+  final int? height;
+  final int? bandwidth;
+  const _HlsQualityVariant({required this.label, required this.url, this.height, this.bandwidth});
+}
+
 class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
   final String title;
@@ -4297,6 +4305,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   String? _embedFallbackName;
   StreamSubscription<Duration>? _positionSubscription;
   int _lastSavedSecond = -1;
+  String? _currentPlaybackUrl;
+  String? _qualityMasterUrl;
+  List<_HlsQualityVariant> _qualityVariants = const [];
+  _HlsQualityVariant? _selectedQualityVariant;
+  bool _qualityLoading = false;
 
   String get _settingsPrefix =>
       ShamFlixLocalStore.playerPrefix(widget.progressKey, widget.title);
@@ -4381,7 +4394,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _open([String? url]) async {
     try {
-      await player.open(Media(url ?? widget.url, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
+      _currentPlaybackUrl = url ?? widget.url;
+      _qualityMasterUrl = _currentPlaybackUrl;
+      _selectedQualityVariant = null;
+      _qualityVariants = const [];
+      await player.open(Media(_currentPlaybackUrl!, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
       if (!mounted) return;
       await _savePreferredServer();
       final prefs = await SharedPreferences.getInstance();
@@ -4396,10 +4413,152 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       await _restorePlaybackPosition(prefs);
       await _restoreTrackPreferences(prefs);
       if (mounted) _showControls();
+      unawaited(_loadHlsQualityVariants());
       unawaited(_runPlaybackServerHealthCheck());
     } catch (e) {
       _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
     }
+  }
+
+  Map<String, String> _parseHlsAttributes(String raw) {
+    final result = <String, String>{};
+    final pattern = RegExp(r'([A-Z0-9-]+)=("(?:[^"]*)"|[^,]*)', caseSensitive: false);
+    for (final match in pattern.allMatches(raw)) {
+      result[match.group(1)!.toUpperCase()] = (match.group(2) ?? '').replaceAll('"', '').trim();
+    }
+    return result;
+  }
+
+  Future<void> _loadHlsQualityVariants() async {
+    final masterUrl = _qualityMasterUrl ?? _currentPlaybackUrl ?? widget.url;
+    final uri = Uri.tryParse(masterUrl);
+    if (uri == null || !uri.hasScheme || !uri.path.toLowerCase().endsWith('.m3u8')) {
+      if (mounted) setState(() => _qualityVariants = const []);
+      return;
+    }
+    if (mounted) setState(() => _qualityLoading = true);
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final request = await client.getUrl(uri).timeout(const Duration(seconds: 8));
+      for (final entry in _headersForServer().entries) {
+        request.headers.set(entry.key, entry.value);
+      }
+      request.headers.set(HttpHeaders.acceptHeader, 'application/vnd.apple.mpegurl,application/x-mpegURL,*/*');
+      final response = await request.close().timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300 ||
+          response.contentLength > 2 * 1024 * 1024) return;
+      final body = await response.transform(utf8.decoder).join();
+      final variants = <_HlsQualityVariant>[];
+      Map<String, String>? pending;
+      for (final rawLine in body.split(RegExp(r'\r?\n'))) {
+        final line = rawLine.trim();
+        if (line.isEmpty) continue;
+        if (line.startsWith('#EXT-X-STREAM-INF:')) {
+          pending = _parseHlsAttributes(line.substring('#EXT-X-STREAM-INF:'.length));
+          continue;
+        }
+        if (pending == null || line.startsWith('#')) continue;
+        final variantUri = uri.resolve(line);
+        if (!{'http', 'https'}.contains(variantUri.scheme)) { pending = null; continue; }
+        final resolution = pending['RESOLUTION'] ?? '';
+        final height = int.tryParse(resolution.split('x').last);
+        final bandwidth = int.tryParse(pending['AVERAGE-BANDWIDTH'] ?? pending['BANDWIDTH'] ?? '');
+        final label = height != null ? '${height}p' :
+            bandwidth != null ? '${(bandwidth / 1000000).toStringAsFixed(1)} Mbps' :
+            'جودة ${variants.length + 1}';
+        variants.add(_HlsQualityVariant(label: label, url: variantUri.toString(), height: height, bandwidth: bandwidth));
+        pending = null;
+      }
+      final unique = <String, _HlsQualityVariant>{};
+      for (final variant in variants) {
+        final key = variant.height != null ? 'h:${variant.height}' :
+            variant.bandwidth != null ? 'b:${variant.bandwidth}' : variant.url;
+        unique.putIfAbsent(key, () => variant);
+      }
+      final result = unique.values.toList()..sort((a, b) {
+        final byHeight = (b.height ?? 0).compareTo(a.height ?? 0);
+        return byHeight != 0 ? byHeight : (b.bandwidth ?? 0).compareTo(a.bandwidth ?? 0);
+      });
+      if (mounted) setState(() => _qualityVariants = result);
+    } catch (_) {
+      if (mounted) setState(() => _qualityVariants = const []);
+    } finally {
+      client.close(force: true);
+      if (mounted) setState(() => _qualityLoading = false);
+    }
+  }
+
+  Future<void> _changeHlsQuality(_HlsQualityVariant? variant) async {
+    final targetUrl = variant?.url ?? _qualityMasterUrl ?? widget.url;
+    final previousUrl = _currentPlaybackUrl ?? widget.url;
+    final previousVariant = _selectedQualityVariant;
+    if (targetUrl == previousUrl) {
+      if (mounted) setState(() => _selectedQualityVariant = variant);
+      return;
+    }
+    final savedPosition = player.state.position;
+    if (mounted) setState(() { opening = true; _selectedQualityVariant = variant; });
+    try {
+      await player.open(Media(targetUrl, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
+      _currentPlaybackUrl = targetUrl;
+      for (int attempt = 0; attempt < 8 && player.state.duration <= Duration.zero; attempt++) {
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+      final duration = player.state.duration;
+      if (savedPosition > Duration.zero && duration > Duration.zero &&
+          savedPosition < duration - const Duration(seconds: 3)) await player.seek(savedPosition);
+      if (mounted) setState(() => opening = false);
+      _showControls();
+    } catch (_) {
+      _currentPlaybackUrl = previousUrl;
+      if (mounted) setState(() => _selectedQualityVariant = previousVariant);
+      try {
+        await player.open(Media(previousUrl, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
+      } catch (_) {}
+      if (mounted) setState(() => opening = false);
+      _message('تعذر تغيير جودة البث');
+    }
+  }
+
+  Future<void> _pickHlsQuality() async {
+    if (_qualityVariants.length < 2 || _qualityLoading) return;
+    final selected = await showModalBottomSheet<_HlsQualityVariant?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: const Color(0xF2171717), borderRadius: BorderRadius.circular(14)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text('جودة البث', style: TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+              ListTile(
+                dense: true,
+                title: const Text('تلقائي', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
+                trailing: _selectedQualityVariant == null ? Icon(Icons.check_circle, color: gold) : null,
+                onTap: () => Navigator.pop(sheetContext, null),
+              ),
+              for (final quality in _qualityVariants)
+                ListTile(
+                  dense: true,
+                  title: Text(quality.label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                  trailing: _selectedQualityVariant?.url == quality.url ? Icon(Icons.check_circle, color: gold) : null,
+                  onTap: () => Navigator.pop(sheetContext, quality),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null) {
+      if (_selectedQualityVariant != null) await _changeHlsQuality(null);
+      return;
+    }
+    await _changeHlsQuality(selected);
   }
 
   Future<void> _savePreferredServer() async {
@@ -4539,6 +4698,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           });
         }
         try {
+          _currentPlaybackUrl = nextUrl;
+          _qualityMasterUrl = nextUrl;
+          _selectedQualityVariant = null;
+          _qualityVariants = const [];
           await player.open(Media(nextUrl, httpHeaders: _headersForServer(next))).timeout(const Duration(seconds: 20));
           if (!mounted) return;
           final playbackPrefs = await SharedPreferences.getInstance();
@@ -4548,6 +4711,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           setState(() => opening = false);
           _failoverInProgress = false;
           _showControls();
+          unawaited(_loadHlsQualityVariants());
           unawaited(_runPlaybackServerHealthCheck());
           return;
         } catch (_) {
@@ -4615,6 +4779,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               });
             }
             try {
+              _currentPlaybackUrl = nextUrl;
+              _qualityMasterUrl = nextUrl;
+              _selectedQualityVariant = null;
+              _qualityVariants = const [];
               await player.open(
                 Media(nextUrl, httpHeaders: _headersForServer(index)),
               ).timeout(const Duration(seconds: 20));
@@ -4629,6 +4797,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               });
               _failoverInProgress = false;
               _showControls();
+              unawaited(_loadHlsQualityVariants());
               unawaited(_runPlaybackServerHealthCheck());
               return;
             } catch (_) {
@@ -5492,6 +5661,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                           );
                                                         },
                                                       ),
+                                                      if (_qualityVariants.length > 1)
+                                                        _toolButton(
+                                                          icon: Icons.hd_rounded,
+                                                          label: _selectedQualityVariant?.label ?? appText('تلقائي', 'Auto', 'Otomatik'),
+                                                          onTap: _pickHlsQuality,
+                                                        ),
                                                       _toolButton(
                                                         icon: Icons.audiotrack_rounded,
                                                         label: appText('الصوت', 'Audio', 'Ses'),
