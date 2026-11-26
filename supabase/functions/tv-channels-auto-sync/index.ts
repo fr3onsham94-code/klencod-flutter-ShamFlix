@@ -88,6 +88,13 @@ function websiteSourceConfig(sourceKey: string): { adapter: string; targetPackag
   return { adapter, targetPackageId };
 }
 
+function sourceIdForRow(row: any): string {
+  const sourceKey = row.source_key ? String(row.source_key) : "";
+  const parts = sourceKey.split(":");
+  if (parts.length === 4 && parts[0] === "website") return "website:" + parts[3];
+  return sourceKey || (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id);
+}
+
 // Website adapter settings are encoded in source_key to remain backward-compatible
 // with existing installations; the source UUID remains the final component.
 function safeStreamUrl(raw: string): string | null {
@@ -743,7 +750,7 @@ async function syncChannels(db: any) {
         }
       }
       return {
-        id: row.source_key ? String(row.source_key) : (sourceType === "xtream" ? "xtream:" : "custom:") + String(row.id),
+        id: sourceIdForRow(row),
         dbId: String(row.id),
         name: clean(row.name).slice(0, 80),
         url: sourceUrl,
@@ -759,8 +766,7 @@ async function syncChannels(db: any) {
   // A channel remains visible if another active source still provides a stream for it.
   const pausedSourceIds = (allSourceRows || [])
     .filter((row: any) => row.is_active !== true || (row.is_builtin === true && !builtinEnabled))
-    .map((row: any) => row.source_key ? String(row.source_key) :
-      (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id));
+    .map((row: any) => sourceIdForRow(row));
   if (pausedSourceIds.length) {
     const { error } = await db.from("playback_servers")
       .update({ is_active: false })
