@@ -4274,7 +4274,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   final Set<int> _failedServers = <int>{};
   bool _failoverInProgress = false;
   bool _sourceRefreshAttempted = false;
-  bool _serverHealthCheckAttempted = false;
+  final Set<String> _serverHealthCheckedKeys = <String>{};
   String? _embedFallbackUrl;
   String? _embedFallbackName;
   StreamSubscription<Duration>? _positionSubscription;
@@ -4599,12 +4599,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Future<void> _runPlaybackServerHealthCheck() async {
-    if (_serverHealthCheckAttempted ||
-        (widget.contentType != 'movie' && widget.contentType != 'episode') ||
+    if ((widget.contentType != 'movie' && widget.contentType != 'episode') ||
         widget.contentId.isEmpty) {
       return;
     }
-    _serverHealthCheckAttempted = true;
 
     final currentServer = _runtimeServers.isNotEmpty &&
             currentServerIndex >= 0 &&
@@ -4612,6 +4610,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         ? _runtimeServers[currentServerIndex]
         : <String, dynamic>{};
     final currentServerId = valueOf(currentServer['id']).trim();
+    final checkKey = currentServerId.isNotEmpty
+        ? currentServerId
+        : valueOf(currentServer['stream_url']).trim();
+    if (checkKey.isEmpty || !_serverHealthCheckedKeys.add(checkKey)) return;
 
     try {
       final response = await Supabase.instance.client.functions.invoke(
