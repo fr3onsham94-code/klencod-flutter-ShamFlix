@@ -890,6 +890,9 @@ async function syncChannels(db: any) {
         source_position: stream.position,
         source_failures: 0,
         is_active: true,
+        ...(stream.sourceId.startsWith("website:aloula:")
+          ? { referer: "https://www.aloula.sa/", origin: "https://www.aloula.sa" }
+          : {}),
         sort_order: stream.sourceId === "iptv-org" ? 0 : stream.sourceId === "nexus" ? 1 : 2,
       });
     }
