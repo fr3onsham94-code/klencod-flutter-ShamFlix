@@ -172,6 +172,17 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       (uri.path == '/' || uri.path.isEmpty ||
           (uri.pathSegments.length == 2 && uri.pathSegments[0] == 'live' && uri.pathSegments[1].isNotEmpty));
 
+  Future<void> _addSaudiChannelsSource() async {
+    if (_saving) return;
+    setState(() {
+      _websiteNameController.text = 'قنوات سعودية';
+      _websiteUrlController.text = 'https://aloula.sba.sa/';
+      _websiteAdapter = 'aloula';
+      _websitePackageId = null;
+    });
+    await _addWebsiteSource();
+  }
+
   Future<void> _addWebsiteSource() async {
     if (_saving) return;
     if (_limitReached) { _message('وصلت للحد الأقصى: 20 مصدراً إضافياً', error: true); return; }
@@ -752,11 +763,18 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                 ] else Padding(padding: const EdgeInsets.only(top: 8),
                                   child: Text('لا توجد باقات قنوات مخصصة حالياً؛ ستُصنّف قنوات Aloula تلقائياً ضمن السعودية.', style: TextStyle(color: muted, fontSize: 11))),
                                 const SizedBox(height: 14),
-                                FilledButton.icon(onPressed: _saving ? null : _addWebsiteSource,
+                                FilledButton.icon(
+                                  onPressed: _saving ? null : _addSaudiChannelsSource,
                                   style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+                                  icon: const Icon(Icons.live_tv),
+                                  label: Text(_saving ? 'جارٍ الإضافة...' : 'إضافة قنوات سعودية'),
+                                ),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: _saving ? null : _addWebsiteSource,
                                   icon: const Icon(Icons.public),
-                                  label: Text(_saving ? 'جارٍ الإضافة...' :
-                                    _websiteAdapter == 'aloula' ? 'إضافة قنوات سعودية' : 'إضافة موقع البث')),
+                                  label: const Text('إضافة موقع بث آخر'),
+                                ),
                                 const SizedBox(height: 22),
                                 Text('إضافة Xtream أو ملف اشتراك', style: TextStyle(color: AppTheme.primary, fontSize: 17, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 6),
