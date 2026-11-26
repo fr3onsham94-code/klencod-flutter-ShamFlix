@@ -91,7 +91,19 @@ function websiteSourceConfig(sourceKey: string): { adapter: string; targetPackag
 function sourceIdForRow(row: any): string {
   const sourceKey = row.source_key ? String(row.source_key) : "";
   const parts = sourceKey.split(":");
-  if (parts.length === 4 && parts[0] === "website") return "website:" + parts[1] + ":" + parts[3];
+  if (parts.length === 4 && parts[0] === "website") {
+    let adapter = parts[1] === "aloula" ? "aloula" : "auto";
+    // Keep the canonical source ID stable when an Aloula row was originally
+    // saved with the generic adapter. Otherwise old Aloula servers look orphaned
+    // and the cleanup pass disables them on every sync.
+    if (adapter === "auto") {
+      try {
+        const host = new URL(String(row.playlist_url || "")).hostname;
+        if (/(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(host)) adapter = "aloula";
+      } catch {}
+    }
+    return "website:" + adapter + ":" + parts[3];
+  }
   return sourceKey || (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id);
 }
 
@@ -273,7 +285,9 @@ async function validatePublicPlaylistUrl(url: URL, allowNonStandardPort = false)
 
 async function fetchPlaylist(source: PlaylistSource, db: any) {
   if (source.sourceType === "website") {
-    return source.websiteAdapter === "aloula"
+    const host = new URL(source.url).hostname;
+    const isAloulaHost = /(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(host);
+    return source.websiteAdapter === "aloula" || isAloulaHost
       ? await fetchAloulaWebsite(source)
       : await fetchGenericWebsite(source);
   }
@@ -352,55 +366,161 @@ async function fetchGenericWebsite(source: PlaylistSource) {
   if (/\.(?:m3u8?|mpd)$/i.test(sourceUri.pathname)) {
     throw new Error("This is a playlist URL, not a website page; add it as an M3U source");
   }
-  const { finalUrl, body } = await fetchWebsitePage(source.url);
-  const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
-    body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
-  const pageTitle = titleMatch ? decodeWebsiteText(titleMatch[1]).slice(0, 100) : source.name;
-  const candidates = new Set<string>();
-  const patterns = [
-    /(?:href|src|data-src|data-hls|data-stream)\s*=\s*["']([^"']+)["']/gi,
-    /https?:\/\/[^"'\s<>\\]+/gi,
-  ];
-  for (const pattern of patterns) {
-    for (const match of body.matchAll(pattern)) {
-      const raw = decodeWebsiteText(match[1] ?? match[0]).replace(/[),;\]}]+$/g, "");
-      try {
-        const resolved = new URL(raw, finalUrl);
-        const safe = safeStreamUrl(resolved.toString());
-        if (safe && /\.(?:m3u8|mpd)$/i.test(new URL(safe).pathname)) candidates.add(safe);
-      } catch {}
-      if (candidates.size >= 40) break;
-    }
-    if (candidates.size >= 40) break;
-  }
-  const entries: ReturnType<typeof parseM3u> = [];
-  let position = 0;
-  for (const streamUrl of candidates) {
+
+  const root = await fetchWebsitePage(source.url);
+  const pages: Array<{url: URL; body: string; title: string}> = [];
+  const rootTitleMatch = root.body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
+    root.body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
+  const rootTitle = rootTitleMatch ? decodeWebsiteText(rootTitleMatch[1]).slice(0, 100) : source.name;
+  pages.push({url: root.finalUrl, body: root.body, title: rootTitle || source.name});
+
+  // Crawl a small set of same-host public channel pages linked from the catalogue.
+  // Do not follow login pages, external embeds, or protected player endpoints.
+  const pageCandidates = new Map<string,string>();
+  for (const match of root.body.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)) {
+    const opening = /^<a\b[^>]*>/i.exec(match[0])?.[0];
+    if (!opening) continue;
+    const linkAttrs = parseAttrs(opening);
+    if (!linkAttrs.href) continue;
     try {
-      await validatePublicPlaylistUrl(new URL(streamUrl));
+      const target = new URL(decodeWebsiteText(linkAttrs.href), root.finalUrl);
+      if (target.protocol !== "https:" || target.hostname !== root.finalUrl.hostname ||
+          target.username || target.password) continue;
+      if (!/^\/(?:[a-z]{2}\/)?(?:live|channel|channels|tv|stream)\//i.test(target.pathname)) continue;
+      if (target.pathname.split("/").filter(Boolean).length > 4) continue;
+      target.hash = "";
+      const label = decodeWebsiteText(linkAttrs.title || match[0].replace(/<[^>]*>/g," ")).slice(0,100);
+      if (!pageCandidates.has(target.toString())) pageCandidates.set(target.toString(),label);
+    } catch {}
+    if (pageCandidates.size >= 24) break;
+  }
+
+  for (const [pageUrl,label] of pageCandidates) {
+    try {
+      const page = await fetchWebsitePage(pageUrl);
+      if (page.finalUrl.hostname !== root.finalUrl.hostname) continue;
+      const titleMatch = page.body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
+        page.body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
+      const title = titleMatch ? decodeWebsiteText(titleMatch[1]).slice(0,100) : label;
+      pages.push({url:page.finalUrl,body:page.body,title:title || label || source.name});
     } catch {
-      continue;
+      // A broken channel page must not prevent other public pages from importing.
     }
-    entries.push({
-      sourceId: source.id,
-      sourceName: source.name,
-      key: canonicalKey("", pageTitle, source.id),
-      name: pageTitle,
-      nameEn: pageTitle,
-      tvgId: "",
-      logo: "",
-      category: categoryOf("", pageTitle),
-      url: streamUrl,
-      position: position++,
-      tvgLanguage: "",
-      tvgCountry: "",
-      groupTitle: "",
-    });
+  }
+
+  const entries: ReturnType<typeof parseM3u> = [];
+  const seen = new Set<string>();
+  let position = 0;
+  for (const page of pages) {
+    const normalized = page.body
+      .replaceAll("\\/", "/")
+      .replaceAll("\\u0026", "&")
+      .replaceAll("&amp;", "&")
+      .replaceAll("\\u003a", ":");
+    const candidates = new Set<string>();
+    const patterns = [
+      /(?:href|src|data-src|data-hls|data-stream|data-file)\s*=\s*["']([^"']+)["']/gi,
+      /(?:file|src|source|hls|hlsUrl|hls_url|streamUrl|stream_url|playlist|manifest)\s*[:=]\s*["']([^"']+)["']/gi,
+      /https?:\/\/[^"'\s<>\\]+?\.(?:m3u8|mpd)(?:\?[^"'\s<>]*)?/gi,
+    ];
+    for (let index = 0; index < patterns.length; index++) {
+      for (const match of normalized.matchAll(patterns[index])) {
+        const raw = decodeWebsiteText(match[1] ?? match[0]).replace(/[),;\]}]+$/g, "");
+        try {
+          const resolved = new URL(raw, page.url);
+          const safe = safeStreamUrl(resolved.toString());
+          if (safe && /\.(?:m3u8|mpd)(?:$|[?])/i.test(new URL(safe).pathname + new URL(safe).search)) {
+            candidates.add(safe);
+          }
+        } catch {}
+        if (candidates.size >= 30) break;
+      }
+      if (candidates.size >= 30) break;
+    }
+
+    for (const streamUrl of candidates) {
+      if (seen.has(streamUrl)) continue;
+      try { await validatePublicPlaylistUrl(new URL(streamUrl)); } catch { continue; }
+      seen.add(streamUrl);
+      const title = (page.title || source.name).slice(0,100);
+      entries.push({
+        sourceId: source.id,
+        sourceName: source.name,
+        key: canonicalKey("", title, source.id),
+        name: title,
+        nameEn: title,
+        tvgId: "",
+        logo: "",
+        category: categoryOf("", title),
+        url: streamUrl,
+        position: position++,
+        tvgLanguage: "",
+        tvgCountry: "",
+        groupTitle: "موقع ويب",
+      });
+    }
   }
   if (!entries.length) {
-    throw new Error("Website page contains no supported public direct HLS/DASH stream links");
+    throw new Error("Website catalogue contains no supported public direct HLS/DASH stream links");
   }
-  return entries;
+  return entries.slice(0, MAX_ENTRIES_PER_SOURCE);
+}
+
+function aloulaRows(payload: any): any[] {
+  const candidates = [
+    payload,
+    payload?.channels,
+    payload?.data,
+    payload?.data?.channels,
+    payload?.data?.items,
+    payload?.result?.channels,
+    payload?.result?.items,
+    payload?.items,
+  ];
+  return candidates.find(Array.isArray) || [];
+}
+
+function aloulaStreamUrl(value: any): string {
+  const candidates = [
+    value?.streams?.hls,
+    value?.data?.streams?.hls,
+    value?.stream?.hls,
+    value?.hls,
+    value?.hls_url,
+    value?.hlsUrl,
+    value?.stream_url,
+    value?.streamUrl,
+    value?.playlist_url,
+    value?.url,
+    value?.data?.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const safe = safeStreamUrl(candidate);
+    if (safe && /\.m3u8(?:$|[?])/i.test(new URL(safe).pathname + new URL(safe).search)) return safe;
+  }
+  return "";
+}
+
+function aloulaIsLive(channel: any): boolean {
+  const values = [channel?.has_live, channel?.is_live, channel?.isLive, channel?.live, channel?.live_status];
+  const live = values.some(value => [true, 1, "1", "true", "yes", "live", "on", "active"].includes(
+    typeof value === "string" ? value.trim().toLowerCase() : value,
+  ));
+  return live || Boolean(aloulaStreamUrl(channel));
+}
+
+function aloulaSlugMatches(channel: any, requestedSlug: string): boolean {
+  if (!requestedSlug) return true;
+  const candidates = [channel?.slug, channel?.url, channel?.path, channel?.permalink, channel?.link]
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  return candidates.some(value => {
+    if (value.replace(/\/+$/, "") === requestedSlug) return true;
+    try {
+      const url = new URL(value, "https://aloula.sba.sa/");
+      return url.pathname.split("/").filter(Boolean).pop() === requestedSlug;
+    } catch { return false; }
+  });
 }
 
 async function fetchAloulaWebsite(source: PlaylistSource) {
@@ -415,21 +535,16 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
   const apiUrl = new URL("https://aloula.faulio.com/api/v1/channels");
   await validatePublicPlaylistUrl(apiUrl);
   const headers = {
-    "User-Agent": "Mozilla/5.0 (compatible; ShamFlix-TV-Sync/1.0)",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
     "Origin": "https://www.aloula.sa",
     "Referer": "https://www.aloula.sa/",
     "Accept": "application/json",
   };
   const channelResponse = await fetch(apiUrl, { headers, signal: AbortSignal.timeout(20000) });
   if (!channelResponse.ok) throw new Error("Aloula channel API returned HTTP " + channelResponse.status);
-  const channelPayload = await channelResponse.json();
-  const channelRows = Array.isArray(channelPayload) ? channelPayload
-    : Array.isArray(channelPayload?.channels) ? channelPayload.channels
-    : Array.isArray(channelPayload?.data) ? channelPayload.data : [];
+  const channelRows = aloulaRows(await channelResponse.json());
   if (!channelRows.length) throw new Error("Aloula channel API response format changed");
-  const liveChannels = channelRows.filter((row: any) =>
-    [true, 1, "1", "true"].includes(row?.has_live) &&
-    (!requestedSlug || String(row?.url || "").replace(/\/+$/, "") === requestedSlug));
+  const liveChannels = channelRows.filter((row: any) => aloulaIsLive(row) && aloulaSlugMatches(row, requestedSlug));
   if (!liveChannels.length) {
     throw new Error(requestedSlug
       ? "Aloula channel was not found or is not currently live"
@@ -438,7 +553,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
 
   const entries = await Promise.all(liveChannels.map(async (channel: any, position: number) => {
     try {
-      let streamUrl = typeof channel?.streams?.hls === "string" ? channel.streams.hls : "";
+      let streamUrl = aloulaStreamUrl(channel);
       if (!streamUrl) {
         const channelId = channel?.id ?? channel?.channel_id;
         if (channelId == null || String(channelId).trim().length === 0) return null;
@@ -448,14 +563,12 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         await validatePublicPlaylistUrl(playerUrl);
         const playerResponse = await fetch(playerUrl, { headers, signal: AbortSignal.timeout(20000) });
         if (!playerResponse.ok) return null;
-        const playerData = await playerResponse.json();
-        streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls
-          : typeof playerData?.data?.streams?.hls === "string" ? playerData.data.streams.hls : "";
+        streamUrl = aloulaStreamUrl(await playerResponse.json());
       }
       const safeUrl = safeStreamUrl(streamUrl);
-      if (!safeUrl) return null;
+      if (!safeUrl || !/\.m3u8(?:$|[?])/i.test(new URL(safeUrl).pathname + new URL(safeUrl).search)) return null;
       await validatePublicPlaylistUrl(new URL(safeUrl));
-      const title = clean(channel.title || channel.name || source.name).slice(0, 100);
+      const title = clean(channel.title || channel.name || channel.label || source.name).slice(0, 100);
       if (!title) return null;
       return {
         sourceId: source.id,
@@ -463,8 +576,8 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         key: canonicalKey("", title, source.id),
         name: title,
         nameEn: title,
-        tvgId: String(channel.id || ""),
-        logo: "",
+        tvgId: String(channel.id || channel.channel_id || ""),
+        logo: String(channel.logo || channel.logo_url || channel.image || ""),
         category: categoryOf("قنوات سعودية", title),
         url: safeUrl,
         position,
@@ -473,7 +586,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         groupTitle: "قنوات سعودية",
       };
     } catch {
-      // A single unavailable channel must not fail the entire Aloula catalogue.
+      // One unavailable public channel must not prevent the rest of the catalogue.
       return null;
     }
   }));
@@ -826,9 +939,10 @@ async function syncChannels(db: any) {
   const websitePlaybackHeaders = new Map<string, { user_agent?: string; referer: string; origin: string }>();
   for (const source of sources) {
     if (source.sourceType !== "website") continue;
-    if (source.websiteAdapter === "aloula") {
+    const isAloulaHost = /(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(new URL(source.url).hostname);
+    if (source.websiteAdapter === "aloula" || isAloulaHost) {
       websitePlaybackHeaders.set(source.id, {
-        user_agent: "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+        user_agent: "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
         referer: "https://www.aloula.sa/",
         origin: "https://www.aloula.sa",
       });

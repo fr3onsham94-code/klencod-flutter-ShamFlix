@@ -222,32 +222,56 @@ function findSeriesNext(html:string,base:URL):string|null{
 async function replaceEpisodePageServers(db: any, episodeId: string, pageUrl: string, sources: {url:string;name:string}[]) {
   if (!sources.length) return null;
   const {data:oldServers,error:readError} = await db.from("playback_servers")
-    .select("id,stream_url").eq("episode_id",episodeId).eq("source_page_url",pageUrl);
+    .select("id,stream_url,is_active").eq("episode_id",episodeId).eq("source_page_url",pageUrl);
   if (readError) throw readError;
-  const nextUrls = new Set(sources.map(source => source.url));
-  const oldUrls = new Set((oldServers || []).map((server:any) => server.stream_url));
-  for (const server of oldServers || []) {
-    const matchIndex = sources.findIndex(source => source.url === server.stream_url);
-    const match = matchIndex >= 0 ? sources[matchIndex] : null;
-    const updates:any = {is_active:match !== null};
-    if (match) {
-      updates.sort_order = matchIndex;
-      updates.server_name = match.name || ("السيرفر " + (matchIndex + 1));
+
+  const page = new URL(pageUrl);
+  const userAgent = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36";
+  const referer = pageUrl;
+  const origin = page.origin;
+  const oldByUrl = new Map((oldServers || []).map((server:any) => [String(server.stream_url), server]));
+  const rows: any[] = [];
+
+  // A source page can temporarily expose only part of its servers. Never
+  // deactivate an older saved server just because it was absent in one scan.
+  for (let index = 0; index < sources.length; index++) {
+    const source = sources[index];
+    const existing:any = oldByUrl.get(source.url);
+    if (existing) {
+      const {error:updateError} = await db.from("playback_servers").update({
+        is_active: true,
+        sort_order: index,
+        server_name: source.name || ("السيرفر " + (index + 1)),
+        user_agent: userAgent,
+        referer,
+        origin,
+      }).eq("id",existing.id);
+      if (updateError) throw updateError;
+      continue;
     }
-    const {error:updateError} = await db.from("playback_servers")
-      .update(updates).eq("id",server.id);
-    if (updateError) throw updateError;
+    rows.push({
+      episode_id: episodeId,
+      source_page_url: pageUrl,
+      server_name: source.name || ("السيرفر " + (index + 1)),
+      stream_url: source.url,
+      sort_order: index,
+      is_active: true,
+      user_agent: userAgent,
+      referer,
+      origin,
+    });
   }
-  const rows = sources.filter(source => !oldUrls.has(source.url)).map((source,index) => ({
-    episode_id:episodeId, source_page_url:pageUrl,
-    server_name:source.name || ("السيرفر " + (index + 1)),
-    stream_url:source.url, sort_order:index, is_active:true,
-  }));
+
   if (rows.length) {
     const {error:insertError} = await db.from("playback_servers").insert(rows);
     if (insertError) throw insertError;
   }
-  return sources[0].url;
+
+  const {data:activeServers,error:activeReadError} = await db.from("playback_servers")
+    .select("stream_url").eq("episode_id",episodeId).eq("is_active",true)
+    .order("sort_order",{ascending:true}).limit(1);
+  if (activeReadError) throw activeReadError;
+  return activeServers?.[0]?.stream_url || sources[0]?.url || null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -347,10 +371,13 @@ Deno.serve(async (req: Request) => {
           }).select("id").single();
           if (saveError) throw saveError;
           if (episode.sources.length) {
+            const sourcePage = new URL(episode.sourcePageUrl);
             const rows = episode.sources.map((server,index)=>({
               episode_id:saved.id,source_page_url:episode.sourcePageUrl,
               server_name:server.name||("السيرفر "+(index+1)),
               stream_url:server.url,sort_order:index,is_active:true,
+              user_agent:"Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
+              referer:episode.sourcePageUrl,origin:sourcePage.origin,
             }));
             const {error:serverError} = await db.from("playback_servers").insert(rows);
             if (serverError) throw serverError;
