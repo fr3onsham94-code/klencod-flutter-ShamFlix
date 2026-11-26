@@ -260,7 +260,10 @@ Deno.serve(async (req: Request) => {
   if (contentError) return json({ error: contentError.message }, 500);
   if (!content || content.is_published !== true) return json({ error: "Content not found" }, 404);
   const sourcePageUrl = String(content.source_page_url || "").trim();
-  if (content.source_monitor_enabled !== true || !sourcePageUrl) {
+  // Health checks also cover manual links, even when source monitoring is disabled.
+  // Source monitoring is required only for modes that fetch or refresh managed links.
+  if (body.mode !== "health_check" &&
+      (content.source_monitor_enabled !== true || !sourcePageUrl)) {
     return json({ success: false, refreshed: false, reason: "no_managed_source", servers: [] });
   }
 
@@ -333,8 +336,8 @@ Deno.serve(async (req: Request) => {
   }
 
   // Probe every saved server independently after playback starts.
-  // Only a server that failed the probe is eligible for cleanup; manual and
-  // DRM-configured rows are never deleted by this automatic process.
+  // Failed manual and source-managed rows may be removed only when another
+  // saved server is confirmed healthy. DRM/license-configured rows are protected.
   if (body.mode === "health_check") {
     try {
       const { data: activeServers, error: activeReadError } = await db.from("playback_servers")
@@ -355,21 +358,27 @@ Deno.serve(async (req: Request) => {
         checked.push(...batch);
       }
 
-      const failedManaged = checked
-        .filter(item => !item.healthy &&
-          !item.row.drm_key?.trim() && !item.row.license_url?.trim() &&
-          item.row.source_page_url === sourcePageUrl)
+      // A failed row is eligible when it belongs to this content's managed source
+      // or is a manual link (empty source_page_url). Other source-managed rows,
+      // and all DRM/license-protected rows, are deliberately left untouched.
+      const failedEligible = checked
+        .filter(item => {
+          const rowSource = String(item.row.source_page_url || "").trim();
+          return !item.healthy &&
+            !item.row.drm_key?.trim() && !item.row.license_url?.trim() &&
+            (!rowSource || rowSource === sourcePageUrl);
+        })
         .map(item => item.row);
       const healthyReplacements = checked
         .filter(item => item.healthy)
         .map(item => item.row);
-      const staleIds = failedManaged
+      const staleIds = failedEligible
         .filter(failed => healthyReplacements.some(replacement =>
           replacement.id !== failed.id && replacement.stream_url !== failed.stream_url))
         .map(server => server.id);
 
       if (staleIds.length) {
-        const staleUrls = new Set(failedManaged
+        const staleUrls = new Set(failedEligible
           .filter(server => staleIds.includes(server.id))
           .map(server => server.stream_url));
         const replacement = healthyReplacements
@@ -394,8 +403,11 @@ Deno.serve(async (req: Request) => {
           throw new Error("لم يتم التحقق من وجود سيرفر بديل محفوظ");
         }
 
+        // IDs came from the active rows for this exact content, so scope the
+        // deletion by the movie/episode foreign key rather than source_page_url.
+        // This allows stale manual rows (NULL/empty source_page_url) to be removed too.
         const { data: deleted, error: deleteError } = await db.from("playback_servers")
-          .delete().in("id", staleIds).eq("source_page_url", sourcePageUrl).select("id");
+          .delete().in("id", staleIds).eq(foreignKey, contentId).select("id");
         if (deleteError) throw deleteError;
         if ((deleted || []).length !== staleIds.length) {
           throw new Error("لم يكتمل حذف السيرفرات المعطّلة");
