@@ -41,7 +41,7 @@ function validateUrl(raw: string): URL {
   return url;
 }
 
-function fetchHtml(raw: string, originalHost?: string): Promise<{html:string;url:URL}> {
+async function fetchHtml(raw: string, originalHost?: string): Promise<{html:string;url:URL}> {
   let url = validateUrl(raw);
   const allowedHost = originalHost ?? url.hostname;
   for (let redirect = 0; redirect <= 4; redirect++) {
