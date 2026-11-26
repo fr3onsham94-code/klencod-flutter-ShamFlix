@@ -97,32 +97,55 @@ function extractEpisodeLinks(html: string, base: URL) {
   }
   return [...found.values()].sort((a,b) => a.number-b.number);
 }
+
+function isDirectMediaUrl(url: URL): boolean {
+  return /\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mpd)(?:$)/i.test(url.pathname);
+}
+function isGenericPageUrl(url: URL): boolean {
+  return url.pathname === "/" ||
+    /\.(?:jpe?g|png|gif|webp|svg|css|js|pdf|zip|woff2?|ico)$/i.test(url.pathname) ||
+    /\/(?:movies?|films?|series|shows?|episodes?|episode|seasons?|profile|favorite|favorites|contactus|recent|category|categories|tag|genre|login|register|search|about)(?:\/|$)/i.test(url.pathname);
+}
+function isPlayerEmbedUrl(raw: string, page: URL): boolean {
+  try {
+    const url = validateUrl(new URL(raw, page).toString());
+    if (isDirectMediaUrl(url) || isGenericPageUrl(url)) return isDirectMediaUrl(url);
+    const playerPath = /\/(?:embed|player|video|stream|e|d|v)\/(?:[^/]+)(?:\/|$)/i.test(url.pathname) ||
+      /\/(?:embed|player)\.php$/i.test(url.pathname);
+    if (!playerPath) return false;
+    if (url.hostname === page.hostname && !/\/(?:embed|player|video|stream)\//i.test(url.pathname)) return false;
+    if (/(?:facebook\.com|fbcdn\.net|instagram\.com|twitter\.com|x\.com|tiktok\.com|pinterest\.com)$/i.test(url.hostname)) return false;
+    return true;
+  } catch { return false; }
+}
+
 function extractSources(html: string, base: URL) {
   const found = new Map<string,{url:string;name:string}>();
-  const add = (raw: string | undefined, name: string) => {
-    if(!raw)return;
-    try{
-      let value=raw.replace(/&amp;/g,"&").replace(/\\\//g,"/").replace(/\\u0026/g,"&").trim();
-      if(value.startsWith("//"))value=base.protocol+value;
-      const url=validateUrl(new URL(value,base).toString());
+  const add = (raw: string | undefined, name: string, tag: "embed" | "media") => {
+    if (!raw) return;
+    try {
+      const value = raw.replace(/&amp;/g,"&").replace(/\\\//g,"/").replace(/\\u0026/g,"&").trim();
+      const url = validateUrl(new URL(value,base).toString());
+      if (tag === "media" ? !isDirectMediaUrl(url) : !isPlayerEmbedUrl(url.toString(),base)) return;
       found.set(url.toString(),{url:url.toString(),name});
-    }catch{}
+    } catch {}
   };
-  for(const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)){
-    const a=attrs(m[0]);
-    add(a.src||a["data-src"]||a["data-lazy-src"]||a["data-url"]||a["data-embed"]||a["data-video"]||a["data-href"]||a["data-file"]||a.data,"مشغل الحلقة");
+  for (const match of html.matchAll(/<(?:iframe|frame|embed)\b[^>]*>/gi)) {
+    const a = attrs(match[0]);
+    for (const key of ["src","data-src","data-lazy-src","data-url","data-embed","data-video","data-href","data-file"]) {
+      add(a[key],"مشغل الحلقة","embed");
+    }
   }
-  for(const m of html.matchAll(/(?:src|href|data-src|data-url|data-embed|data-file|file|source|url)\s*[:=]\s*["']([^"']{8,2000})["']/gi)){
-    const raw=m[1];
-    if(/^(https?:)?\/\//i.test(raw)||/\.(?:m3u8|mp4|mpd|webm)(?:[?#]|$)/i.test(raw)||/(?:embed|player|watch)/i.test(raw))add(raw,"مصدر تشغيل الحلقة");
+  for (const match of html.matchAll(/<(?:video|source)\b[^>]*>/gi)) {
+    const a = attrs(match[0]);
+    for (const key of ["src","data-src","data-lazy-src","data-url","data-file"]) add(a[key],"رابط فيديو مباشر","media");
   }
-  for(const m of html.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)){
-    const raw=m[0].replace(/&amp;/g,"&");
-    if(/\.(?:m3u8|mp4|mpd|m4v|mov|webm|avi)(?:[?#]|$)/i.test(raw)||/(?:\/embed\/|\/player\/|\/watch\/)/i.test(raw))add(raw,"رابط تشغيل الحلقة");
-    if(found.size>=60)break;
-  }
+  const normalized = html.replace(/\\\//g,"/").replace(/\\u0026/g,"&").replace(/&amp;/g,"&");
+  const directPattern = /https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mpd)(?:\?[^\s"'<>]*)?/gi;
+  for (const match of normalized.matchAll(directPattern)) add(match[0],"رابط فيديو مباشر","media");
   return [...found.values()].slice(0,60);
 }
+
 async function inspectEpisode(link: {url:string;title:string;number:number}, host: string, fallbackSeason: number) {
   const page = await fetchHtml(link.url, host);
   const title = titleFromHtml(page.html) || link.title || ("الحلقة " + link.number);
@@ -138,7 +161,6 @@ async function inspectEpisode(link: {url:string;title:string;number:number}, hos
   if (watchUrl) {
     try { const watch = await fetchHtml(watchUrl,host); sources = [...sources,...extractSources(watch.html,watch.url)]; } catch { /* fallback to watch page */ }
   }
-  if (watchUrl && !sources.some(s=>s.url===watchUrl)) sources.push({url:watchUrl,name:"صفحة مشاهدة الحلقة"});
   const unique = [...new Map(sources.map(s=>[s.url,s])).values()].slice(0,15);
   return {
     number: link.number,
