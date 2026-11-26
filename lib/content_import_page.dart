@@ -36,6 +36,13 @@ class _ContentImportPageState extends State<ContentImportPage> {
   Timer? _backgroundJobTimer;
   Map<String, dynamic>? backgroundJob;
 
+  double get _backgroundProgress {
+    final total = (backgroundJob?['total'] as num?)?.toDouble() ?? 0;
+    final processed = (backgroundJob?['processed'] as num?)?.toDouble() ?? 0;
+    if (total <= 0) return 0;
+    return (processed / total).clamp(0.0, 1.0).toDouble();
+  }
+
   Color get accent => AppTheme.primary;
   Color get bg => AppTheme.background;
   Color get panel => AppTheme.panel;
@@ -64,6 +71,90 @@ class _ContentImportPageState extends State<ContentImportPage> {
       _backgroundJobTimer = null;
     }
     setState(() => backgroundJob = job);
+  }
+
+  Future<void> _choosePackages() async {
+    final temporary = Set<String>.from(packageIds);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('اختيار الباقات المستهدفة'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 340,
+            child: ListView(
+              children: packages.map((p) {
+                final id = p['id'].toString();
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: temporary.contains(id),
+                  activeColor: accent,
+                  title: Text(p['name'].toString()),
+                  onChanged: scanning || importing
+                      ? null
+                      : (checked) => setDialogState(() {
+                            if (checked == true) {
+                              temporary.add(id);
+                            } else {
+                              temporary.remove(id);
+                            }
+                          }),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: scanning || importing
+                  ? null
+                  : () {
+                      setState(() {
+                        packageIds
+                          ..clear()
+                          ..addAll(temporary);
+                      });
+                      Navigator.pop(dialogContext);
+                    },
+              child: const Text('اعتماد الاختيار'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> cancelBackgroundImport() async {
+    final status = backgroundJob?['status']?.toString();
+    if (status == null || !['queued', 'running'].contains(status)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('إيقاف الاستيراد؟'),
+        content: const Text('سيتم إيقاف المهمة بالخلفية وحفظ العناصر التي تمت معالجتها حتى الآن.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('متابعة الاستيراد'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('إيقاف'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ShamFlixBackgroundImportService.cancel();
+    await _refreshBackgroundJob();
+    if (mounted) message('تم إرسال طلب إيقاف الاستيراد');
   }
 
   Future<void> startBackgroundImport() async {
@@ -746,80 +837,26 @@ class _ContentImportPageState extends State<ContentImportPage> {
                 },
               ),
               const SizedBox(height: 12),
-              if (loadingPackages) Center(child: CircularProgressIndicator(color: accent))
+              if (loadingPackages)
+                Center(child: CircularProgressIndicator(color: accent))
               else if (packages.isNotEmpty) ...[
-                Card(
-                  color: panel,
-                  margin: EdgeInsets.zero,
-                  child: Theme(
-                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      initiallyExpanded: false,
-                      leading: Icon(Icons.folder_copy_outlined, color: accent),
-                      title: const Text('الباقات المستهدفة'),
-                      subtitle: Text(
-                        packageIds.isEmpty
-                            ? 'لم يتم اختيار باقة'
-                            : 'تم اختيار ${packageIds.length} من ${packages.length} باقة',
-                        style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
-                      ),
-                      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                      children: [
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Wrap(
-                            spacing: 8,
-                            children: [
-                              TextButton(
-                                onPressed: scanning || importing
-                                    ? null
-                                    : () => setState(() => packageIds.addAll(
-                                          packages.map((p) => p['id'].toString()),
-                                        )),
-                                child: const Text('تحديد الكل'),
-                              ),
-                              TextButton(
-                                onPressed: scanning || importing || packageIds.isEmpty
-                                    ? null
-                                    : () => setState(() => packageIds.clear()),
-                                child: const Text('إلغاء التحديد'),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ...packages.map((p) {
-                          final id = p['id'].toString();
-                          return CheckboxListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            value: packageIds.contains(id),
-                            activeColor: accent,
-                            title: Text(p['name'].toString()),
-                            onChanged: scanning || importing ? null : (checked) => setState(() {
-                              if (checked == true) {
-                                packageIds.add(id);
-                              } else {
-                                packageIds.remove(id);
-                              }
-                            }),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-                ),
-              ]
-              else ...[
-                const Text('لا توجد باقات لهذا النوع. أنشئ باقة أولاً.'),
                 OutlinedButton.icon(
-                  onPressed: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPackagesPage(
-                      contentType: type, title: type == 'movie' ? 'الأفلام' : 'المسلسلات',
-                    )));
-                    await loadPackages();
-                  },
-                  icon: const Icon(Icons.create_new_folder_outlined), label: const Text('إنشاء باقة'),
+                  onPressed: scanning || importing ? null : _choosePackages,
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: Text(packageIds.isEmpty
+                      ? 'اختيار الباقات المستهدفة'
+                      : 'الباقات المستهدفة: ${packageIds.length} محددة'),
                 ),
+                if (packageIds.isNotEmpty)
+                  Text(
+                    packages
+                        .where((p) => packageIds.contains(p['id'].toString()))
+                        .map((p) => p['name'].toString())
+                        .join(' • '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 11),
+                  ),
               ],
               const SizedBox(height: 12),
               TextField(
@@ -979,11 +1016,50 @@ class _ContentImportPageState extends State<ContentImportPage> {
             if (backgroundJob != null)
               Card(
                 color: panel,
-                child: ListTile(
-                  leading: Icon(Icons.downloading_outlined, color: accent),
-                  title: Text('حالة الاستيراد: ${backgroundJob!['status'] == 'running' ? 'قيد التنفيذ' : backgroundJob!['status'] == 'queued' ? 'بانتظار التنفيذ' : backgroundJob!['status'] == 'completed' ? 'مكتمل' : backgroundJob!['status'] == 'failed' ? 'فشل' : 'ملغي'}'),
-                  subtitle: Text(backgroundJob!['message']?.toString() ?? ''),
-                  trailing: Text('${backgroundJob!['processed'] ?? 0}/${backgroundJob!['total'] ?? 0}'),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.downloading_outlined, color: accent),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'حالة الاستيراد: ${backgroundJob!['status'] == 'running' ? 'قيد التنفيذ' : backgroundJob!['status'] == 'queued' ? 'بانتظار التنفيذ' : backgroundJob!['status'] == 'completed' ? 'مكتمل' : backgroundJob!['status'] == 'failed' ? 'فشل' : 'ملغي'}',
+                              style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Text(
+                            '${backgroundJob!['processed'] ?? 0}/${backgroundJob!['total'] ?? 0}',
+                            style: TextStyle(color: accent, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      LinearProgressIndicator(
+                        value: _backgroundProgress,
+                        minHeight: 7,
+                        backgroundColor: AppTheme.secondaryText.withOpacity(0.18),
+                        valueColor: AlwaysStoppedAnimation<Color>(accent),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        backgroundJob!['message']?.toString() ?? '',
+                        style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
+                      ),
+                      if (['queued', 'running'].contains(backgroundJob!['status']))
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: cancelBackgroundImport,
+                            icon: const Icon(Icons.stop_circle_outlined, color: Colors.redAccent),
+                            label: const Text('إيقاف الاستيراد', style: TextStyle(color: Colors.redAccent)),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             if (imported + duplicates + failed > 0)
