@@ -753,7 +753,9 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                 const SizedBox(height: 14),
                                 FilledButton.icon(onPressed: _saving ? null : _addWebsiteSource,
                                   style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
-                                  icon: const Icon(Icons.public), label: Text(_saving ? 'جارٍ الإضافة...' : 'إضافة موقع البث')),
+                                  icon: const Icon(Icons.public),
+                                  label: Text(_saving ? 'جارٍ الإضافة...' :
+                                    _websiteAdapter == 'aloula' ? 'إضافة قنوات سعودية' : 'إضافة موقع البث')),
                                 const SizedBox(height: 22),
                                 Text('إضافة Xtream أو ملف اشتراك', style: TextStyle(color: AppTheme.primary, fontSize: 17, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 6),
