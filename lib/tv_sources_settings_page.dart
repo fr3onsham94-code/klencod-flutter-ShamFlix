@@ -246,9 +246,29 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                 DropdownMenuItem(value: 'auto', child: Text('استخراج تلقائي')),
                 DropdownMenuItem(value: 'aloula', child: Text('Aloula')),
               ],
-              onChanged: (value) => setDialogState(() => adapter = value ?? 'auto'),
+              onChanged: (value) => setDialogState(() {
+                adapter = value ?? 'auto';
+                if (adapter == 'aloula' && urlController.text.trim().isEmpty) {
+                  urlController.text = 'https://aloula.sba.sa/';
+                }
+              }),
             ),
-            Text('تغيير الباقة يتطلب حذف المصدر وإضافته مجدداً حتى لا تبقى عضوية قديمة في الباقة السابقة.', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+            if (_channelPackages.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String?>(
+                value: packageId,
+                decoration: const InputDecoration(labelText: 'إضافة القنوات إلى باقة'),
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('تلقائي حسب البلد والفئة')),
+                  ..._channelPackages.map((p) => DropdownMenuItem<String?>(value: p['id'].toString(), child: Text(p['name'].toString(), overflow: TextOverflow.ellipsis))),
+                ],
+                onChanged: (value) => setDialogState(() => packageId = value),
+              ),
+            ],
+            Text(adapter == 'aloula'
+              ? 'محول Aloula يستورد القنوات الحية العامة من كتالوج الهيئة، ويحتاج رابط الموقع الرسمي.'
+              : 'الاستخراج التلقائي يفحص صفحة عامة وروابط صفحات القنوات المرتبطة بها فقط؛ لا يقرأ محتوى يتطلب تسجيل دخول أو DRM.',
+              style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
           ])),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
