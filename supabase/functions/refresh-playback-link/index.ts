@@ -189,7 +189,7 @@ type PlaybackServerRow = {
 async function probePlaybackUrl(server: PlaybackServerRow): Promise<boolean> {
   try {
     const original = validateUrl(server.stream_url);
-    if (isGenericPageUrl(original) || /\\/(?:watch|episode|episodes)\\//i.test(original.pathname)) return false;
+    if (isGenericPageUrl(original) || /\/(?:watch|episode|episodes)\//i.test(original.pathname)) return false;
     const headers: Record<string, string> = {
       "User-Agent": server.user_agent?.trim() || "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
       "Range": "bytes=0-1023",
@@ -222,7 +222,7 @@ async function probePlaybackUrl(server: PlaybackServerRow): Promise<boolean> {
         if (response.status >= 200 && response.status < 300 && response.status !== 204) {
           const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
           const directMediaPath = /\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd|ts)$/i.test(url.pathname);
-          if (contentType.includes("text/html") && !/\\/(?:embed|player|video|stream|e|d|v)\\//i.test(original.pathname)) return false;
+          if (contentType.includes("text/html") && !/\/(?:embed|player|video|stream|e|d|v)\//i.test(original.pathname)) return false;
           if (directMediaPath && contentType.includes("text/html")) return false;
           if (!response.body) return false;
           const reader = response.body.getReader();
