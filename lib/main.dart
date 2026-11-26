@@ -17,6 +17,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 
 import 'supabase_service.dart';
 import 'app_theme.dart';
@@ -4272,11 +4273,16 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   late int currentServerIndex;
   late List<Map<String, dynamic>> _runtimeServers;
   final Set<int> _failedServers = <int>{};
+  final Set<String> _failedManagedServerIds = <String>{};
+  final Set<String> _auditedManagedServerIds = <String>{};
+  bool _serverAuditScheduled = false;
+  bool _serverAuditInProgress = false;
   bool _failoverInProgress = false;
   bool _sourceRefreshAttempted = false;
   String? _embedFallbackUrl;
   String? _embedFallbackName;
   StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<bool>? _playingSubscription;
   int _lastSavedSecond = -1;
 
   String get _settingsPrefix =>
@@ -4302,6 +4308,9 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       _setLandscape(true);
     }
     player.stream.error.listen(_handlePlaybackError);
+    _playingSubscription = player.stream.playing.listen((playing) {
+      if (playing) unawaited(_auditManagedServersAfterStablePlayback());
+    });
     _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
     _open();
   }
@@ -4377,6 +4386,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       await _restorePlaybackPosition(prefs);
       await _restoreTrackPreferences(prefs);
       if (mounted) _showControls();
+      unawaited(_auditManagedServersAfterStablePlayback());
     } catch (e) {
       _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
     }
@@ -4469,6 +4479,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _handlePlaybackError(String message) async {
     if (!mounted || _failoverInProgress) return;
+    if (currentServerIndex >= 0 && currentServerIndex < _runtimeServers.length) {
+      final failedServer = _runtimeServers[currentServerIndex];
+      final failedId = valueOf(failedServer['id']).trim();
+      if (failedId.isNotEmpty && valueOf(failedServer['source_page_url']).trim().isNotEmpty) {
+        _failedManagedServerIds.add(failedId);
+      }
+    }
     if (_runtimeServers.length > 1) {
       _failoverInProgress = true;
       _failedServers.add(currentServerIndex);
@@ -4506,6 +4523,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           setState(() => opening = false);
           _failoverInProgress = false;
           _showControls();
+          unawaited(_auditManagedServersAfterStablePlayback());
           return;
         } catch (_) {
           _failedServers.add(next);
@@ -4574,6 +4592,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               _failoverInProgress = false;
               _message('تم تحديث رابط المشاهدة وتشغيل المحتوى بنجاح');
               _showControls();
+              unawaited(_auditManagedServersAfterStablePlayback());
               return;
             } catch (_) {
               _failedServers.add(index);
@@ -4593,6 +4612,142 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       opening = false;
       controlsVisible = true;
     });
+  }
+
+  Future<bool> _isDefinitelyUnavailableServer(int index) async {
+    if (index < 0 || index >= _runtimeServers.length) return false;
+    final server = _runtimeServers[index];
+    final rawUrl = valueOf(server['stream_url']).trim();
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
+      return false;
+    }
+
+    // Only a repeated, explicit 404/410 is considered conclusive.
+    // Timeouts, 401/403, 5xx and network errors are inconclusive and never delete a link.
+    for (int attempt = 0; attempt < 2; attempt++) {
+      final client = http.Client();
+      try {
+        final request = http.Request('GET', uri)
+          ..followRedirects = true
+          ..maxRedirects = 5;
+        request.headers.addAll(_headersForServer(index));
+        if (StreamSourceDetector.isDirectMediaUrl(rawUrl)) {
+          request.headers['Range'] = 'bytes=0-0';
+        }
+        final response = await client.send(request).timeout(const Duration(seconds: 7));
+        final unavailable = response.statusCode == 404 || response.statusCode == 410;
+        await response.stream.listen((_) {}).cancel();
+        if (!unavailable) return false;
+      } catch (_) {
+        return false;
+      } finally {
+        client.close();
+      }
+      if (attempt == 0) {
+        await Future.delayed(const Duration(milliseconds: 450));
+      }
+    }
+    return true;
+  }
+
+  Future<void> _auditManagedServersAfterStablePlayback() async {
+    if (_serverAuditScheduled || _serverAuditInProgress ||
+        (widget.contentType != 'movie' && widget.contentType != 'episode') ||
+        _runtimeServers.length < 2) {
+      return;
+    }
+
+    _serverAuditScheduled = true;
+    final playingIndex = currentServerIndex;
+    final replacementServerId = playingIndex >= 0 && playingIndex < _runtimeServers.length
+        ? valueOf(_runtimeServers[playingIndex]['id']).trim()
+        : '';
+    await Future.delayed(const Duration(seconds: 4));
+    _serverAuditScheduled = false;
+
+    if (!mounted || !player.state.playing ||
+        currentServerIndex != playingIndex || replacementServerId.isEmpty) {
+      return;
+    }
+
+    _serverAuditInProgress = true;
+    try {
+      for (int index = 0; index < _runtimeServers.length; index++) {
+        if (index == playingIndex) continue;
+        final server = _runtimeServers[index];
+        final serverId = valueOf(server['id']).trim();
+        if (serverId.isEmpty ||
+            valueOf(server['source_page_url']).trim().isEmpty ||
+            _auditedManagedServerIds.contains(serverId) ||
+            _failedManagedServerIds.contains(serverId)) {
+          continue;
+        }
+        _auditedManagedServerIds.add(serverId);
+        if (await _isDefinitelyUnavailableServer(index)) {
+          _failedManagedServerIds.add(serverId);
+        }
+        if (!mounted || !player.state.playing || currentServerIndex != playingIndex) {
+          return;
+        }
+      }
+
+      if (_failedManagedServerIds.isEmpty) return;
+      await _refreshAndRemoveFailedManagedServers(
+        failedServerIds: _failedManagedServerIds.toList(),
+        replacementServerId: replacementServerId,
+      );
+    } finally {
+      _serverAuditInProgress = false;
+    }
+  }
+
+  Future<void> _refreshAndRemoveFailedManagedServers({
+    required List<String> failedServerIds,
+    required String replacementServerId,
+  }) async {
+    if (!mounted || failedServerIds.isEmpty || replacementServerId.isEmpty ||
+        (widget.contentType != 'movie' && widget.contentType != 'episode')) {
+      return;
+    }
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'refresh-playback-link',
+        body: {
+          'action': 'refresh_failed_servers',
+          'contentType': widget.contentType,
+          'contentId': widget.contentId,
+          'failedServerIds': failedServerIds,
+          'replacementServerId': replacementServerId,
+        },
+      );
+      final payload = response.data;
+      if (payload is! Map || payload['success'] != true) return;
+      final rawServers = payload['servers'];
+      if (rawServers is! List) return;
+      final refreshed = rawServers
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final replacementIndex = refreshed.indexWhere(
+        (server) => valueOf(server['id']).trim() == replacementServerId,
+      );
+      if (replacementIndex < 0 || !mounted) return;
+
+      setState(() {
+        _runtimeServers = refreshed;
+        currentServerIndex = replacementIndex;
+      });
+      final removedIds = (payload['removedFailedServerIds'] is List)
+          ? (payload['removedFailedServerIds'] as List).map((id) => id.toString()).toSet()
+          : <String>{};
+      _failedManagedServerIds.removeAll(removedIds);
+      if (removedIds.isNotEmpty) {
+        _message('تم حذف ${removedIds.length} سيرفر معطّل بعد التأكد من بديل شغّال');
+      }
+    } catch (_) {
+      // If source refresh or verification fails, keep every existing server.
+    }
   }
 
   Future<void> _openEmbedFallback() async {
@@ -5091,6 +5246,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   void dispose() {
     controlsTimer?.cancel();
     _positionSubscription?.cancel();
+    _playingSubscription?.cancel();
     _saveProgressAtPosition(player.state.position);
     _savePlayerSetting('rate', player.state.rate);
     _savePlayerSetting('fit', videoFitMode);
