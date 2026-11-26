@@ -1,0 +1,28 @@
+name: Check playback refresh Edge Function
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "supabase/functions/refresh-playback-link/**"
+      - ".github/workflows/edge-function-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deno-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check playback refresh function
+        run: deno check supabase/functions/refresh-playback-link/index.ts
