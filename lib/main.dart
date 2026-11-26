@@ -4654,7 +4654,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   Future<void> _auditManagedServersAfterStablePlayback() async {
     if (_serverAuditScheduled || _serverAuditInProgress ||
         (widget.contentType != 'movie' && widget.contentType != 'episode') ||
-        _runtimeServers.length < 2) {
+        _runtimeServers.isEmpty) {
       return;
     }
 
