@@ -16,46 +16,37 @@ function json(data: unknown, status = 200) {
 }
 
 function clean(value: unknown): string {
-  return String(value ?? "").replace(/<[^>]*>/g, " ")
-    .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, " ")
-    .replace(/\\u0026/g, "&").replace(/\\\//g, "/")
-    .replace(/\\s+/g, " ").trim();
+  return String(value ?? "").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ").trim();
 }
 
 function attrs(tag: string): Record<string, string> {
   const result: Record<string, string> = {};
-  const pattern = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))/g;
-  for (const match of tag.matchAll(pattern)) {
-    result[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4] ?? "";
-  }
+  const pattern = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+  for (const m of tag.matchAll(pattern)) result[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? "";
   return result;
 }
 
 function validateUrl(raw: string): URL {
   const url = new URL(raw);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password ||
-      (url.port && !["80", "443"].includes(url.port))) {
-    throw new Error("رابط المصدر غير صالح");
-  }
-  const host = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
-      host.endsWith(".internal") || host === "0.0.0.0" || host === "::1" ||
-      /^127\\./.test(host) || /^10\\./.test(host) || /^192\\.168\\./.test(host) ||
-      /^172\\.(1[6-9]|2\\d|3[01])\\./.test(host) || /^169\\.254\\./.test(host)) {
+      (url.port && !["80", "443"].includes(url.port))) throw new Error("رابط المصدر غير صالح");
+  const host = url.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "::1" ||
+      /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
     throw new Error("تم رفض عنوان شبكة محلية");
   }
   url.hash = "";
   return url;
 }
 
-async function fetchHtml(raw: string, originalHost?: string): Promise<{ html: string; url: URL }> {
+function fetchHtml(raw: string, originalHost?: string): Promise<{html:string;url:URL}> {
   let url = validateUrl(raw);
   const allowedHost = originalHost ?? url.hostname;
   for (let redirect = 0; redirect <= 4; redirect++) {
     const response = await fetch(url, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(18000),
+      redirect: "manual", signal: AbortSignal.timeout(18000),
       headers: {
         "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
@@ -64,90 +55,92 @@ async function fetchHtml(raw: string, originalHost?: string): Promise<{ html: st
         "Cache-Control": "no-cache",
       },
     });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
+    if ([301,302,303,307,308].includes(response.status)) {
       const location = response.headers.get("location");
       if (!location || redirect === 4) throw new Error("تجاوز الموقع عدد التحويلات المسموح");
-      const next = validateUrl(new URL(location, url).toString());
+      const next = validateUrl(new URL(location,url).toString());
       if (next.hostname !== allowedHost) throw new Error("تم رفض تحويل الصفحة إلى نطاق آخر");
-      url = next;
-      continue;
+      url = next; continue;
     }
     if (!response.ok) throw new Error("رفض الموقع قراءة الصفحة: HTTP " + response.status);
     const type = response.headers.get("content-type")?.toLowerCase() ?? "";
-    if (type && !type.includes("text/html") && !type.includes("application/xhtml")) {
-      throw new Error("رابط المصدر لا يعرض صفحة HTML");
-    }
+    if (type && !type.includes("text/html") && !type.includes("application/xhtml")) throw new Error("الرابط لا يشير إلى صفحة HTML");
     const html = await response.text();
-    if (new TextEncoder().encode(html).length > 2 * 1024 * 1024) {
-      throw new Error("حجم الصفحة أكبر من الحد المسموح");
-    }
-    return { html, url };
+    if (new TextEncoder().encode(html).length > 2 * 1024 * 1024) throw new Error("حجم الصفحة أكبر من الحد المسموح");
+    return {html,url};
   }
-  throw new Error("تعذر قراءة صفحة المصدر");
+  throw new Error("تعذر قراءة الصفحة");
 }
 
-function extractSources(html: string, page: URL): Source[] {
-  const found = new Map<string, Source>();
+function extractSources(html: string, page: URL) {
+  const found = new Map<string,{url:string;name:string}>();
   const add = (raw: string | undefined, name: string) => {
     if (!raw) return;
     try {
-      let value = raw.replace(/&amp;/g, "&").replace(/\\\//g, "/").replace(/\\u0026/g, "&").trim();
+      let value = raw.replace(/&amp;/g,"&").replace(/\\\//g,"/").replace(/\\u0026/g,"&").trim();
       if (value.startsWith("//")) value = page.protocol + value;
-      const target = validateUrl(new URL(value, page).toString());
-      found.set(target.toString(), { url: target.toString(), name });
-    } catch { /* Ignore malformed or unsafe candidates. */ }
+      const url = validateUrl(new URL(value,page).toString());
+      found.set(url.toString(),{url:url.toString(),name});
+    } catch {}
   };
 
-  for (const match of html.matchAll(/<(?:iframe|frame|video|source|embed)\\b[^>]*>/gi)) {
-    const a = attrs(match[0]);
+  // Match the manual importer: accept only actual player elements and media files.
+  for (const m of html.matchAll(/<(?:iframe|frame|video|source|embed)\b[^>]*>/gi)) {
+    const a = attrs(m[0]);
     const raw = a.src || a["data-src"] || a["data-lazy-src"] || a["data-url"] ||
       a["data-embed"] || a["data-video"] || a["data-href"] || a["data-file"] || a.data;
-    if (raw) add(raw, "مشغل المصدر");
+    if (raw) add(raw,"مشغل الفيلم");
   }
 
-  const normalized = html.replace(/\\\//g, "/").replace(/\\u0026/g, "&");
-  const directMedia = /https?:\\/\\/[^\\s"'<>\\\\]+?\\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd|mkv|ts)(?:\\?[^\\s"'<>]*)?/gi;
-  for (const match of normalized.matchAll(directMedia)) {
-    add(match[0], "رابط تشغيل مباشر");
+  // Some Akwam player pages place the media URL inside inline scripts.
+  const normalizedHtml = html.replace(/\\\//g,"/").replace(/\\u0026/g,"&");
+  const directMedia = /https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd)(?:\?[^\s"'<>]*)?/gi;
+  for (const m of normalizedHtml.matchAll(directMedia)) {
+    add(m[0],"رابط تشغيل مباشر");
     if (found.size >= 60) break;
   }
-  return [...found.values()].slice(0, 60);
+
+  return [...found.values()].slice(0,60);
 }
 
-function findWatchUrls(html: string, page: URL, allowedHost: string): string[] {
-  const normalized = html.replaceAll("\\\\/", "/").replaceAll("\\\\u0026", "&").replaceAll("&amp;", "&");
-  const found = new Set<string>();
+function findPublicWatchUrls(html: string, page: URL, allowedHost: string): string[] {
+  const normalized = html.replaceAll("\\/", "/").replaceAll("\\u0026", "&").replaceAll("&amp;", "&");
+  const candidates = new Set<string>();
+  const routePattern = new RegExp(String.raw`(?:https?:\/\/[^\s"'<>]+)?\/watch\/[^\s"'<>\\)]+`, "gi");
   const add = (raw: string) => {
+    const value = raw.trim().replace(/^["']|["']$/g, "");
+    if (!value || /^(javascript:|#|mailto:)/i.test(value)) return;
     try {
-      const target = validateUrl(new URL(raw.trim().replace(/^["']|["']$/g, ""), page).toString());
-      if (target.hostname === allowedHost && /\\/(?:watch|player)\\//i.test(target.pathname)) {
-        found.add(target.toString());
+      const target = validateUrl(new URL(value, page).toString());
+      if (target.hostname === allowedHost && target.pathname.toLowerCase().includes("/watch/")) {
+        target.hash = "";
+        candidates.add(target.toString());
       }
-    } catch { /* Ignore malformed candidates. */ }
+    } catch {}
   };
-  const route = /(?:https?:\\/\\/[^\\s"'<>]+)?\\/(?:watch|player)\\/[^\\s"'<>\\\\)]+/gi;
+  // Akwam and similar sites may store the watch route in data-* attributes.
   for (const match of normalized.matchAll(/<(?:a|button|iframe|frame|div|span)[^>]*>/gi)) {
     const a = attrs(match[0]);
     for (const key of ["href", "data-href", "data-url", "data-link", "data-src", "data-embed", "onclick"]) {
-      const value = a[key];
-      if (!value) continue;
-      const candidate = route.exec(value);
-      route.lastIndex = 0;
-      if (candidate) add(candidate[0]);
+      if (!a[key]) continue;
+      const route = routePattern.exec(a[key]);
+      routePattern.lastIndex = 0;
+      if (route) add(route[0]);
     }
   }
-  for (const match of normalized.matchAll(route)) {
+  // Some versions expose the public /watch/ route only inside inline scripts.
+  for (const match of normalized.matchAll(routePattern)) {
     add(match[0]);
-    if (found.size >= 5) break;
+    if (candidates.size >= 5) break;
   }
-  return [...found].slice(0, 5);
+  return [...candidates].slice(0, 5);
 }
 
 async function inspectSourcePage(sourceUrl: string): Promise<{ pageUrl: string; sources: Source[] }> {
   const original = validateUrl(sourceUrl);
   const page = await fetchHtml(original.toString(), original.hostname);
   let sources = extractSources(page.html, page.url);
-  const watchUrls = findWatchUrls(page.html, page.url, original.hostname);
+  const watchUrls = findPublicWatchUrls(page.html, page.url, original.hostname);
   for (const watchUrl of watchUrls) {
     try {
       const watch = await fetchHtml(watchUrl, original.hostname);
