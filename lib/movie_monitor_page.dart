@@ -13,6 +13,7 @@ class _MovieMonitorPageState extends State<MovieMonitorPage> {
   bool loading = true;
   String? error;
   List<Map<String, dynamic>> monitors = [];
+  List<Map<String, dynamic>> moviePageMonitors = [];
   Color get accent => AppTheme.primary;
   Color get bg => AppTheme.background;
   Color get panel => AppTheme.panel;
@@ -27,6 +28,12 @@ class _MovieMonitorPageState extends State<MovieMonitorPage> {
           .select('id,package_id,source_url,category,check_interval_minutes,is_active,last_checked_at,last_error,last_added_count,content_packages(name)')
           .order('created_at', ascending: false);
       monitors = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      final pageRows = await AuthService.client.from('movies')
+          .select('id,title,source_page_url,source_monitor_enabled,source_monitor_interval_minutes,source_page_checked_at,source_page_last_error')
+          .not('source_page_url', 'is', null)
+          .order('source_page_checked_at', ascending: false)
+          .limit(1000);
+      moviePageMonitors = pageRows.map((row) => Map<String, dynamic>.from(row)).toList();
     } catch (e) { error = e.toString(); }
     if (mounted) setState(() => loading = false);
   }
@@ -209,7 +216,7 @@ class _MovieMonitorPageState extends State<MovieMonitorPage> {
                       OutlinedButton(onPressed: _load, child: const Text('إعادة المحاولة')),
                     ]),
                   ))
-                : monitors.isEmpty
+                : monitors.isEmpty && moviePageMonitors.isEmpty
                     ? Center(child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -226,6 +233,46 @@ class _MovieMonitorPageState extends State<MovieMonitorPage> {
                     : ListView(
                         padding: const EdgeInsets.all(12),
                         children: [
+                          if (moviePageMonitors.isNotEmpty) ...[
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+                              child: Text('مراقبة صفحات الأفلام الفردية (${moviePageMonitors.length})',
+                                style: TextStyle(color: accent, fontWeight: FontWeight.bold, fontSize: 15)),
+                            ),
+                            ...moviePageMonitors.map((item) {
+                              final title = item['title']?.toString() ?? 'فيلم';
+                              final active = item['source_monitor_enabled'] == true;
+                              final interval = int.tryParse(item['source_monitor_interval_minutes']?.toString() ?? '') ?? 60;
+                              final lastError = item['source_page_last_error']?.toString() ?? '';
+                              return Card(
+                                color: panel, margin: const EdgeInsets.only(bottom: 8),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                                    Row(children: [
+                                      Expanded(child: Text(title, style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold))),
+                                      Icon(active ? Icons.check_circle : Icons.pause_circle,
+                                        color: active ? Colors.green : Colors.orangeAccent, size: 19),
+                                    ]),
+                                    const SizedBox(height: 5),
+                                    SelectableText(item['source_page_url']?.toString() ?? '',
+                                      textDirection: TextDirection.ltr,
+                                      style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                                    const SizedBox(height: 6),
+                                    Text('الفحص كل $interval دقيقة • ${active ? 'المراقبة مفعّلة' : 'المراقبة متوقفة'}',
+                                      style: TextStyle(color: accent, fontSize: 11)),
+                                    Text('آخر فحص: ${_date(item['source_page_checked_at'])}',
+                                      style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                                    if (lastError.isNotEmpty)
+                                      Padding(padding: const EdgeInsets.only(top: 5),
+                                        child: Text('ملاحظة الفحص: $lastError',
+                                          style: const TextStyle(color: Colors.orangeAccent, fontSize: 11))),
+                                  ]),
+                                ),
+                              );
+                            }),
+                          ],
+                          if (monitors.isNotEmpty) ...[
                           Card(color: panel, child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Text('عدد الأقسام: ${monitors.length} • الفحص الآلي كل 30 دقيقة، ويحترم الفترة المحددة لكل قسم. تُضاف الأفلام الجديدة مباشرة إلى الباقة المحددة.',
@@ -288,6 +335,7 @@ class _MovieMonitorPageState extends State<MovieMonitorPage> {
                               ),
                             );
                           }),
+                          ],
                         ],
                       ),
       ),
