@@ -274,7 +274,7 @@ async function validatePublicPlaylistUrl(url: URL, allowNonStandardPort = false)
 async function fetchPlaylist(source: PlaylistSource, db: any) {
   if (source.sourceType === "website") {
     const host = new URL(source.url).hostname;
-    const isAloulaHost = /(^|\\.)aloula\\.(?:sba\\.sa|sa)$/i.test(host);
+    const isAloulaHost = /(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(host);
     return source.websiteAdapter === "aloula" || isAloulaHost
       ? await fetchAloulaWebsite(source)
       : await fetchGenericWebsite(source);
@@ -928,7 +928,7 @@ async function syncChannels(db: any) {
   const websitePlaybackHeaders = new Map<string, { user_agent?: string; referer: string; origin: string }>();
   for (const source of sources) {
     if (source.sourceType !== "website") continue;
-    const isAloulaHost = /(^|\\.)aloula\\.(?:sba\\.sa|sa)$/i.test(new URL(source.url).hostname);
+    const isAloulaHost = /(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(new URL(source.url).hostname);
     if (source.websiteAdapter === "aloula" || isAloulaHost) {
       websitePlaybackHeaders.set(source.id, {
         user_agent: "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
