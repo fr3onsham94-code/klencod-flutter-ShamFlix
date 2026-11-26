@@ -292,6 +292,8 @@ Deno.serve(async (req: Request) => {
               source_page_url: sourcePageUrl,
               server_name: item.source.name || ("السيرفر الجديد " + (index + 1)),
               stream_url: item.source.url,
+              user_agent: "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
+              referer: sourcePageUrl,
               sort_order: rows.length + index,
               is_active: true,
             }));
