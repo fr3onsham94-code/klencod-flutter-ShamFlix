@@ -36,6 +36,13 @@ class _ContentImportPageState extends State<ContentImportPage> {
   Timer? _backgroundJobTimer;
   Map<String, dynamic>? backgroundJob;
 
+  double get _backgroundProgress {
+    final total = (backgroundJob?['total'] as num?)?.toDouble() ?? 0;
+    final processed = (backgroundJob?['processed'] as num?)?.toDouble() ?? 0;
+    if (total <= 0) return 0;
+    return (processed / total).clamp(0.0, 1.0).toDouble();
+  }
+
   Color get accent => AppTheme.primary;
   Color get bg => AppTheme.background;
   Color get panel => AppTheme.panel;
@@ -850,7 +857,7 @@ class _ContentImportPageState extends State<ContentImportPage> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: AppTheme.secondaryText, fontSize: 11),
                   ),
-              ]
+              ],
               const SizedBox(height: 12),
               TextField(
                 controller: category,
