@@ -416,7 +416,6 @@ async function fetchGenericWebsite(source: PlaylistSource) {
         const raw = decodeWebsiteText(match[1] ?? match[0]).replace(/[),;\]}]+$/g, "");
         try {
           const resolved = new URL(raw, page.url);
-          if (resolved.hostname !== page.url.hostname) continue;
           const safe = safeStreamUrl(resolved.toString());
           if (safe && /\.(?:m3u8|mpd)(?:$|[?])/i.test(new URL(safe).pathname + new URL(safe).search)) {
             candidates.add(safe);
