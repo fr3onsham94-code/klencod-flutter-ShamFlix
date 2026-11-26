@@ -5651,10 +5651,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                             ],
                                           ),
                                         ),
-                                        if (widget.contentType == 'episode' && widget.episodeIndex > 0)
-                                          _controlButton(icon: Icons.skip_previous_rounded, size: 25, onTap: () => _playAdjacentEpisode(widget.episodeIndex - 1)),
-                                        if (widget.contentType == 'episode' && widget.episodeIndex >= 0 && widget.episodeIndex < widget.episodeQueue.length - 1)
-                                          _controlButton(icon: Icons.skip_next_rounded, size: 25, onTap: () => _playAdjacentEpisode(widget.episodeIndex + 1)),
                                         if (_runtimeServers.length > 1)
                                           SizedBox(
                                             width: 150,
@@ -5681,6 +5677,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                       return Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
+                                          if (widget.contentType == 'episode' && widget.episodeIndex > 0)
+                                            _controlButton(icon: Icons.skip_previous_rounded, size: 30,
+                                              onTap: () => _playAdjacentEpisode(widget.episodeIndex - 1)),
+                                          if (widget.contentType == 'episode' && widget.episodeIndex > 0)
+                                            const SizedBox(width: 10),
                                           _controlButton(
                                             icon: Icons.replay_10_rounded,
                                             size: 38,
@@ -5745,6 +5746,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                               _showControls();
                                             },
                                           ),
+                                          if (widget.contentType == 'episode' && widget.episodeIndex >= 0 && widget.episodeIndex < widget.episodeQueue.length - 1)
+                                            const SizedBox(width: 10),
+                                          if (widget.contentType == 'episode' && widget.episodeIndex >= 0 && widget.episodeIndex < widget.episodeQueue.length - 1)
+                                            _controlButton(icon: Icons.skip_next_rounded, size: 30,
+                                              onTap: () => _playAdjacentEpisode(widget.episodeIndex + 1)),
                                         ],
                                       );
                                     },
