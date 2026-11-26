@@ -276,6 +276,10 @@ Deno.serve(async (req: Request) => {
       if (activeReadError) throw activeReadError;
 
       const rows = (activeServers || []) as PlaybackServerRow[];
+      const { data: allContentServers, error: allServersReadError } = await db.from("playback_servers")
+        .select("stream_url").eq(foreignKey, contentId);
+      if (allServersReadError) throw allServersReadError;
+      const allKnownUrls = new Set((allContentServers || []).map((row: any) => String(row.stream_url || "")));
       const preserveServerId = String(body.preserveServerId || "");
       const checked: Array<{ row: PlaybackServerRow; healthy: boolean }> = [];
       for (let index = 0; index < rows.length; index += 6) {
@@ -301,9 +305,8 @@ Deno.serve(async (req: Request) => {
         // protect playback, but no unverified candidate is ever inserted.
         try {
           const inspected = await inspectSourcePage(sourcePageUrl);
-          const existingUrls = new Set(rows.map(row => row.stream_url));
           const candidates = inspected.sources
-            .filter(source => !existingUrls.has(source.url))
+            .filter(source => !allKnownUrls.has(source.url))
             .slice(0, 30);
           const probed: Array<{ source: Source; healthy: boolean }> = [];
           for (let index = 0; index < candidates.length; index += 6) {
@@ -386,7 +389,8 @@ Deno.serve(async (req: Request) => {
       return json({
         success: true,
         checkedServers: checked.length,
-        failedServers: checked.filter(item => !item.healthy).length,
+        failedServers: checked.filter(item => !item.healthy &&
+          !item.row.drm_key?.trim() && !item.row.license_url?.trim()).length,
         addedServers: addedServers.length,
         removedOldServers: staleIds.length,
         servers: finalServers || [],
