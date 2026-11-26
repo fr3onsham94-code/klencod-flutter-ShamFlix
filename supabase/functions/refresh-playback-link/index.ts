@@ -304,7 +304,7 @@ Deno.serve(async (req: Request) => {
       // Return all active rows (including manual ones) so the player and admin
       // remain in sync with the database after the targeted cleanup.
       const { data: finalServers, error: finalReadError } = await db.from("playback_servers")
-        .select("id,server_name,stream_url,sort_order,user_agent,referer,origin,cookie,source_page_url")
+        .select("*")
         .eq(foreignKey, contentId).eq("is_active", true)
         .order("sort_order", { ascending: true });
       if (finalReadError) throw finalReadError;
