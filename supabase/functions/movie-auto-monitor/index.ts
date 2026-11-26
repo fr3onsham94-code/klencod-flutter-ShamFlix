@@ -286,6 +286,34 @@ Deno.serve(async (req: Request) => {
   if (error) return json({error:error.message},500);
   const summary = {checked:0,added:0,linked:0,skipped:0,failed:0,results:[] as unknown[]};
   const now = Date.now();
+  // Fetch each identical listing URL only once per execution. Monitors remain
+  // separate so every package still receives its own content links and status.
+  const listingCardsCache = new Map<string, Promise<Map<string,{url:string;title:string;poster:string}>>>();
+  const getListingCards = (source: URL) => {
+    const key = source.toString();
+    let cached = listingCardsCache.get(key);
+    if (!cached) {
+      cached = (async () => {
+        const cards = new Map<string,{url:string;title:string;poster:string}>();
+        const visited = new Set<string>();
+        let next: string | null = key;
+        for (let pageNo=0; pageNo<MAX_PAGES && next && cards.size<MAX_ITEMS; pageNo++) {
+          if (visited.has(next)) break;
+          visited.add(next);
+          const listing = await fetchHtml(next,source.hostname);
+          for (const card of extractCards(listing.html,listing.url)) {
+            cards.set(card.url,card);
+            if (cards.size>=MAX_ITEMS) break;
+          }
+          next = findNext(listing.html,listing.url);
+        }
+        if (!cards.size) throw new Error("لم يتم العثور على روابط أفلام عامة واضحة في صفحة القسم");
+        return cards;
+      })();
+      listingCardsCache.set(key,cached);
+    }
+    return cached;
+  };
   for (const monitor of monitors || []) {
     const last = monitor.last_checked_at ? new Date(monitor.last_checked_at).getTime() : 0;
     const interval = Math.max(15,Number(monitor.check_interval_minutes)||15)*60000;
@@ -293,19 +321,7 @@ Deno.serve(async (req: Request) => {
     let added = 0, linked = 0, errorMessage: string | null = null;
     try {
       const source = validateUrl(monitor.source_url);
-      const cards = new Map<string,{url:string;title:string;poster:string}>();
-      const visited = new Set<string>();
-      let next: string | null = source.toString();
-      for (let pageNo=0; pageNo<MAX_PAGES && next && cards.size<MAX_ITEMS; pageNo++) {
-        if (visited.has(next)) break;
-        visited.add(next);
-        const listing = await fetchHtml(next,source.hostname);
-        for (const card of extractCards(listing.html,listing.url)) {
-          cards.set(card.url,card); if(cards.size>=MAX_ITEMS) break;
-        }
-        next = findNext(listing.html,listing.url);
-      }
-      if (!cards.size) throw new Error("لم يتم العثور على روابط أفلام عامة واضحة في صفحة القسم");
+      const cards = await getListingCards(source);
       let processed = 0;
       for (const card of cards.values()) {
         if (processed >= MAX_NEW_PER_MONITOR) break;
