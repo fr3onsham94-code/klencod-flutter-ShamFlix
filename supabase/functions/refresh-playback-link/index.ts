@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info, x-supabase-api-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -164,18 +164,15 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  const authorization = req.headers.get("authorization") || "";
-  const bearer = /^Bearer\\s+(.+)$/i.exec(authorization)?.[1] || "";
-  if (!bearer) return json({ error: "Unauthorized" }, 401);
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !anonKey || !serviceKey) return json({ error: "Server configuration missing" }, 500);
 
-  const authClient = createClient(supabaseUrl, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
-  const { data: authData, error: authError } = await authClient.auth.getUser(bearer);
-  if (authError || !authData.user) return json({ error: "Unauthorized" }, 401);
+  // The app's publishable key is public by design. Writes remain restricted
+  // to published, explicitly source-managed movies/episodes and their managed servers.
+  const suppliedApiKey = req.headers.get("apikey") || "";
+  if (!suppliedApiKey || suppliedApiKey !== anonKey) return json({ error: "Unauthorized" }, 401);
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body" }, 400); }
@@ -190,10 +187,10 @@ Deno.serve(async (req: Request) => {
   const table = contentType === "movie" ? "movies" : "episodes";
   const foreignKey = contentType === "movie" ? "movie_id" : "episode_id";
   const { data: content, error: contentError } = await db.from(table)
-    .select("id,source_page_url,source_monitor_enabled")
+    .select("id,is_published,source_page_url,source_monitor_enabled")
     .eq("id", contentId).maybeSingle();
   if (contentError) return json({ error: contentError.message }, 500);
-  if (!content) return json({ error: "Content not found" }, 404);
+  if (!content || content.is_published !== true) return json({ error: "Content not found" }, 404);
   const sourcePageUrl = String(content.source_page_url || "").trim();
   if (content.source_monitor_enabled !== true || !sourcePageUrl) {
     return json({ success: false, refreshed: false, reason: "no_managed_source", servers: [] });
