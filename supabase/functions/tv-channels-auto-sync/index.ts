@@ -91,7 +91,19 @@ function websiteSourceConfig(sourceKey: string): { adapter: string; targetPackag
 function sourceIdForRow(row: any): string {
   const sourceKey = row.source_key ? String(row.source_key) : "";
   const parts = sourceKey.split(":");
-  if (parts.length === 4 && parts[0] === "website") return "website:" + parts[1] + ":" + parts[3];
+  if (parts.length === 4 && parts[0] === "website") {
+    let adapter = parts[1] === "aloula" ? "aloula" : "auto";
+    // Keep the canonical source ID stable when an Aloula row was originally
+    // saved with the generic adapter. Otherwise old Aloula servers look orphaned
+    // and the cleanup pass disables them on every sync.
+    if (adapter === "auto") {
+      try {
+        const host = new URL(String(row.playlist_url || "")).hostname;
+        if (/(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(host)) adapter = "aloula";
+      } catch {}
+    }
+    return "website:" + adapter + ":" + parts[3];
+  }
   return sourceKey || (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id);
 }
 
