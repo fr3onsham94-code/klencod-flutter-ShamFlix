@@ -767,7 +767,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                   onPressed: _saving ? null : _addSaudiChannelsSource,
                                   style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
                                   icon: const Icon(Icons.live_tv),
-                                  label: Text(_saving ? 'جارٍ الإضافة...' : 'إضافة قنوات سعودية'),
+                                  label: Text(_saving ? 'جارٍ الإضافة...' : 'إضافة مواقع قنوات'),
                                 ),
                                 const SizedBox(height: 8),
                                 OutlinedButton.icon(
