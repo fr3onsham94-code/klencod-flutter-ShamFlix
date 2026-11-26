@@ -4274,6 +4274,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   final Set<int> _failedServers = <int>{};
   bool _failoverInProgress = false;
   bool _sourceRefreshAttempted = false;
+  final Set<String> _serverHealthCheckedKeys = <String>{};
   String? _embedFallbackUrl;
   String? _embedFallbackName;
   StreamSubscription<Duration>? _positionSubscription;
@@ -4377,6 +4378,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       await _restorePlaybackPosition(prefs);
       await _restoreTrackPreferences(prefs);
       if (mounted) _showControls();
+      unawaited(_runPlaybackServerHealthCheck());
     } catch (e) {
       _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
     }
@@ -4506,6 +4508,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           setState(() => opening = false);
           _failoverInProgress = false;
           _showControls();
+          unawaited(_runPlaybackServerHealthCheck());
           return;
         } catch (_) {
           _failedServers.add(next);
@@ -4530,20 +4533,34 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       try {
         final response = await Supabase.instance.client.functions.invoke(
           'refresh-playback-link',
-          body: {'contentType': widget.contentType, 'contentId': widget.contentId},
+          body: {
+            'contentType': widget.contentType,
+            'contentId': widget.contentId,
+            'mode': 'refresh_candidates',
+          },
         );
         final payload = response.data;
         final rawServers = payload is Map ? payload['servers'] : null;
+        final rawNewServers = payload is Map ? payload['newServers'] : null;
         final refreshed = rawServers is List
             ? rawServers.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
             : <Map<String, dynamic>>[];
-        if (payload is Map && payload['success'] == true && refreshed.isNotEmpty) {
+        final newServers = rawNewServers is List
+            ? rawNewServers.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
+            : <Map<String, dynamic>>[];
+        if (payload is Map && payload['success'] == true &&
+            refreshed.isNotEmpty && newServers.isNotEmpty) {
           final manualServers = _runtimeServers
               .where((server) => valueOf(server['source_page_url']).trim().isEmpty)
               .toList();
           _runtimeServers = [...manualServers, ...refreshed];
           _failedServers.clear();
-          for (int index = manualServers.length; index < _runtimeServers.length; index++) {
+          final newServerIds = newServers
+              .map((server) => valueOf(server['id']).trim())
+              .where((id) => id.isNotEmpty)
+              .toSet();
+          for (int index = 0; index < _runtimeServers.length; index++) {
+            if (!newServerIds.contains(valueOf(_runtimeServers[index]['id']).trim())) continue;
             final nextUrl = valueOf(_runtimeServers[index]['stream_url']).trim();
             if (nextUrl.isEmpty) continue;
             if (!StreamSourceDetector.isDirectMediaUrl(nextUrl)) {
@@ -4574,6 +4591,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               _failoverInProgress = false;
               _message('تم تحديث رابط المشاهدة وتشغيل المحتوى بنجاح');
               _showControls();
+              unawaited(_runPlaybackServerHealthCheck());
               return;
             } catch (_) {
               _failedServers.add(index);
@@ -4593,6 +4611,68 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       opening = false;
       controlsVisible = true;
     });
+  }
+
+  Future<void> _runPlaybackServerHealthCheck() async {
+    if ((widget.contentType != 'movie' && widget.contentType != 'episode') ||
+        widget.contentId.isEmpty) {
+      return;
+    }
+
+    // Let the stream begin before treating the selected server as a confirmed fallback.
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted || !player.state.playing) return;
+
+    final currentServer = _runtimeServers.isNotEmpty &&
+            currentServerIndex >= 0 &&
+            currentServerIndex < _runtimeServers.length
+        ? _runtimeServers[currentServerIndex]
+        : <String, dynamic>{};
+    final currentServerId = valueOf(currentServer['id']).trim();
+    final checkKey = currentServerId.isNotEmpty
+        ? currentServerId
+        : valueOf(currentServer['stream_url']).trim();
+    if (checkKey.isEmpty || !_serverHealthCheckedKeys.add(checkKey)) return;
+
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'refresh-playback-link',
+        body: {
+          'contentType': widget.contentType,
+          'contentId': widget.contentId,
+          'mode': 'health_check',
+          'preserveServerId': currentServerId,
+        },
+      );
+      final payload = response.data;
+      final rawServers = payload is Map ? payload['servers'] : null;
+      if (payload is! Map || payload['success'] != true || rawServers is! List) {
+        return;
+      }
+
+      final refreshed = rawServers
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      if (!mounted || refreshed.isEmpty) return;
+
+      final selectedIndex = currentServerId.isNotEmpty
+          ? refreshed.indexWhere((server) => valueOf(server['id']) == currentServerId)
+          : refreshed.indexWhere((server) =>
+              valueOf(server['stream_url']) == valueOf(currentServer['stream_url']));
+      setState(() {
+        _runtimeServers = refreshed;
+        if (selectedIndex >= 0) {
+          currentServerIndex = selectedIndex;
+        } else {
+          currentServerIndex = currentServerIndex
+              .clamp(0, _runtimeServers.length - 1)
+              .toInt();
+        }
+      });
+    } catch (_) {
+      // A failed health check must never interrupt the currently playing stream.
+    }
   }
 
   Future<void> _openEmbedFallback() async {
