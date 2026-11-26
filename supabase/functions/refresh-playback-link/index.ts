@@ -204,20 +204,7 @@ Deno.serve(async (req: Request) => {
     const sources = inspected.sources;
     const sourceUrls = new Set(sources.map(source => source.url));
 
-    for (const old of oldManaged || []) {
-      const index = sources.findIndex(source => source.url === old.stream_url);
-      const updates: Record<string, unknown> = {
-        is_active: index >= 0,
-        source_page_url: sourcePageUrl,
-      };
-      if (index >= 0) {
-        updates.sort_order = index;
-        updates.server_name = sources[index].name || ("السيرفر " + (index + 1));
-      }
-      const { error } = await db.from("playback_servers").update(updates).eq("id", old.id);
-      if (error) throw error;
-    }
-
+    // Save newly discovered links first. If this fails, no old managed link is deleted.
     const inserts = sources.filter(source => !oldUrls.has(source.url)).map((source, index) => ({
       [foreignKey]: contentId,
       source_page_url: sourcePageUrl,
@@ -228,6 +215,20 @@ Deno.serve(async (req: Request) => {
     }));
     if (inserts.length) {
       const { error } = await db.from("playback_servers").insert(inserts);
+      if (error) throw error;
+    }
+
+    // Reactivate/update only old managed links that still exist in the source.
+    // Rows for manual servers are excluded by the exact source_page_url filter above.
+    for (const old of oldManaged || []) {
+      const index = sources.findIndex(source => source.url === old.stream_url);
+      if (index < 0) continue;
+      const { error } = await db.from("playback_servers").update({
+        is_active: true,
+        source_page_url: sourcePageUrl,
+        sort_order: index,
+        server_name: sources[index].name || ("السيرفر " + (index + 1)),
+      }).eq("id", old.id);
       if (error) throw error;
     }
 
@@ -244,12 +245,28 @@ Deno.serve(async (req: Request) => {
       .eq(foreignKey, contentId).eq("source_page_url", sourcePageUrl).eq("is_active", true)
       .order("sort_order", { ascending: true });
     if (serverReadError) throw serverReadError;
+    if (!refreshedServers?.length) throw new Error("لم يتم حفظ أي رابط مشاهدة صالح");
+
+    // Delete only stale rows owned by this exact source page, and only after
+    // the replacement links and the content's primary URL were saved/read back.
+    const staleIds = (oldManaged || [])
+      .filter((row: any) => !sourceUrls.has(String(row.stream_url || "")))
+      .map((row: any) => row.id);
+    if (staleIds.length) {
+      const { data: deletedRows, error: deleteError } = await db.from("playback_servers")
+        .delete().in("id", staleIds).select("id");
+      if (deleteError) throw deleteError;
+      if ((deletedRows || []).length !== staleIds.length) {
+        throw new Error("لم يكتمل تنظيف روابط المشاهدة القديمة");
+      }
+    }
 
     return json({
       success: true,
       refreshed: true,
-      changed: sources.some(source => !oldUrls.has(source.url)) || (oldManaged || []).some((row: any) => !sourceUrls.has(String(row.stream_url || ""))),
-      servers: refreshedServers || [],
+      changed: sources.some(source => !oldUrls.has(source.url)) || staleIds.length > 0,
+      removedOldServers: staleIds.length,
+      servers: refreshedServers,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر تحديث روابط المصدر";
