@@ -180,7 +180,7 @@ async function probePlaybackUrl(server: PlaybackServerRow): Promise<boolean> {
     if (server.origin?.trim()) headers["Origin"] = server.origin.trim();
     if (server.cookie?.trim()) headers["Cookie"] = server.cookie.trim();
 
-    const request = async (method: "HEAD" | "GET"): Promise<boolean> => {
+    const request = async (method: "GET"): Promise<boolean> => {
       let url = original;
       for (let redirect = 0; redirect <= 4; redirect++) {
         const response = await fetch(url, {
