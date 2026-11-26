@@ -4636,10 +4636,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         (uri.hasPort && uri.port != 80 && uri.port != 443) ||
         host == 'localhost' || host.endsWith('.localhost') ||
         host == '::1' || host == '0.0.0.0' ||
-        RegExp(r'^127\\.').hasMatch(host) ||
-        RegExp(r'^10\\.').hasMatch(host) ||
-        RegExp(r'^192\\.168\\.').hasMatch(host) ||
-        RegExp(r'^172\\.(1[6-9]|2[0-9]|3[01])\\.').hasMatch(host)) {
+        RegExp(r'^127\.').hasMatch(host) ||
+        RegExp(r'^10\.').hasMatch(host) ||
+        RegExp(r'^192\.168\.').hasMatch(host) ||
+        RegExp(r'^172\.(1[6-9]|2[0-9]|3[01])\.').hasMatch(host)) {
       return false;
     }
 
