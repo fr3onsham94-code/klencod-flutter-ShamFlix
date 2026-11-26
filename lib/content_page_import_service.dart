@@ -368,51 +368,64 @@ class ContentPageImportService {
   static List<Map<String, dynamic>> _extractStreamSources(String html, Uri pageUri) {
     final found = <String, Map<String, dynamic>>{};
 
-    void add(String? raw, {required String kind}) {
+    bool isDirectMedia(Uri uri) => RegExp(
+      r'\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mpd)$',
+      caseSensitive: false,
+    ).hasMatch(uri.path);
+
+    bool isGenericPage(Uri uri) =>
+        uri.path == '/' ||
+        RegExp(r'\.(?:jpe?g|png|gif|webp|svg|css|js|pdf|zip|woff2?|ico)$', caseSensitive: false).hasMatch(uri.path) ||
+        RegExp(r'/(?:movies?|films?|series|shows?|episodes?|episode|seasons?|profile|favorite|favorites|contactus|recent|category|categories|tag|genre|login|register|search|about)(?:/|$)', caseSensitive: false).hasMatch(uri.path);
+
+    bool isPlayerEmbed(Uri uri) {
+      if (isDirectMedia(uri)) return true;
+      if (isGenericPage(uri)) return false;
+      final playerPath = RegExp(r'/(?:embed|player|video|stream|e|d|v)/[^/]+(?:/|$)', caseSensitive: false).hasMatch(uri.path) ||
+          RegExp(r'/(?:embed|player)\.php$', caseSensitive: false).hasMatch(uri.path);
+      if (!playerPath) return false;
+      if (uri.host.toLowerCase() == pageUri.host.toLowerCase() &&
+          !RegExp(r'/(?:embed|player|video|stream)/', caseSensitive: false).hasMatch(uri.path)) return false;
+      if (RegExp(r'(?:facebook\.com|fbcdn\.net|instagram\.com|twitter\.com|x\.com|tiktok\.com)$', caseSensitive: false).hasMatch(uri.host)) return false;
+      return true;
+    }
+
+    void add(String? raw, {required String kind, required bool embed}) {
       if (raw == null || raw.trim().isEmpty) return;
       final cleaned = raw.trim().replaceAll('&amp;', '&').replaceAll(r'\/', '/');
       final resolved = Uri.tryParse(cleaned);
       if (resolved == null) return;
       final uri = pageUri.resolveUri(resolved);
-      if (uri.scheme != 'http' && uri.scheme != 'https') return;
-      try {
-        _validatedUri(uri.toString());
-      } catch (_) {
-        return;
-      }
+      if ((uri.scheme != 'http' && uri.scheme != 'https') ||
+          (embed ? !isPlayerEmbed(uri) : !isDirectMedia(uri))) return;
+      try { _validatedUri(uri.toString()); } catch (_) { return; }
       final url = uri.toString();
-      final direct = StreamSourceDetector.isDirectMediaUrl(url);
       found[url] = {
         'url': url,
         'name': StreamSourceDetector.sourceName(url),
-        'kind': direct ? 'media' : kind,
+        'kind': isDirectMedia(uri) ? 'media' : kind,
       };
     }
 
     for (final match in RegExp(r'<(?:iframe|frame|embed)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
-      for (final key in [
-        'src', 'data-src', 'data-lazy-src', 'data-url', 'data-embed',
-        'data-video', 'data-href',
-      ]) {
-        add(attrs[key], kind: 'iframe');
+      for (final key in ['src','data-src','data-lazy-src','data-url','data-embed','data-video','data-href','data-file']) {
+        add(attrs[key], kind: 'iframe', embed: true);
       }
     }
     for (final match in RegExp(r'<(?:video|source)\b[^>]*>', caseSensitive: false).allMatches(html)) {
       final attrs = _attributes(match.group(0)!);
-      for (final key in [
-        'src', 'data-src', 'data-lazy-src', 'data-url', 'data-file', 'data',
-      ]) {
-        add(attrs[key], kind: 'media');
+      for (final key in ['src','data-src','data-lazy-src','data-url','data-file']) {
+        add(attrs[key], kind: 'media', embed: false);
       }
     }
-
+    final normalized = html.replaceAll(r'\/', '/').replaceAll(r'\u0026', '&').replaceAll('&amp;', '&');
     final directPattern = RegExp(
-      r'''https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|mpd)(?:\?[^\s"'<>]*)?''',
+      r'''https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mkv|m4v|mov|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|mpd)(?:\?[^\s"'<>]*)?''',
       caseSensitive: false,
     );
-    for (final match in directPattern.allMatches(html)) {
-      add(match.group(0), kind: 'media');
+    for (final match in directPattern.allMatches(normalized)) {
+      add(match.group(0), kind: 'media', embed: false);
       if (found.length >= 80) break;
     }
     return found.values.take(80).toList();
