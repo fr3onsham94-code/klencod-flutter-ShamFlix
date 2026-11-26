@@ -214,7 +214,7 @@ class _SeriesMonitorPageState extends State<SeriesMonitorPage> {
                       OutlinedButton(onPressed: _load, child: const Text('إعادة المحاولة')),
                     ]),
                   ))
-                : monitors.isEmpty
+                : monitors.isEmpty && seriesPageMonitors.isEmpty
                     ? Center(child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Column(mainAxisSize: MainAxisSize.min, children: [
