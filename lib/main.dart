@@ -4516,7 +4516,17 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           ...result.map((item) => item.label),
           ...sourceVariants.map((item) => item.label),
         };
-        if (allQualityLabels.length > 1) result.addAll(sourceVariants);
+        if (allQualityLabels.length > 1) {
+          if (result.isEmpty) {
+            for (final candidate in sourceVariants) {
+              if (candidate.serverIndex == currentServerIndex) {
+                if (mounted) setState(() => _selectedQualityVariant = candidate);
+                break;
+              }
+            }
+          }
+          result.addAll(sourceVariants);
+        }
       }
       final ordered = result..sort((a, b) {
         final byHeight = (b.height ?? 0).compareTo(a.height ?? 0);
@@ -4597,7 +4607,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               ),
               ListTile(
                 dense: true,
-                title: const Text('تلقائي', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
+                title: Text(appText('افتراضي المصدر', 'Source default', 'Kaynak varsayılanı'),
+                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
                 trailing: _selectedQualityVariant == null ? Icon(Icons.check_circle, color: gold) : null,
                 onTap: () => Navigator.pop(sheetContext, 'auto'),
               ),
