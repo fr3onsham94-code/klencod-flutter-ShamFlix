@@ -431,8 +431,9 @@ Deno.serve(async (req: Request) => {
     .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at")
     .eq("is_active",true).order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100);
   if(sectionListError)return json({error:sectionListError.message},500);
+  let processedSectionMonitors = 0;
   for(const monitor of sectionMonitors||[]){
-    if (Date.now() - runStartedAt >= runBudgetMs) break;
+    if (Date.now() - runStartedAt >= runBudgetMs || processedSectionMonitors >= 1) break;
     const last=monitor.last_checked_at?new Date(monitor.last_checked_at).getTime():0;
     const interval=Math.max(30,Number(monitor.check_interval_minutes)||60)*60000;
     if(last&&now-last<interval)continue;
@@ -440,7 +441,8 @@ Deno.serve(async (req: Request) => {
     try{
       const source=validateUrl(monitor.source_url),cards=new Map<string,{url:string;title:string;poster:string}>(),visited=new Set<string>();
       let next:string|null=source.toString();
-      for(let pageNo=0;pageNo<100&&next&&cards.size<500;pageNo++){
+      for(let pageNo=0;pageNo<6&&next&&cards.size<500;pageNo++){
+        if (Date.now() - runStartedAt >= runBudgetMs) break;
         if(visited.has(next))break;visited.add(next);
         const listing=await fetchHtml(next,source.hostname);
         for(const card of extractSeriesCards(listing.html,listing.url)){cards.set(card.url,card);if(cards.size>=500)break;}
@@ -449,7 +451,7 @@ Deno.serve(async (req: Request) => {
       if(!cards.size)throw new Error("لم يتم العثور على روابط مسلسلات عامة واضحة في صفحة القسم");
       let processed=0;
       for(const card of cards.values()){
-        if(processed>=25)break;
+        if(processed>=3 || Date.now() - runStartedAt >= runBudgetMs)break;
         try{
           const exists=await db.from("series").select("id").eq("source_page_url",card.url).maybeSingle();
           if(exists.error)throw exists.error;
@@ -492,7 +494,23 @@ Deno.serve(async (req: Request) => {
           const {error:pkg}=await db.from("content_package_items").upsert({package_id:monitor.package_id,content_type:"series",content_id:seriesId},{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
           if(pkg)throw pkg;
           const links=extractEpisodeLinks(page.html,page.url);
-          for(const link of links){
+          const {data:knownSeasons,error:knownSeasonsError}=await db.from("seasons")
+            .select("id,season_number").eq("series_id",seriesId);
+          if(knownSeasonsError)throw knownSeasonsError;
+          const knownSeasonIds=(knownSeasons||[]).map((row:any)=>row.id);
+          const knownSeasonNumbers=new Map((knownSeasons||[]).map((row:any)=>[row.id,Number(row.season_number)||1]));
+          const {data:knownEpisodes,error:knownEpisodesError}=knownSeasonIds.length
+            ? await db.from("episodes").select("season_id,episode_number").in("season_id",knownSeasonIds)
+            : {data:[],error:null};
+          if(knownEpisodesError)throw knownEpisodesError;
+          const knownEpisodeKeys=new Set((knownEpisodes||[]).map((row:any)=>
+            String(knownSeasonNumbers.get(row.season_id)||1)+":"+Number(row.episode_number)));
+          const pendingLinks=links.filter(link=>{
+            const seasonNumber=parseSeason(link.title+" "+link.url,parseSeason(meta.title+" "+page.html,1));
+            return !knownEpisodeKeys.has(seasonNumber+":"+link.number);
+          }).slice(0,3);
+          for(const link of pendingLinks){
+            if (Date.now() - runStartedAt >= runBudgetMs) break;
             try{
               const episode=await inspectEpisode(link,source.hostname,parseSeason(meta.title+" "+page.html,1));
               if(!episode.streamUrl){summary.skipped++;continue;}
@@ -527,7 +545,7 @@ Deno.serve(async (req: Request) => {
       }
     }catch(e){errorMessage=e instanceof Error?e.message:"تعذر فحص قسم المسلسلات";summary.failed++;}
     await db.from("series_section_monitors").update({last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString()}).eq("id",monitor.id);
-    summary.checked++;summary.results.push({monitor_id:monitor.id,added,error:errorMessage,mode:"section"});
+    summary.checked++;processedSectionMonitors++;summary.results.push({monitor_id:monitor.id,added,error:errorMessage,mode:"section"});
   }
 
   if (Date.now() - runStartedAt >= runBudgetMs) return json({success:true,...summary,deferred:"individual_episode_pages"});
