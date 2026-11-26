@@ -425,7 +425,10 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
     : Array.isArray(channelPayload?.channels) ? channelPayload.channels
     : Array.isArray(channelPayload?.data) ? channelPayload.data : [];
   if (!channelRows.length) throw new Error("Aloula channel API response format changed");
-  const channel = channelRows.find((row: any) => String(row?.url || "") === slug);
+  const channel = channelRows.find((row: any) => {
+    const channelUrl = String(row?.url || "").replace(/\/+$/, "");
+    return channelUrl === slug || channelUrl.endsWith("/" + slug);
+  });
   const hasLive = channel && [true, 1, "1", "true"].includes(channel.has_live);
   if (!channel || !hasLive) {
     throw new Error("Aloula channel was not found or is not currently live");
