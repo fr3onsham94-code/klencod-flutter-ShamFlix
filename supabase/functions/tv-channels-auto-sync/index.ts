@@ -429,7 +429,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
   let streamUrl = typeof channel?.streams?.hls === "string" ? channel.streams.hls : "";
   if (!streamUrl) {
     const channelId = channel.id ?? channel.channel_id;
-    if (channelId == null || String(channelId).trim().isEmpty) {
+    if (channelId == null || String(channelId).trim().length === 0) {
       throw new Error("Aloula response is missing the channel identifier");
     }
     const playerUrl = new URL(
