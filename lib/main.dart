@@ -3102,6 +3102,8 @@ class _DetailsPageState extends State<DetailsPage> {
     required String contentId,
     required String title,
     String? legacyUrl,
+    List<Map<String, dynamic>> episodeQueue = const [],
+    int episodeIndex = -1,
   }) async {
     if (contentType != 'episode') {
       await saveWatchRecord(contentType: contentType, item: widget.item, title: title,
@@ -3141,7 +3143,8 @@ class _DetailsPageState extends State<DetailsPage> {
       }
       await _startPlayback(fallback, title,
         progressKey: '$contentType-$contentId',
-        contentType: contentType, contentId: contentId);
+        contentType: contentType, contentId: contentId,
+        episodeQueue: episodeQueue, episodeIndex: episodeIndex);
       return;
     }
 
@@ -3154,6 +3157,7 @@ class _DetailsPageState extends State<DetailsPage> {
         servers: servers,
         progressKey: '$contentType-$contentId',
         contentType: contentType, contentId: contentId,
+        episodeQueue: episodeQueue, episodeIndex: episodeIndex,
       );
       return;
     }
@@ -3161,7 +3165,8 @@ class _DetailsPageState extends State<DetailsPage> {
     if (servers.length == 1) {
       await _startPlayback(servers.first['stream_url'].toString(), title,
         progressKey: '$contentType-$contentId',
-        contentType: contentType, contentId: contentId);
+        contentType: contentType, contentId: contentId,
+        episodeQueue: episodeQueue, episodeIndex: episodeIndex);
       return;
     }
 
@@ -3220,6 +3225,7 @@ class _DetailsPageState extends State<DetailsPage> {
       initialServerIndex: selectedIndex < 0 ? 0 : selectedIndex,
       progressKey: '$contentType-$contentId',
       contentType: contentType, contentId: contentId,
+      episodeQueue: episodeQueue, episodeIndex: episodeIndex,
     );
   }
 
@@ -3252,6 +3258,8 @@ class _DetailsPageState extends State<DetailsPage> {
     String progressKey = '',
     String contentType = '',
     String contentId = '',
+    List<Map<String, dynamic>> episodeQueue = const [],
+    int episodeIndex = -1,
   }) async {
     final prefsForNetwork = await SharedPreferences.getInstance();
     if (prefsForNetwork.getBool('shamflix_wifi_only') == true) {
@@ -3284,6 +3292,8 @@ class _DetailsPageState extends State<DetailsPage> {
             progressKey: progressKey,
             contentType: contentType,
             contentId: contentId,
+            episodeQueue: episodeQueue,
+            episodeIndex: episodeIndex,
           ),
         ));
       } else if (uri.scheme == 'http' || uri.scheme == 'https') {
@@ -3310,6 +3320,8 @@ class _DetailsPageState extends State<DetailsPage> {
           progressKey: progressKey,
           contentType: contentType,
           contentId: contentId,
+          episodeQueue: episodeQueue,
+          episodeIndex: episodeIndex,
         ),
       ));
       return;
@@ -3409,7 +3421,9 @@ class _DetailsPageState extends State<DetailsPage> {
                 await saveWatchRecord(contentType: 'episode', item: episodeRecord, title: episodeTitle,
                   fallbackPoster: valueOf(widget.item['poster_url']));
                 await _chooseAndPlay(contentType: 'episode', contentId: episode['id'].toString(),
-                  title: episodeTitle, legacyUrl: episode['stream_url']?.toString());
+                  title: episodeTitle, legacyUrl: episode['stream_url']?.toString(),
+                  episodeQueue: episodes.map((row) => Map<String, dynamic>.from(row)).toList(),
+                  episodeIndex: entry.key);
               },
             ),
           );
@@ -4233,6 +4247,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
   final String progressKey;
   final String contentType;
   final String contentId;
+  final List<Map<String, dynamic>> episodeQueue;
+  final int episodeIndex;
   final bool embedded;
   final VoidCallback? onClose;
   final Map<String, String> headers;
@@ -4246,6 +4262,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
     this.progressKey = '',
     this.contentType = '',
     this.contentId = '',
+    this.episodeQueue = const [],
+    this.episodeIndex = -1,
     this.embedded = false,
     this.onClose,
     this.headers = const {},
