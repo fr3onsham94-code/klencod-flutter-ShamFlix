@@ -807,6 +807,24 @@ async function syncChannels(db: any) {
       // User-added Xtream and M3U sources are imported in every language.
       entries: x.source.isBuiltin ? x.entries.filter(isArabicOrTurkishChannel) : x.entries,
     }));
+  const websitePlaybackHeaders = new Map<string, { referer: string; origin: string }>();
+  for (const source of sources) {
+    if (source.sourceType !== "website") continue;
+    if (source.websiteAdapter === "aloula") {
+      websitePlaybackHeaders.set(source.id, {
+        referer: "https://www.aloula.sa/",
+        origin: "https://www.aloula.sa",
+      });
+    } else {
+      try {
+        const pageUrl = new URL(source.url);
+        websitePlaybackHeaders.set(source.id, {
+          referer: source.url,
+          origin: pageUrl.origin,
+        });
+      } catch {}
+    }
+  }
   const sourceErrors = settledSources.filter((x): x is {status:"rejected";source:PlaylistSource;reason:unknown} => x.status === "rejected");
 
   const checkedAt = new Date().toISOString();
@@ -909,9 +927,7 @@ async function syncChannels(db: any) {
         source_position: stream.position,
         source_failures: 0,
         is_active: true,
-        ...(stream.sourceId.startsWith("website:aloula:")
-          ? { referer: "https://www.aloula.sa/", origin: "https://www.aloula.sa" }
-          : {}),
+        ...(websitePlaybackHeaders.get(stream.sourceId) || {}),
         sort_order: stream.sourceId === "iptv-org" ? 0 : stream.sourceId === "nexus" ? 1 : 2,
       });
     }
