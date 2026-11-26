@@ -326,7 +326,7 @@ Deno.serve(async (req: Request) => {
         nextPage=findSeriesNext(listing.html,listing.url);
       }
       const links=[...allLinks.values()].sort((a,b)=>a.number-b.number);
-      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة خلال أول 100 صفحة");
+      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة خلال أول 6 صفحات");
       const defaultSeason = parseSeason(listingTitle+" "+listingHtml,Number(monitor.season_number)||1);
       const seriesMeta = seriesMetadata(listingHtml,source,listingTitle,"","");
       const seriesUpdates: Record<string,unknown> = {source_page_checked_at:new Date().toISOString(),source_page_last_error:null};
