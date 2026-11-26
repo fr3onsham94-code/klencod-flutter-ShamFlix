@@ -1300,6 +1300,29 @@ class _AdminPageState extends State<AdminPage> {
       throw Exception(_readError(response));
     }
     final savedId = id ?? _returnedRowId(response.body);
+    if (section == 'series' && savedId != null) {
+      final rawSourceUrl = item['source_page_url']?.toString().trim() ?? '';
+      if (rawSourceUrl.isNotEmpty) {
+        final sourceUri = Uri.tryParse(rawSourceUrl);
+        if (sourceUri == null ||
+            (sourceUri.scheme != 'http' && sourceUri.scheme != 'https') ||
+            sourceUri.host.isEmpty || sourceUri.userInfo.isNotEmpty) {
+          throw Exception('رابط صفحة المسلسل غير صالح؛ استخدم رابط HTTP أو HTTPS صحيحاً');
+        }
+        await AuthService.client.from('series').update({
+          'source_monitor_enabled': true,
+          'source_monitor_interval_minutes': 60,
+        }).eq('id', savedId);
+        await AuthService.client.from('series_source_monitors').upsert({
+          'series_id': savedId,
+          'source_url': sourceUri.toString(),
+          'source_host': sourceUri.host,
+          'season_number': 1,
+          'check_interval_minutes': 60,
+          'is_active': true,
+        }, onConflict: 'series_id,source_url');
+      }
+    }
     await loadCatalog(section);
     return savedId;
   }
