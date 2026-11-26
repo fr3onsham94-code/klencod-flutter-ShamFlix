@@ -4478,7 +4478,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Future<void> _handlePlaybackError(String message) async {
-    if (!mounted || _failoverInProgress) return;
+    if (!mounted) return;
     if (currentServerIndex >= 0 && currentServerIndex < _runtimeServers.length) {
       final failedServer = _runtimeServers[currentServerIndex];
       final failedId = valueOf(failedServer['id']).trim();
@@ -4486,6 +4486,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         _failedManagedServerIds.add(failedId);
       }
     }
+    if (_failoverInProgress) return;
     if (_runtimeServers.length > 1) {
       _failoverInProgress = true;
       _failedServers.add(currentServerIndex);
@@ -4527,6 +4528,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           return;
         } catch (_) {
           _failedServers.add(next);
+          final failedId = valueOf(_runtimeServers[next]['id']).trim();
+          if (failedId.isNotEmpty &&
+              valueOf(_runtimeServers[next]['source_page_url']).trim().isNotEmpty) {
+            _failedManagedServerIds.add(failedId);
+          }
         }
       }
       _failoverInProgress = false;
@@ -4596,6 +4602,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               return;
             } catch (_) {
               _failedServers.add(index);
+              final failedId = valueOf(_runtimeServers[index]['id']).trim();
+              if (failedId.isNotEmpty &&
+                  valueOf(_runtimeServers[index]['source_page_url']).trim().isNotEmpty) {
+                _failedManagedServerIds.add(failedId);
+              }
             }
           }
         }
