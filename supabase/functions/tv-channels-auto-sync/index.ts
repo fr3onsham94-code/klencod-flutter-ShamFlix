@@ -348,6 +348,10 @@ function decodeWebsiteText(value: string): string {
 }
 
 async function fetchGenericWebsite(source: PlaylistSource) {
+  const sourceUri = new URL(source.url);
+  if (/\.(?:m3u8?|mpd)$/i.test(sourceUri.pathname)) {
+    throw new Error("This is a playlist URL, not a website page; add it as an M3U source");
+  }
   const { finalUrl, body } = await fetchWebsitePage(source.url);
   const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
     body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
