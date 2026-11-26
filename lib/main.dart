@@ -4478,7 +4478,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   }
 
   Future<void> _handlePlaybackError(String message) async {
-    if (!mounted) return;
+    if (!mounted || _failoverInProgress) return;
     if (currentServerIndex >= 0 && currentServerIndex < _runtimeServers.length) {
       final failedServer = _runtimeServers[currentServerIndex];
       final failedId = valueOf(failedServer['id']).trim();
@@ -4486,7 +4486,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         _failedManagedServerIds.add(failedId);
       }
     }
-    if (_failoverInProgress) return;
     if (_runtimeServers.length > 1) {
       _failoverInProgress = true;
       _failedServers.add(currentServerIndex);
