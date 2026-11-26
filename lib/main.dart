@@ -4522,7 +4522,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _pickHlsQuality() async {
     if (_qualityVariants.length < 2 || _qualityLoading) return;
-    final selected = await showModalBottomSheet<_HlsQualityVariant?>(
+    final selected = await showModalBottomSheet<Object?>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => SafeArea(
@@ -4540,7 +4540,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                 dense: true,
                 title: const Text('تلقائي', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
                 trailing: _selectedQualityVariant == null ? Icon(Icons.check_circle, color: gold) : null,
-                onTap: () => Navigator.pop(sheetContext, null),
+                onTap: () => Navigator.pop(sheetContext, 'auto'),
               ),
               for (final quality in _qualityVariants)
                 ListTile(
@@ -4554,11 +4554,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         ),
       ),
     );
-    if (selected == null) {
-      if (_selectedQualityVariant != null) await _changeHlsQuality(null);
+    if (selected == null) return;
+    if (selected == 'auto') {
+      await _changeHlsQuality(null);
       return;
     }
-    await _changeHlsQuality(selected);
+    if (selected is _HlsQualityVariant) await _changeHlsQuality(selected);
   }
 
   Future<void> _savePreferredServer() async {
