@@ -183,6 +183,11 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       _message(urlError ?? 'محول Aloula يحتاج رابط قناة رسمي من نوع /live/اسم-القناة', error: true);
       return;
     }
+    if (_websiteAdapter == 'auto' &&
+        ['.m3u', '.m3u8', '.mpd'].any((extension) => uri.path.toLowerCase().endsWith(extension))) {
+      _message('هذا رابط قائمة أو بث مباشر، أضفه من قسم مصادر M3U وليس كموقع ويب', error: true);
+      return;
+    }
     setState(() => _saving = true);
     String? insertedId;
     try {
