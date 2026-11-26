@@ -35,7 +35,7 @@ async function fetchHtml(raw: string, originalHost?: string): Promise<{ html: st
   const allowedHost = originalHost ?? url.hostname;
   for (let redirect = 0; redirect <= 4; redirect++) {
     const response = await fetch(url, {
-      redirect: "manual", signal: AbortSignal.timeout(18000),
+      redirect: "manual", signal: AbortSignal.timeout(8000),
       headers: {
         "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
@@ -300,8 +300,13 @@ Deno.serve(async (req: Request) => {
     : {data:[],error:null};
   if (listError) return json({error:listError.message,stage:"series_monitors"},500);
   const now = Date.now();
+  const runStartedAt = Date.now();
+  const runBudgetMs = 85_000;
   const summary = {checked:0,added:0,skipped:0,failed:0,results:[] as unknown[]};
+  let processedSeriesMonitors = 0;
   for (const monitor of monitors ?? []) {
+    // Keep each invocation bounded; remaining monitors stay due for the next cron run.
+    if (Date.now() - runStartedAt >= runBudgetMs || processedSeriesMonitors >= 2) break;
     const last = monitor.last_checked_at ? new Date(monitor.last_checked_at).getTime() : 0;
     const interval = Math.max(30,Number(monitor.check_interval_minutes)||60)*60000;
     if (last && now-last < interval) continue;
@@ -312,7 +317,7 @@ Deno.serve(async (req: Request) => {
       const visitedPages=new Set<string>();
       let nextPage:string|null=source.toString(),listingTitle="";
       let listingHtml="";
-      for(let pageNo=0;pageNo<100&&nextPage;pageNo++){
+      for(let pageNo=0;pageNo<6&&nextPage;pageNo++){
         if(visitedPages.has(nextPage))break;
         visitedPages.add(nextPage);
         const listing=await fetchHtml(nextPage,source.hostname);
@@ -321,7 +326,7 @@ Deno.serve(async (req: Request) => {
         nextPage=findSeriesNext(listing.html,listing.url);
       }
       const links=[...allLinks.values()].sort((a,b)=>a.number-b.number);
-      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة خلال أول 100 صفحة");
+      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة خلال أول 6 صفحات");
       const defaultSeason = parseSeason(listingTitle+" "+listingHtml,Number(monitor.season_number)||1);
       const seriesMeta = seriesMetadata(listingHtml,source,listingTitle,"","");
       const seriesUpdates: Record<string,unknown> = {source_page_checked_at:new Date().toISOString(),source_page_last_error:null};
@@ -332,7 +337,25 @@ Deno.serve(async (req: Request) => {
       if (seriesMeta.release_year) seriesUpdates.release_year = seriesMeta.release_year;
       const {error:seriesUpdateError} = await db.from("series").update(seriesUpdates).eq("id",monitor.series_id);
       if (seriesUpdateError) throw seriesUpdateError;
-      for (const link of links) {
+      const {data:knownSeasons,error:knownSeasonsError} = await db.from("seasons")
+        .select("id,season_number").eq("series_id",monitor.series_id);
+      if (knownSeasonsError) throw knownSeasonsError;
+      const knownSeasonIds = (knownSeasons || []).map((row:any)=>row.id);
+      const knownSeasonNumbers = new Map((knownSeasons || []).map((row:any)=>[row.id,Number(row.season_number)||defaultSeason]));
+      const {data:knownEpisodes,error:knownEpisodesError} = knownSeasonIds.length
+        ? await db.from("episodes").select("season_id,episode_number").in("season_id",knownSeasonIds)
+        : {data:[],error:null};
+      if (knownEpisodesError) throw knownEpisodesError;
+      const knownEpisodeKeys = new Set((knownEpisodes || []).map((row:any)=>
+        String(knownSeasonNumbers.get(row.season_id) || defaultSeason) + ":" + Number(row.episode_number)));
+      // Existing episodes are refreshed by the independent episode-page pass below.
+      // This discovery pass spends its budget only on genuinely new episode pages.
+      const pendingLinks = links.filter(link => {
+        const seasonNumber = parseSeason(link.title + " " + link.url,defaultSeason);
+        return !knownEpisodeKeys.has(seasonNumber + ":" + link.number);
+      }).slice(0,3);
+      for (const link of pendingLinks) {
+        if (Date.now() - runStartedAt >= runBudgetMs) break;
         try {
           const episode = await inspectEpisode(link,source.hostname,defaultSeason);
           if (!episode.streamUrl) { summary.skipped++; continue; }
@@ -399,9 +422,11 @@ Deno.serve(async (req: Request) => {
       source_page_checked_at:new Date().toISOString(),source_page_last_error:errorMessage,
     }).eq("id",monitor.series_id);
     summary.checked++;
+    processedSeriesMonitors++;
     summary.results.push({monitor_id:monitor.id,added,error:errorMessage});
   }
 
+  if (Date.now() - runStartedAt >= runBudgetMs) return json({success:true,...summary,deferred:"section_and_episode_checks"});
   const {data:sectionMonitors,error:sectionListError}=await db.from("series_section_monitors")
     .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at")
     .eq("is_active",true).order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100);
@@ -504,6 +529,7 @@ Deno.serve(async (req: Request) => {
     summary.checked++;summary.results.push({monitor_id:monitor.id,added,error:errorMessage,mode:"section"});
   }
 
+  if (Date.now() - runStartedAt >= runBudgetMs) return json({success:true,...summary,deferred:"individual_episode_pages"});
   // Independently recheck saved episode pages, even if a provider removes
   // an episode from the current series listing.
   const {data:enabledSeasons,error:enabledSeasonsError}=enabledSeriesIds.length
