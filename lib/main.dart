@@ -4778,6 +4778,17 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       if (removedIds.isNotEmpty) {
         _message('تم حذف ${removedIds.length} سيرفر معطّل بعد التأكد من بديل شغّال');
       }
+      final hasUnauditedManagedServer = refreshed.any((server) {
+        final id = valueOf(server['id']).trim();
+        return id.isNotEmpty &&
+            valueOf(server['source_page_url']).trim().isNotEmpty &&
+            !_auditedManagedServerIds.contains(id);
+      });
+      if (hasUnauditedManagedServer) {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) unawaited(_auditManagedServersAfterStablePlayback());
+        });
+      }
     } catch (_) {
       // If source refresh or verification fails, keep every existing server.
     }
