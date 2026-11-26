@@ -4520,6 +4520,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         (widget.contentType == 'movie' || widget.contentType == 'episode') &&
         widget.contentId.isNotEmpty) {
       _sourceRefreshAttempted = true;
+      _failoverInProgress = true;
       setState(() {
         opening = true;
         error = null;
@@ -4581,6 +4582,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         }
       } catch (_) {
         // Preserve existing links when refresh is unavailable or fails.
+      } finally {
+        _failoverInProgress = false;
       }
     }
 
