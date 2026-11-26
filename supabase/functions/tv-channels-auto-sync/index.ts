@@ -91,7 +91,7 @@ function websiteSourceConfig(sourceKey: string): { adapter: string; targetPackag
 function sourceIdForRow(row: any): string {
   const sourceKey = row.source_key ? String(row.source_key) : "";
   const parts = sourceKey.split(":");
-  if (parts.length === 4 && parts[0] === "website") return "website:" + parts[3];
+  if (parts.length === 4 && parts[0] === "website") return "website:" + parts[1] + ":" + parts[3];
   return sourceKey || (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id);
 }
 
