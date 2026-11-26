@@ -368,7 +368,7 @@ async function fetchGenericWebsite(source: PlaylistSource) {
   for (const match of root.body.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)) {
     const opening = /^<a\b[^>]*>/i.exec(match[0])?.[0];
     if (!opening) continue;
-    const linkAttrs = attrs(opening);
+    const linkAttrs = parseAttrs(opening);
     if (!linkAttrs.href) continue;
     try {
       const target = new URL(decodeWebsiteText(linkAttrs.href), root.finalUrl);
