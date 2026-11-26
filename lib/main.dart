@@ -4512,8 +4512,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
             ));
           }
         }
-        final distinctServerQualities = sourceVariants.map((item) => item.label).toSet();
-        if (distinctServerQualities.length > 1) result.addAll(sourceVariants);
+        final allQualityLabels = <String>{
+          ...result.map((item) => item.label),
+          ...sourceVariants.map((item) => item.label),
+        };
+        if (allQualityLabels.length > 1) result.addAll(sourceVariants);
       }
       final ordered = result..sort((a, b) {
         final byHeight = (b.height ?? 0).compareTo(a.height ?? 0);
