@@ -458,7 +458,7 @@ Deno.serve(async (req: Request) => {
   // Independently recheck saved episode pages, even if a provider removes
   // an episode from the current series listing.
   const {data:enabledSeasons,error:enabledSeasonsError}=enabledSeriesIds.length
-    ? await db.from("seasons").select("id,series_id").in("series_id",enabledSeriesIds)
+    ? await db.from("seasons").select("id,series_id,season_number").in("series_id",enabledSeriesIds)
     : {data:[],error:null};
   if(enabledSeasonsError)return json({error:enabledSeasonsError.message,stage:"enabled_seasons"},500);
   const enabledSeasonIds=(enabledSeasons||[]).map((row:any)=>row.id);
