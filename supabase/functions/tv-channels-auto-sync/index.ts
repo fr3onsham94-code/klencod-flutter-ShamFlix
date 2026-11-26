@@ -1,6 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-type PlaylistSource = { id: string; name: string; url: string; dbId: string; sourceType: string; isBuiltin: boolean; storagePath?: string };
+type PlaylistSource = {
+  id: string; name: string; url: string; dbId: string;
+  sourceType: string; isBuiltin: boolean; storagePath?: string;
+  websiteAdapter?: string; targetPackageId?: string;
+};
 
 // Sources are managed in public.tv_channel_sources so every built-in and custom
 // playlist can be enabled or paused independently from the admin panel.
@@ -76,6 +80,23 @@ function canonicalKey(_tvgId: string, name: string, _sourceId: string): string {
   return "name:" + normalizeName(alias || baseName);
 }
 
+function websiteSourceConfig(sourceKey: string): { adapter: string; targetPackageId?: string } | null {
+  const parts = sourceKey.split(":");
+  if (parts.length !== 4 || parts[0] !== "website") return null;
+  const adapter = parts[1] === "aloula" ? "aloula" : "auto";
+  const targetPackageId = parts[2] && parts[2] !== "auto" ? parts[2] : undefined;
+  return { adapter, targetPackageId };
+}
+
+function sourceIdForRow(row: any): string {
+  const sourceKey = row.source_key ? String(row.source_key) : "";
+  const parts = sourceKey.split(":");
+  if (parts.length === 4 && parts[0] === "website") return "website:" + parts[1] + ":" + parts[3];
+  return sourceKey || (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id);
+}
+
+// Website adapter settings are encoded in source_key to remain backward-compatible
+// with existing installations; the source UUID remains the final component.
 function safeStreamUrl(raw: string): string | null {
   try {
     const u = new URL(raw.trim());
@@ -251,6 +272,11 @@ async function validatePublicPlaylistUrl(url: URL, allowNonStandardPort = false)
 }
 
 async function fetchPlaylist(source: PlaylistSource, db: any) {
+  if (source.sourceType === "website") {
+    return source.websiteAdapter === "aloula"
+      ? await fetchAloulaWebsite(source)
+      : await fetchGenericWebsite(source);
+  }
   if (source.sourceType === "m3u_file") {
     if (!source.storagePath) throw new Error(source.id + " has no uploaded playlist file");
     const { data, error } = await db.storage.from("tv-source-playlists").download(source.storagePath);
@@ -284,6 +310,164 @@ async function fetchPlaylist(source: PlaylistSource, db: any) {
   const entries = parseM3u(body, source.id, source.name);
   if (!entries.length) throw new Error(source.id + " contained no supported direct HLS/DASH streams");
   return entries;
+}
+
+async function fetchWebsitePage(url: string): Promise<{ finalUrl: URL; body: string }> {
+  let current = new URL(url);
+  let response: Response | null = null;
+  for (let hop = 0; hop <= 3; hop++) {
+    await validatePublicPlaylistUrl(current);
+    response = await fetch(current.toString(), {
+      redirect: "manual",
+      signal: AbortSignal.timeout(20000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; ShamFlix-TV-Sync/1.0)",
+        "Accept": "text/html,application/xhtml+xml,application/json,*/*",
+      },
+    });
+    if (response.status < 300 || response.status >= 400) break;
+    const location = response.headers.get("location");
+    if (!location || hop === 3) throw new Error("Website returned an invalid or excessive redirect");
+    current = new URL(location, current);
+  }
+  if (!response) throw new Error("Website did not return a response");
+  if (!response.ok) throw new Error("Website returned HTTP " + response.status);
+  const body = await response.text();
+  if (new TextEncoder().encode(body).length > 4 * 1024 * 1024) {
+    throw new Error("Website page exceeds the 4 MB safety limit");
+  }
+  return { finalUrl: current, body };
+}
+
+function decodeWebsiteText(value: string): string {
+  return clean(value)
+    .replace(/\\\//g, "/")
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\u003d/gi, "=")
+    .replace(/&amp;/gi, "&");
+}
+
+async function fetchGenericWebsite(source: PlaylistSource) {
+  const sourceUri = new URL(source.url);
+  if (/\.(?:m3u8?|mpd)$/i.test(sourceUri.pathname)) {
+    throw new Error("This is a playlist URL, not a website page; add it as an M3U source");
+  }
+  const { finalUrl, body } = await fetchWebsitePage(source.url);
+  const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
+    body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
+  const pageTitle = titleMatch ? decodeWebsiteText(titleMatch[1]).slice(0, 100) : source.name;
+  const candidates = new Set<string>();
+  const patterns = [
+    /(?:href|src|data-src|data-hls|data-stream)\s*=\s*["']([^"']+)["']/gi,
+    /https?:\/\/[^"'\s<>\\]+/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of body.matchAll(pattern)) {
+      const raw = decodeWebsiteText(match[1] ?? match[0]).replace(/[),;\]}]+$/g, "");
+      try {
+        const resolved = new URL(raw, finalUrl);
+        const safe = safeStreamUrl(resolved.toString());
+        if (safe && /\.(?:m3u8|mpd)$/i.test(new URL(safe).pathname)) candidates.add(safe);
+      } catch {}
+      if (candidates.size >= 40) break;
+    }
+    if (candidates.size >= 40) break;
+  }
+  const entries: ReturnType<typeof parseM3u> = [];
+  let position = 0;
+  for (const streamUrl of candidates) {
+    try {
+      await validatePublicPlaylistUrl(new URL(streamUrl));
+    } catch {
+      continue;
+    }
+    entries.push({
+      sourceId: source.id,
+      sourceName: source.name,
+      key: canonicalKey("", pageTitle, source.id),
+      name: pageTitle,
+      nameEn: pageTitle,
+      tvgId: "",
+      logo: "",
+      category: categoryOf("", pageTitle),
+      url: streamUrl,
+      position: position++,
+      tvgLanguage: "",
+      tvgCountry: "",
+      groupTitle: "",
+    });
+  }
+  if (!entries.length) {
+    throw new Error("Website page contains no supported public direct HLS/DASH stream links");
+  }
+  return entries;
+}
+
+async function fetchAloulaWebsite(source: PlaylistSource) {
+  const pageUrl = new URL(source.url);
+  if (!/(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(pageUrl.hostname) ||
+      !/\/live\/[^/]+\/?$/i.test(pageUrl.pathname)) {
+    throw new Error("Aloula adapter accepts only official Aloula live-channel pages");
+  }
+  const slug = pageUrl.pathname.split("/").filter(Boolean).pop() || "";
+  const apiUrl = new URL("https://aloula.faulio.com/api/v1/channels");
+  await validatePublicPlaylistUrl(apiUrl);
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (compatible; ShamFlix-TV-Sync/1.0)",
+    "Origin": "https://www.aloula.sa",
+    "Referer": "https://www.aloula.sa/",
+    "Accept": "application/json",
+  };
+  const channelResponse = await fetch(apiUrl, { headers, signal: AbortSignal.timeout(15000) });
+  if (!channelResponse.ok) throw new Error("Aloula channel API returned HTTP " + channelResponse.status);
+  const channelPayload = await channelResponse.json();
+  const channelRows = Array.isArray(channelPayload) ? channelPayload
+    : Array.isArray(channelPayload?.channels) ? channelPayload.channels
+    : Array.isArray(channelPayload?.data) ? channelPayload.data : [];
+  if (!channelRows.length) throw new Error("Aloula channel API response format changed");
+  const channel = channelRows.find((row: any) => {
+    const channelUrl = String(row?.url || "").replace(/\/+$/, "");
+    return channelUrl === slug || channelUrl.endsWith("/" + slug);
+  });
+  const hasLive = channel && [true, 1, "1", "true"].includes(channel.has_live);
+  if (!channel || !hasLive) {
+    throw new Error("Aloula channel was not found or is not currently live");
+  }
+  let streamUrl = typeof channel?.streams?.hls === "string" ? channel.streams.hls : "";
+  if (!streamUrl) {
+    const channelId = channel.id ?? channel.channel_id;
+    if (channelId == null || String(channelId).trim().length === 0) {
+      throw new Error("Aloula response is missing the channel identifier");
+    }
+    const playerUrl = new URL(
+      "https://aloula.faulio.com/api/v1.1/channels/" + encodeURIComponent(String(channelId)) + "/player",
+    );
+    await validatePublicPlaylistUrl(playerUrl);
+    const playerResponse = await fetch(playerUrl, { headers, signal: AbortSignal.timeout(15000) });
+    if (!playerResponse.ok) throw new Error("Aloula player API returned HTTP " + playerResponse.status);
+    const playerData = await playerResponse.json();
+    streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls
+      : typeof playerData?.data?.streams?.hls === "string" ? playerData.data.streams.hls : "";
+  }
+  const safeUrl = safeStreamUrl(streamUrl);
+  if (!safeUrl) throw new Error("Aloula did not return a supported direct HLS stream");
+  await validatePublicPlaylistUrl(new URL(safeUrl));
+  const title = clean(channel.title || channel.name || source.name).slice(0, 100);
+  return [{
+    sourceId: source.id,
+    sourceName: source.name,
+    key: canonicalKey("", title, source.id),
+    name: title,
+    nameEn: title,
+    tvgId: String(channel.id || ""),
+    logo: "",
+    category: categoryOf("قنوات سعودية", title),
+    url: safeUrl,
+    position: 0,
+    tvgLanguage: "Arabic",
+    tvgCountry: "sa",
+    groupTitle: "قنوات سعودية",
+  }];
 }
 
 async function hash(value: string): Promise<string> {
@@ -559,7 +743,9 @@ async function syncChannels(db: any) {
   const sources: PlaylistSource[] = (allSourceRows || [])
     .filter((row: any) => row.is_active === true && (row.is_builtin !== true || builtinEnabled))
     .map((row: any) => {
-      const sourceType = String(row.source_type || "m3u_url");
+      const storedSourceKey = row.source_key ? String(row.source_key) : "";
+      const websiteConfig = websiteSourceConfig(storedSourceKey);
+      const sourceType = websiteConfig ? "website" : String(row.source_type || "m3u_url");
       let sourceUrl = String(row.playlist_url || "");
       if (sourceType === "xtream") {
         try {
@@ -580,13 +766,15 @@ async function syncChannels(db: any) {
         }
       }
       return {
-        id: row.source_key ? String(row.source_key) : (sourceType === "xtream" ? "xtream:" : "custom:") + String(row.id),
+        id: sourceIdForRow(row),
         dbId: String(row.id),
         name: clean(row.name).slice(0, 80),
         url: sourceUrl,
         sourceType,
         isBuiltin: row.is_builtin === true,
         storagePath: row.playlist_storage_path ? String(row.playlist_storage_path) : undefined,
+        websiteAdapter: websiteConfig?.adapter,
+        targetPackageId: websiteConfig?.targetPackageId,
       };
     });
 
@@ -594,8 +782,7 @@ async function syncChannels(db: any) {
   // A channel remains visible if another active source still provides a stream for it.
   const pausedSourceIds = (allSourceRows || [])
     .filter((row: any) => row.is_active !== true || (row.is_builtin === true && !builtinEnabled))
-    .map((row: any) => row.source_key ? String(row.source_key) :
-      (String(row.source_type || "m3u_url") === "xtream" ? "xtream:" : "custom:") + String(row.id));
+    .map((row: any) => sourceIdForRow(row));
   if (pausedSourceIds.length) {
     const { error } = await db.from("playback_servers")
       .update({ is_active: false })
@@ -623,6 +810,24 @@ async function syncChannels(db: any) {
       // User-added Xtream and M3U sources are imported in every language.
       entries: x.source.isBuiltin ? x.entries.filter(isArabicOrTurkishChannel) : x.entries,
     }));
+  const websitePlaybackHeaders = new Map<string, { referer: string; origin: string }>();
+  for (const source of sources) {
+    if (source.sourceType !== "website") continue;
+    if (source.websiteAdapter === "aloula") {
+      websitePlaybackHeaders.set(source.id, {
+        referer: "https://www.aloula.sa/",
+        origin: "https://www.aloula.sa",
+      });
+    } else {
+      try {
+        const pageUrl = new URL(source.url);
+        websitePlaybackHeaders.set(source.id, {
+          referer: source.url,
+          origin: pageUrl.origin,
+        });
+      } catch {}
+    }
+  }
   const sourceErrors = settledSources.filter((x): x is {status:"rejected";source:PlaylistSource;reason:unknown} => x.status === "rejected");
 
   const checkedAt = new Date().toISOString();
@@ -638,6 +843,17 @@ async function syncChannels(db: any) {
     throw new Error("All active playlist sources failed; existing catalogue was left untouched");
   }
   const grouped = new Map<string, typeof sourceResults[number]["entries"]>();
+  const targetPackagesByChannelKey = new Map<string, Set<string>>();
+  for (const result of sourceResults) {
+    const targetPackageId = result.source.targetPackageId;
+    if (targetPackageId) {
+      for (const entry of result.entries) {
+        const targets = targetPackagesByChannelKey.get(entry.key) || new Set<string>();
+        targets.add(targetPackageId);
+        targetPackagesByChannelKey.set(entry.key, targets);
+      }
+    }
+  }
   for (const { entries } of sourceResults) {
     for (const entry of entries) {
       const group = grouped.get(entry.key) || [];
@@ -714,6 +930,7 @@ async function syncChannels(db: any) {
         source_position: stream.position,
         source_failures: 0,
         is_active: true,
+        ...(websitePlaybackHeaders.get(stream.sourceId) || {}),
         sort_order: stream.sourceId === "iptv-org" ? 0 : stream.sourceId === "nexus" ? 1 : 2,
       });
     }
@@ -813,12 +1030,28 @@ async function syncChannels(db: any) {
   if (packagesError) throw new Error("package lookup: " + JSON.stringify(packagesError));
   const packageIds = new Map((packages || []).map((x:any)=>[x.name,x.id]));
   const itemRows: Record<string,unknown>[] = [];
+  const requestedTargetPackageIds = [...new Set(
+    [...targetPackagesByChannelKey.values()].flatMap(ids => [...ids]),
+  )];
+  const validTargetPackageIds = new Set<string>();
+  for (let offset = 0; offset < requestedTargetPackageIds.length; offset += 500) {
+    const batch = requestedTargetPackageIds.slice(offset, offset + 500);
+    const { data, error } = await db.from("content_packages")
+      .select("id").eq("content_type", "channel").in("id", batch);
+    if (error) throw new Error("website target package validation: " + JSON.stringify(error));
+    for (const row of data || []) validTargetPackageIds.add(String(row.id));
+  }
   for (const [key,labels] of memberships) {
     const channelId = channelIds.get(key);
     if (!channelId) continue;
     for (const label of labels) {
       const packageId = packageIds.get("قنوات تلقائية — " + label);
       if (packageId) itemRows.push({ package_id:packageId, content_type:"channel", content_id:channelId });
+    }
+    for (const targetPackageId of targetPackagesByChannelKey.get(key) || []) {
+      if (validTargetPackageIds.has(targetPackageId)) {
+        itemRows.push({ package_id:targetPackageId, content_type:"channel", content_id:channelId });
+      }
     }
   }
   // Add/update automatic package memberships for channels supplied by active sources.

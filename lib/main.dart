@@ -3102,6 +3102,8 @@ class _DetailsPageState extends State<DetailsPage> {
     required String contentId,
     required String title,
     String? legacyUrl,
+    List<Map<String, dynamic>> episodeQueue = const [],
+    int episodeIndex = -1,
   }) async {
     if (contentType != 'episode') {
       await saveWatchRecord(contentType: contentType, item: widget.item, title: title,
@@ -3141,7 +3143,8 @@ class _DetailsPageState extends State<DetailsPage> {
       }
       await _startPlayback(fallback, title,
         progressKey: '$contentType-$contentId',
-        contentType: contentType, contentId: contentId);
+        contentType: contentType, contentId: contentId,
+        episodeQueue: episodeQueue, episodeIndex: episodeIndex);
       return;
     }
 
@@ -3154,6 +3157,7 @@ class _DetailsPageState extends State<DetailsPage> {
         servers: servers,
         progressKey: '$contentType-$contentId',
         contentType: contentType, contentId: contentId,
+        episodeQueue: episodeQueue, episodeIndex: episodeIndex,
       );
       return;
     }
@@ -3161,7 +3165,8 @@ class _DetailsPageState extends State<DetailsPage> {
     if (servers.length == 1) {
       await _startPlayback(servers.first['stream_url'].toString(), title,
         progressKey: '$contentType-$contentId',
-        contentType: contentType, contentId: contentId);
+        contentType: contentType, contentId: contentId,
+        episodeQueue: episodeQueue, episodeIndex: episodeIndex);
       return;
     }
 
@@ -3220,6 +3225,7 @@ class _DetailsPageState extends State<DetailsPage> {
       initialServerIndex: selectedIndex < 0 ? 0 : selectedIndex,
       progressKey: '$contentType-$contentId',
       contentType: contentType, contentId: contentId,
+      episodeQueue: episodeQueue, episodeIndex: episodeIndex,
     );
   }
 
@@ -3252,6 +3258,8 @@ class _DetailsPageState extends State<DetailsPage> {
     String progressKey = '',
     String contentType = '',
     String contentId = '',
+    List<Map<String, dynamic>> episodeQueue = const [],
+    int episodeIndex = -1,
   }) async {
     final prefsForNetwork = await SharedPreferences.getInstance();
     if (prefsForNetwork.getBool('shamflix_wifi_only') == true) {
@@ -3284,6 +3292,8 @@ class _DetailsPageState extends State<DetailsPage> {
             progressKey: progressKey,
             contentType: contentType,
             contentId: contentId,
+            episodeQueue: episodeQueue,
+            episodeIndex: episodeIndex,
           ),
         ));
       } else if (uri.scheme == 'http' || uri.scheme == 'https') {
@@ -3310,6 +3320,8 @@ class _DetailsPageState extends State<DetailsPage> {
           progressKey: progressKey,
           contentType: contentType,
           contentId: contentId,
+          episodeQueue: episodeQueue,
+          episodeIndex: episodeIndex,
         ),
       ));
       return;
@@ -3409,7 +3421,9 @@ class _DetailsPageState extends State<DetailsPage> {
                 await saveWatchRecord(contentType: 'episode', item: episodeRecord, title: episodeTitle,
                   fallbackPoster: valueOf(widget.item['poster_url']));
                 await _chooseAndPlay(contentType: 'episode', contentId: episode['id'].toString(),
-                  title: episodeTitle, legacyUrl: episode['stream_url']?.toString());
+                  title: episodeTitle, legacyUrl: episode['stream_url']?.toString(),
+                  episodeQueue: episodes.map((row) => Map<String, dynamic>.from(row)).toList(),
+                  episodeIndex: entry.key);
               },
             ),
           );
@@ -4225,6 +4239,15 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
 
 
 
+class _HlsQualityVariant {
+  final String label;
+  final String url;
+  final int? height;
+  final int? bandwidth;
+  final int? serverIndex;
+  const _HlsQualityVariant({required this.label, required this.url, this.height, this.bandwidth, this.serverIndex});
+}
+
 class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
   final String title;
@@ -4233,6 +4256,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
   final String progressKey;
   final String contentType;
   final String contentId;
+  final List<Map<String, dynamic>> episodeQueue;
+  final int episodeIndex;
   final bool embedded;
   final VoidCallback? onClose;
   final Map<String, String> headers;
@@ -4246,6 +4271,8 @@ class ShamFlixPlayerPage extends StatefulWidget {
     this.progressKey = '',
     this.contentType = '',
     this.contentId = '',
+    this.episodeQueue = const [],
+    this.episodeIndex = -1,
     this.embedded = false,
     this.onClose,
     this.headers = const {},
@@ -4279,6 +4306,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   String? _embedFallbackName;
   StreamSubscription<Duration>? _positionSubscription;
   int _lastSavedSecond = -1;
+  String? _currentPlaybackUrl;
+  String? _qualityMasterUrl;
+  List<_HlsQualityVariant> _qualityVariants = const [];
+  _HlsQualityVariant? _selectedQualityVariant;
+  int _qualityMasterServerIndex = -1;
+  bool _qualityLoading = false;
 
   String get _settingsPrefix =>
       ShamFlixLocalStore.playerPrefix(widget.progressKey, widget.title);
@@ -4363,7 +4396,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
 
   Future<void> _open([String? url]) async {
     try {
-      await player.open(Media(url ?? widget.url, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
+      _currentPlaybackUrl = url ?? widget.url;
+      _qualityMasterUrl = _currentPlaybackUrl;
+      _qualityMasterServerIndex = currentServerIndex;
+      _selectedQualityVariant = null;
+      _qualityVariants = const [];
+      await player.open(Media(_currentPlaybackUrl!, httpHeaders: _headersForServer())).timeout(const Duration(seconds: 20));
       if (!mounted) return;
       await _savePreferredServer();
       final prefs = await SharedPreferences.getInstance();
@@ -4378,10 +4416,220 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       await _restorePlaybackPosition(prefs);
       await _restoreTrackPreferences(prefs);
       if (mounted) _showControls();
+      unawaited(_loadHlsQualityVariants());
       unawaited(_runPlaybackServerHealthCheck());
     } catch (e) {
       _handlePlaybackError('تعذر تشغيل هذا الرابط: $e');
     }
+  }
+
+  Map<String, String> _parseHlsAttributes(String raw) {
+    final result = <String, String>{};
+    final pattern = RegExp(r'([A-Z0-9-]+)=("(?:[^"]*)"|[^,]*)', caseSensitive: false);
+    for (final match in pattern.allMatches(raw)) {
+      result[match.group(1)!.toUpperCase()] = (match.group(2) ?? '').replaceAll('"', '').trim();
+    }
+    return result;
+  }
+
+  Future<void> _loadHlsQualityVariants() async {
+    final masterUrl = _qualityMasterUrl ?? _currentPlaybackUrl ?? widget.url;
+    final uri = Uri.tryParse(masterUrl);
+    if (uri == null || !uri.hasScheme || !uri.path.toLowerCase().endsWith('.m3u8')) {
+      if (mounted) setState(() => _qualityVariants = const []);
+      return;
+    }
+    if (mounted) setState(() => _qualityLoading = true);
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final request = await client.getUrl(uri).timeout(const Duration(seconds: 8));
+      for (final entry in _headersForServer().entries) {
+        request.headers.set(entry.key, entry.value);
+      }
+      request.headers.set(HttpHeaders.acceptHeader, 'application/vnd.apple.mpegurl,application/x-mpegURL,*/*');
+      final response = await request.close().timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300 ||
+          response.contentLength > 2 * 1024 * 1024) return;
+      final baseUri = response.redirects.isNotEmpty ? response.redirects.last.location : uri;
+      final body = await response.transform(utf8.decoder).join();
+      if (body.length > 2 * 1024 * 1024) return;
+      final variants = <_HlsQualityVariant>[];
+      Map<String, String>? pending;
+      for (final rawLine in body.split(RegExp(r'\r?\n'))) {
+        final line = rawLine.trim();
+        if (line.isEmpty) continue;
+        if (line.startsWith('#EXT-X-STREAM-INF:')) {
+          pending = _parseHlsAttributes(line.substring('#EXT-X-STREAM-INF:'.length));
+          continue;
+        }
+        if (pending == null || line.startsWith('#')) continue;
+        var variantUri = baseUri.resolve(line);
+        if (!{'http', 'https'}.contains(variantUri.scheme)) { pending = null; continue; }
+        if (variantUri.host == baseUri.host && !variantUri.hasQuery && baseUri.hasQuery) {
+          variantUri = variantUri.replace(queryParameters: baseUri.queryParameters);
+        }
+        final resolution = pending['RESOLUTION'] ?? '';
+        final height = int.tryParse(resolution.split('x').last);
+        final bandwidth = int.tryParse(pending['AVERAGE-BANDWIDTH'] ?? pending['BANDWIDTH'] ?? '');
+        final label = height != null ? '${height}p' :
+            bandwidth != null ? '${(bandwidth / 1000000).toStringAsFixed(1)} Mbps' :
+            'جودة ${variants.length + 1}';
+        variants.add(_HlsQualityVariant(label: label, url: variantUri.toString(), height: height, bandwidth: bandwidth));
+        pending = null;
+      }
+      final unique = <String, _HlsQualityVariant>{};
+      for (final variant in variants) {
+        final key = variant.height != null ? 'h:${variant.height}' :
+            variant.bandwidth != null ? 'b:${variant.bandwidth}' : variant.url;
+        unique.putIfAbsent(key, () => variant);
+      }
+      final result = unique.values.toList();
+      final currentSourceId = currentServerIndex >= 0 && currentServerIndex < _runtimeServers.length
+          ? valueOf(_runtimeServers[currentServerIndex]['source_id']).trim()
+          : '';
+      if (currentSourceId.isNotEmpty) {
+        final sourceVariants = <_HlsQualityVariant>[];
+        for (int index = 0; index < _runtimeServers.length; index++) {
+          final server = _runtimeServers[index];
+          if (valueOf(server['source_id']).trim() != currentSourceId) continue;
+          final streamUrl = valueOf(server['stream_url']).trim();
+          if (!StreamSourceDetector.isDirectMediaUrl(streamUrl)) continue;
+          final rawName = valueOf(server['server_name']).toUpperCase();
+          final match = RegExp(r'\b(8K|4K|FHD|HD|SD|[0-9]{3,4}P)\b').firstMatch(rawName);
+          if (match == null) continue;
+          final rawQuality = match.group(1)!;
+          final height = rawQuality == '8K' ? 4320 :
+              rawQuality == '4K' ? 2160 :
+              rawQuality == 'FHD' ? 1080 :
+              rawQuality == 'HD' ? 720 :
+              rawQuality == 'SD' ? 480 :
+              int.tryParse(rawQuality.replaceAll('P', ''));
+          if (height == null) continue;
+          final label = '${height}p';
+          if (!result.any((item) => item.label == label)) {
+            sourceVariants.add(_HlsQualityVariant(
+              label: label, url: streamUrl, height: height, serverIndex: index,
+            ));
+          }
+        }
+        final allQualityLabels = <String>{
+          ...result.map((item) => item.label),
+          ...sourceVariants.map((item) => item.label),
+        };
+        if (allQualityLabels.length > 1) {
+          if (result.isEmpty) {
+            for (final candidate in sourceVariants) {
+              if (candidate.serverIndex == currentServerIndex) {
+                if (mounted) setState(() => _selectedQualityVariant = candidate);
+                break;
+              }
+            }
+          }
+          result.addAll(sourceVariants);
+        }
+      }
+      final ordered = result..sort((a, b) {
+        final byHeight = (b.height ?? 0).compareTo(a.height ?? 0);
+        return byHeight != 0 ? byHeight : (b.bandwidth ?? 0).compareTo(a.bandwidth ?? 0);
+      });
+      if (mounted) setState(() => _qualityVariants = ordered);
+    } catch (_) {
+      if (mounted) setState(() => _qualityVariants = const []);
+    } finally {
+      client.close(force: true);
+      if (mounted) setState(() => _qualityLoading = false);
+    }
+  }
+
+  Future<void> _changeHlsQuality(_HlsQualityVariant? variant) async {
+    final targetUrl = variant?.url ?? _qualityMasterUrl ?? widget.url;
+    final targetServerIndex = variant?.serverIndex ?? _qualityMasterServerIndex;
+    final previousUrl = _currentPlaybackUrl ?? widget.url;
+    final previousServerIndex = currentServerIndex;
+    final previousVariant = _selectedQualityVariant;
+    if (targetUrl == previousUrl && targetServerIndex == previousServerIndex) {
+      if (mounted) setState(() => _selectedQualityVariant = variant);
+      return;
+    }
+    final savedPosition = player.state.position;
+    if (mounted) setState(() {
+      opening = true;
+      _selectedQualityVariant = variant;
+      if (targetServerIndex >= 0 && targetServerIndex < _runtimeServers.length) {
+        currentServerIndex = targetServerIndex;
+      }
+    });
+    try {
+      final headers = targetServerIndex >= 0 && targetServerIndex < _runtimeServers.length
+          ? _headersForServer(targetServerIndex) : _headersForServer();
+      await player.open(Media(targetUrl, httpHeaders: headers)).timeout(const Duration(seconds: 20));
+      _currentPlaybackUrl = targetUrl;
+      await _savePreferredServer();
+      for (int attempt = 0; attempt < 8 && player.state.duration <= Duration.zero; attempt++) {
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+      final duration = player.state.duration;
+      if (savedPosition > Duration.zero && duration > Duration.zero &&
+          savedPosition < duration - const Duration(seconds: 3)) await player.seek(savedPosition);
+      if (mounted) setState(() => opening = false);
+      _showControls();
+    } catch (_) {
+      _currentPlaybackUrl = previousUrl;
+      if (mounted) setState(() {
+        currentServerIndex = previousServerIndex;
+        _selectedQualityVariant = previousVariant;
+      });
+      try {
+        final headers = previousServerIndex >= 0 && previousServerIndex < _runtimeServers.length
+            ? _headersForServer(previousServerIndex) : _headersForServer();
+        await player.open(Media(previousUrl, httpHeaders: headers)).timeout(const Duration(seconds: 20));
+      } catch (_) {}
+      if (mounted) setState(() => opening = false);
+      _message('تعذر تغيير جودة البث');
+    }
+  }
+
+  Future<void> _pickHlsQuality() async {
+    if (_qualityVariants.length < 2 || _qualityLoading) return;
+    final selected = await showModalBottomSheet<Object?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: const Color(0xF2171717), borderRadius: BorderRadius.circular(14)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text('جودة البث', style: TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+              ListTile(
+                dense: true,
+                title: Text(appText('افتراضي المصدر', 'Source default', 'Kaynak varsayılanı'),
+                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                trailing: _selectedQualityVariant == null ? Icon(Icons.check_circle, color: gold) : null,
+                onTap: () => Navigator.pop(sheetContext, 'auto'),
+              ),
+              for (final quality in _qualityVariants)
+                ListTile(
+                  dense: true,
+                  title: Text(quality.label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                  trailing: _selectedQualityVariant?.url == quality.url ? Icon(Icons.check_circle, color: gold) : null,
+                  onTap: () => Navigator.pop(sheetContext, quality),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null) return;
+    if (selected == 'auto') {
+      await _changeHlsQuality(null);
+      return;
+    }
+    if (selected is _HlsQualityVariant) await _changeHlsQuality(selected);
   }
 
   Future<void> _savePreferredServer() async {
@@ -4469,6 +4717,34 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     if (value is String) await prefs.setString('${_settingsPrefix}_$key', value);
   }
 
+  Future<void> _playAdjacentEpisode(int targetIndex) async {
+    if (targetIndex < 0 || targetIndex >= widget.episodeQueue.length || !mounted) return;
+    final episode = widget.episodeQueue[targetIndex];
+    final id = valueOf(episode['id']).trim();
+    if (id.isEmpty) return;
+    final number = valueOf(episode['episode_number'], '${targetIndex + 1}');
+    final title = valueOf(episode['title'], 'الحلقة $number');
+    setState(() { opening = true; controlsVisible = false; error = null; });
+    try {
+      final servers = await SupabaseService.getPlaybackServers(contentType: 'episode', contentId: id);
+      if (!mounted) return;
+      final playableServers = servers.where((server) =>
+        StreamSourceDetector.isDirectMediaUrl(valueOf(server['stream_url']).trim())).toList();
+      final orderedServers = playableServers.isNotEmpty ? playableServers : servers;
+      final url = orderedServers.isNotEmpty
+          ? valueOf(orderedServers.first['stream_url'])
+          : valueOf(episode['stream_url']);
+      if (url.isEmpty) { setState(() { opening = false; controlsVisible = true; }); return; }
+      await Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(
+        url: url, title: title, servers: orderedServers, progressKey: 'episode-$id',
+        contentType: 'episode', contentId: id,
+        episodeQueue: widget.episodeQueue, episodeIndex: targetIndex,
+      )));
+    } catch (_) {
+      if (mounted) setState(() { opening = false; controlsVisible = true; });
+    }
+  }
+
   Future<void> _handlePlaybackError(String message) async {
     if (!mounted || _failoverInProgress) return;
     if (_runtimeServers.length > 1) {
@@ -4496,9 +4772,13 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
             error = null;
             controlsVisible = true;
           });
-          _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
         }
         try {
+          _currentPlaybackUrl = nextUrl;
+          _qualityMasterUrl = nextUrl;
+          _qualityMasterServerIndex = next;
+          _selectedQualityVariant = null;
+          _qualityVariants = const [];
           await player.open(Media(nextUrl, httpHeaders: _headersForServer(next))).timeout(const Duration(seconds: 20));
           if (!mounted) return;
           final playbackPrefs = await SharedPreferences.getInstance();
@@ -4508,6 +4788,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
           setState(() => opening = false);
           _failoverInProgress = false;
           _showControls();
+          unawaited(_loadHlsQualityVariants());
           unawaited(_runPlaybackServerHealthCheck());
           return;
         } catch (_) {
@@ -4529,7 +4810,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         error = null;
         controlsVisible = true;
       });
-      _message('تعذر تشغيل الروابط الحالية، جارٍ جلب أحدث روابط من المصدر…');
       try {
         final response = await Supabase.instance.client.functions.invoke(
           'refresh-playback-link',
@@ -4576,6 +4856,11 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
               });
             }
             try {
+              _currentPlaybackUrl = nextUrl;
+              _qualityMasterUrl = nextUrl;
+              _qualityMasterServerIndex = index;
+              _selectedQualityVariant = null;
+              _qualityVariants = const [];
               await player.open(
                 Media(nextUrl, httpHeaders: _headersForServer(index)),
               ).timeout(const Duration(seconds: 20));
@@ -4589,8 +4874,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                 error = null;
               });
               _failoverInProgress = false;
-              _message('تم تحديث رابط المشاهدة وتشغيل المحتوى بنجاح');
               _showControls();
+              unawaited(_loadHlsQualityVariants());
               unawaited(_runPlaybackServerHealthCheck());
               return;
             } catch (_) {
@@ -4606,11 +4891,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     }
 
     if (!mounted) return;
-    setState(() {
-      error = 'تعذر تشغيل الفيديو. جرّب سيرفراً آخر.\n$message';
-      opening = false;
-      controlsVisible = true;
-    });
+    setState(() { error = null; opening = false; controlsVisible = false; });
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+    if (widget.embedded) { widget.onClose?.call(); } else { Navigator.of(context).maybePop(); }
   }
 
   Future<void> _runPlaybackServerHealthCheck() async {
@@ -4673,14 +4957,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     } catch (_) {
       // A failed health check must never interrupt the currently playing stream.
     }
-  }
-
-  Future<void> _openEmbedFallback() async {
-    final url = _embedFallbackUrl;
-    if (url == null || url.isEmpty || !mounted) return;
-    await Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ShamFlixWebPage(url: url, title: widget.title, playerOnly: true, returnToPlayer: true),
-    ));
   }
 
   void _showControls() {
@@ -5186,39 +5462,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: error != null
-            ? SafeArea(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(22),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline, color: gold, size: 48),
-                        const SizedBox(height: 14),
-                        Text(error!, textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white70)),
-                        const SizedBox(height: 18),
-                        if (_embedFallbackUrl != null) ...[
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
-                            onPressed: _openEmbedFallback,
-                            icon: const Icon(Icons.web),
-                            label: Text('فتح ${_embedFallbackName ?? 'السيرفر المضمّن'}'),
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                        FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
-                          onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
-                          child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            : GestureDetector(
+        body: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _toggleControls,
                 child: Stack(
@@ -5312,6 +5556,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                             ],
                                           ),
                                         ),
+                                        if (widget.contentType == 'episode' && widget.episodeIndex > 0)
+                                          _controlButton(icon: Icons.skip_previous_rounded, size: 25, onTap: () => _playAdjacentEpisode(widget.episodeIndex - 1)),
+                                        if (widget.contentType == 'episode' && widget.episodeIndex >= 0 && widget.episodeIndex < widget.episodeQueue.length - 1)
+                                          _controlButton(icon: Icons.skip_next_rounded, size: 25, onTap: () => _playAdjacentEpisode(widget.episodeIndex + 1)),
                                         if (_runtimeServers.length > 1)
                                           SizedBox(
                                             width: 150,
@@ -5491,6 +5739,12 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                                           );
                                                         },
                                                       ),
+                                                      if (_qualityVariants.length > 1)
+                                                        _toolButton(
+                                                          icon: Icons.hd_rounded,
+                                                          label: _selectedQualityVariant?.label ?? appText('تلقائي', 'Auto', 'Otomatik'),
+                                                          onTap: _pickHlsQuality,
+                                                        ),
                                                       _toolButton(
                                                         icon: Icons.audiotrack_rounded,
                                                         label: appText('الصوت', 'Audio', 'Ses'),
