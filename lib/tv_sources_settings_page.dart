@@ -238,19 +238,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
               ],
               onChanged: (value) => setDialogState(() => adapter = value ?? 'auto'),
             ),
-            if (_channelPackages.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String?>(
-                value: packageId, decoration: const InputDecoration(labelText: 'الباقة المستهدفة'),
-                items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('تلقائي حسب البلد والفئة')),
-                  ..._channelPackages.map((p) => DropdownMenuItem<String?>(
-                    value: p['id'].toString(), child: Text(p['name'].toString(), overflow: TextOverflow.ellipsis),
-                  )),
-                ],
-                onChanged: (value) => setDialogState(() => packageId = value),
-              ),
-            ],
+            Text('تغيير الباقة يتطلب حذف المصدر وإضافته مجدداً حتى لا تبقى عضوية قديمة في الباقة السابقة.', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
           ])),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
