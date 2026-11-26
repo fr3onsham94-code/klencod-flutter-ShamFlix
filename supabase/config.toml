@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.tv-channels-auto-sync]
 verify_jwt = false
+
+[functions.refresh-playback-link]
+verify_jwt = false
