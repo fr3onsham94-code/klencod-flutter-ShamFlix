@@ -202,7 +202,7 @@ async function probePlaybackUrl(server: PlaybackServerRow): Promise<boolean> {
         }
         if (response.status >= 200 && response.status < 300 && response.status !== 204) {
           const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-          const directMediaPath = /\\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd|ts)$/i.test(url.pathname);
+          const directMediaPath = /\.(?:m3u8|mp4|m4v|mov|webm|avi|mpd|ts)$/i.test(url.pathname);
           if (directMediaPath && contentType.includes("text/html")) return false;
           if (!response.body) return false;
           const reader = response.body.getReader();
