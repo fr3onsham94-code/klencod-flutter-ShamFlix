@@ -4487,6 +4487,29 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     if (value is String) await prefs.setString('${_settingsPrefix}_$key', value);
   }
 
+  Future<void> _playAdjacentEpisode(int targetIndex) async {
+    if (targetIndex < 0 || targetIndex >= widget.episodeQueue.length || !mounted) return;
+    final episode = widget.episodeQueue[targetIndex];
+    final id = valueOf(episode['id']).trim();
+    if (id.isEmpty) return;
+    final number = valueOf(episode['episode_number'], '${targetIndex + 1}');
+    final title = valueOf(episode['title'], 'الحلقة $number');
+    setState(() { opening = true; controlsVisible = false; error = null; });
+    try {
+      final servers = await SupabaseService.getPlaybackServers(contentType: 'episode', contentId: id);
+      if (!mounted) return;
+      final url = servers.isNotEmpty ? valueOf(servers.first['stream_url']) : valueOf(episode['stream_url']);
+      if (url.isEmpty) { setState(() { opening = false; controlsVisible = true; }); return; }
+      await Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ShamFlixPlayerPage(
+        url: url, title: title, servers: servers, progressKey: 'episode-$id',
+        contentType: 'episode', contentId: id,
+        episodeQueue: widget.episodeQueue, episodeIndex: targetIndex,
+      )));
+    } catch (_) {
+      if (mounted) setState(() { opening = false; controlsVisible = true; });
+    }
+  }
+
   Future<void> _handlePlaybackError(String message) async {
     if (!mounted || _failoverInProgress) return;
     if (_runtimeServers.length > 1) {
@@ -4514,7 +4537,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
             error = null;
             controlsVisible = true;
           });
-          _message('تعذر السيرفر الحالي، جارٍ تجربة السيرفر ${next + 1}');
         }
         try {
           await player.open(Media(nextUrl, httpHeaders: _headersForServer(next))).timeout(const Duration(seconds: 20));
@@ -4547,7 +4569,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         error = null;
         controlsVisible = true;
       });
-      _message('تعذر تشغيل الروابط الحالية، جارٍ جلب أحدث روابط من المصدر…');
       try {
         final response = await Supabase.instance.client.functions.invoke(
           'refresh-playback-link',
@@ -4607,7 +4628,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                 error = null;
               });
               _failoverInProgress = false;
-              _message('تم تحديث رابط المشاهدة وتشغيل المحتوى بنجاح');
               _showControls();
               unawaited(_runPlaybackServerHealthCheck());
               return;
@@ -4624,11 +4644,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     }
 
     if (!mounted) return;
-    setState(() {
-      error = 'تعذر تشغيل الفيديو. جرّب سيرفراً آخر.\n$message';
-      opening = false;
-      controlsVisible = true;
-    });
+    setState(() { error = null; opening = false; controlsVisible = false; });
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+    if (widget.embedded) { widget.onClose?.call(); } else { Navigator.of(context).maybePop(); }
   }
 
   Future<void> _runPlaybackServerHealthCheck() async {
@@ -4691,14 +4710,6 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     } catch (_) {
       // A failed health check must never interrupt the currently playing stream.
     }
-  }
-
-  Future<void> _openEmbedFallback() async {
-    final url = _embedFallbackUrl;
-    if (url == null || url.isEmpty || !mounted) return;
-    await Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ShamFlixWebPage(url: url, title: widget.title, playerOnly: true, returnToPlayer: true),
-    ));
   }
 
   void _showControls() {
@@ -5204,39 +5215,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
       textDirection: appLocaleNotifier.value.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: error != null
-            ? SafeArea(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(22),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline, color: gold, size: 48),
-                        const SizedBox(height: 14),
-                        Text(error!, textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white70)),
-                        const SizedBox(height: 18),
-                        if (_embedFallbackUrl != null) ...[
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
-                            onPressed: _openEmbedFallback,
-                            icon: const Icon(Icons.web),
-                            label: Text('فتح ${_embedFallbackName ?? 'السيرفر المضمّن'}'),
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                        FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white),
-                          onPressed: widget.embedded ? widget.onClose : () => Navigator.pop(context),
-                          child: Text(widget.embedded ? 'إغلاق المشغل' : 'رجوع'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            : GestureDetector(
+        body: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _toggleControls,
                 child: Stack(
@@ -5330,6 +5309,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                             ],
                                           ),
                                         ),
+                                        if (widget.contentType == 'episode' && widget.episodeIndex > 0)
+                                          _controlButton(icon: Icons.skip_previous_rounded, size: 25, onTap: () => _playAdjacentEpisode(widget.episodeIndex - 1)),
+                                        if (widget.contentType == 'episode' && widget.episodeIndex >= 0 && widget.episodeIndex < widget.episodeQueue.length - 1)
+                                          _controlButton(icon: Icons.skip_next_rounded, size: 25, onTap: () => _playAdjacentEpisode(widget.episodeIndex + 1)),
                                         if (_runtimeServers.length > 1)
                                           SizedBox(
                                             width: 150,
