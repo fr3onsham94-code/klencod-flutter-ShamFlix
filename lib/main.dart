@@ -4435,6 +4435,10 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
   String? error;
   bool opening = true;
   bool controlsVisible = true;
+  bool _welcomeVisible = false;
+  bool _welcomeDontShowAgain = false;
+  String _welcomeMessage = 'اهلا وسهلا بكم في تطبيق sham flix جميع الافلام والمسلسلات سيرفراتها تعمل باستمرار يرجى الانتظار عشر ثواني لجلب احدث سيرفر للمشاهدة';
+  static const String _welcomeDismissedKey = 'shamflix_player_welcome_dismissed';
   bool seeking = false;
   double seekValue = 0;
   bool landscape = true;
@@ -4484,7 +4488,50 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     player.stream.error.listen(_handlePlaybackError);
     _positionSubscription = player.stream.position.listen(_saveProgressAtPosition);
     _tracksSubscription = player.stream.tracks.listen(_handleDashTracks);
+    unawaited(_loadPlaybackWelcome());
     _open();
+  }
+
+  Future<void> _loadPlaybackWelcome() async {
+    if (widget.contentType != 'movie' && widget.contentType != 'episode') return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_welcomeDismissedKey) == true || !mounted) return;
+
+      var enabled = true;
+      try {
+        final row = await AuthService.client
+            .from('app_settings')
+            .select('setting_value')
+            .eq('setting_key', 'player_welcome')
+            .maybeSingle()
+            .timeout(const Duration(seconds: 4));
+        final value = row?['setting_value'];
+        if (value is Map) {
+          enabled = value['enabled'] != false;
+          final message = value['message']?.toString().trim() ?? '';
+          if (message.isNotEmpty) _welcomeMessage = message;
+        }
+      } catch (_) {
+        // Keep the built-in welcome text if the settings service is unavailable.
+      }
+      if (mounted && enabled && prefs.getBool(_welcomeDismissedKey) != true) {
+        setState(() => _welcomeVisible = true);
+      }
+    } catch (_) {
+      // A local preferences failure must never interrupt video playback.
+    }
+  }
+
+  Future<void> _closePlaybackWelcome() async {
+    final dontShowAgain = _welcomeDontShowAgain;
+    if (mounted) setState(() => _welcomeVisible = false);
+    if (dontShowAgain) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_welcomeDismissedKey, true);
+      } catch (_) {}
+    }
   }
 
   Future<void> _setLandscape(bool value) async {
@@ -6037,6 +6084,81 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_welcomeVisible)
+                      Positioned.fill(
+                        child: Material(
+                          color: Colors.black.withOpacity(0.78),
+                          child: SafeArea(
+                            child: Center(
+                              child: GestureDetector(
+                                onTap: () {},
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 520),
+                                  child: Container(
+                                    margin: const EdgeInsets.all(22),
+                                    padding: const EdgeInsets.all(22),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF171717),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: gold.withOpacity(0.75), width: 1.2),
+                                      boxShadow: const [
+                                        BoxShadow(color: Colors.black54, blurRadius: 24, spreadRadius: 2),
+                                      ],
+                                    ),
+                                    child: Directionality(
+                                      textDirection: TextDirection.rtl,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.waving_hand_rounded, color: gold, size: 34),
+                                          const SizedBox(height: 10),
+                                          Text(
+                                            'أهلاً وسهلاً بكم',
+                                            style: TextStyle(color: gold, fontSize: 20, fontWeight: FontWeight.bold),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          Text(
+                                            _welcomeMessage,
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(color: Colors.white, height: 1.8, fontSize: 15),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          CheckboxListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            value: _welcomeDontShowAgain,
+                                            activeColor: gold,
+                                            checkColor: Colors.black,
+                                            controlAffinity: ListTileControlAffinity.leading,
+                                            title: const Text(
+                                              'عدم إظهارها مرة أخرى',
+                                              style: TextStyle(color: Colors.white, fontSize: 13),
+                                            ),
+                                            onChanged: (value) => setState(() => _welcomeDontShowAgain = value == true),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: gold,
+                                                foregroundColor: Colors.black,
+                                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                              ),
+                                              onPressed: _closePlaybackWelcome,
+                                              child: const Text('إغلاق', style: TextStyle(fontWeight: FontWeight.bold)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
