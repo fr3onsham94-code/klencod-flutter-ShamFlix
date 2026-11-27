@@ -632,7 +632,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     try {
       final sourceId = sourceIdForAdminWebsite(source);
       final stableChannelKey = 'admin-web:' + source['id'].toString() + ':' +
-          channelName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\\u0600-\\u06FF]+'), '-');
+          Uri.encodeComponent(channelName.trim().toLowerCase());
       final existing = await AuthService.client.from('channels')
           .select('id')
           .eq('external_source_key', stableChannelKey)
