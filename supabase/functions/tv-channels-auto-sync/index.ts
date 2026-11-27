@@ -1112,6 +1112,12 @@ async function syncChannels(db: any) {
   const memberships = new Map<string,Set<string>>();
   for (const [key, entries] of grouped) {
     const uniqueStreams = [...new Map(entries.map(e => [e.sourceId + "|" + e.url,e])).values()];
+    // Website-imported channels receive only the package selected by the owner
+    // in the per-channel review dialog; do not auto-assign country/category packages.
+    if (uniqueStreams.every(e => e.sourceId.startsWith("website:"))) {
+      memberships.set(key, new Set<string>());
+      continue;
+    }
     const category = categoryByKey.get(key) || "عامة";
     const labels = new Set<string>();
     const country = uniqueStreams.map(countryPackageLabel).find(label => label !== "قنوات عربية متنوعة") || "قنوات عربية متنوعة";
