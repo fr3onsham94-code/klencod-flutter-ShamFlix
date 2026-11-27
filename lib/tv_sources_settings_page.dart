@@ -592,6 +592,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     }
     final channelName = nameController.text.trim();
     nameController.dispose();
+    final logoUrl = entries.first['logoUrl']?.toString().trim() ?? '';
     try {
       final sourceId = sourceIdForAdminWebsite(source);
       final stableChannelKey = 'admin-web:' + source['id'].toString() + ':' +
@@ -607,6 +608,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           'name': channelName,
           'name_en': channelName,
           'category': category,
+          if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
           'stream_url': entries.first['url'].toString(),
           'is_live': true,
           'is_published': true,
@@ -617,6 +619,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           'name': channelName,
           'name_en': channelName,
           'category': category,
+          if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
           'stream_url': entries.first['url'].toString(),
           'is_live': true,
           'is_published': true,
