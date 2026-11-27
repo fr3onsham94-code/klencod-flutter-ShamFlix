@@ -554,7 +554,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'تم جمع \${grouped.length} صفحة و\${entries.length} رابط HLS. كل صفحة ستُنشأ كقناة مستقلة، وروابطها كسيرفرات متعددة.',
+                    'تم جمع ${grouped.length} صفحة و${entries.length} رابط HLS. كل صفحة ستُنشأ كقناة مستقلة، وروابطها كسيرفرات متعددة.',
                     style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5),
                   ),
                   const SizedBox(height: 10),
@@ -578,7 +578,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                       ),
                       const Spacer(),
                       Text(
-                        '\${selectedPages.values.where((value) => value).length} محددة',
+                        '${selectedPages.values.where((value) => value).length} محددة',
                         style: TextStyle(color: AppTheme.primary, fontSize: 11),
                       ),
                     ],
@@ -608,7 +608,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                 style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold),
                               ),
                               subtitle: Text(
-                                '\${pageEntries.length} سيرفر • \${Uri.tryParse(pageUrl)?.host ?? pageUrl}',
+                                '${pageEntries.length} سيرفر • ${Uri.tryParse(pageUrl)?.host ?? pageUrl}',
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(color: AppTheme.secondaryText, fontSize: 10),
@@ -765,7 +765,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           .map((entry) => entry['logoUrl']?.toString().trim() ?? '')
           .firstWhere((value) => value.isNotEmpty, orElse: () => '');
       try {
-        final stableChannelKey = 'admin-web:\${source['id']}:\${Uri.encodeComponent(pageUrl.toLowerCase())}';
+        final stableChannelKey = 'admin-web:${source['id']}:${Uri.encodeComponent(pageUrl.toLowerCase())}';
         final existing = await AuthService.client.from('channels')
             .select('id')
             .eq('external_source_key', stableChannelKey)
@@ -838,7 +838,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           await AuthService.client.from('playback_servers').insert({
             'channel_id': channelId,
             'server_name': (source['name']?.toString() ?? 'موقع ويب') +
-                ' • \${channelName} • سيرفر \${index + 1}',
+                ' • ${channelName} • سيرفر ${index + 1}',
             'stream_url': streamUrl,
             'sort_order': index,
             'is_active': true,
@@ -877,8 +877,8 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     }
     if (mounted) {
       _message(
-        'اكتمل الاستيراد: \${importedChannels} قناة، \${addedServers} سيرفر جديد' +
-            (failedChannels > 0 ? '، وفشل \${failedChannels} قناة' : ''),
+        'اكتمل الاستيراد: ${importedChannels} قناة، ${addedServers} سيرفر جديد' +
+            (failedChannels > 0 ? '، وفشل ${failedChannels} قناة' : ''),
         error: failedChannels > 0 && importedChannels == 0,
       );
     }
