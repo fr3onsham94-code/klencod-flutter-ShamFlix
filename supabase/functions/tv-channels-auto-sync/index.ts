@@ -316,20 +316,23 @@ function collectAloulaImageUrls(...roots: any[]): string[] {
   const found: string[] = [];
   const seen = new Set<any>();
   const imageKey = /logo|image|thumbnail|poster|icon|picture|artwork|avatar|cover/i;
-  const visit = (value: any, key = "", depth = 0) => {
+  const visit = (value: any, key = "", depth = 0, inheritedImageContext = false) => {
     if (value == null || depth > 7) return;
+    const isImageContext = inheritedImageContext || imageKey.test(key);
     if (typeof value === "string") {
       const raw = value.trim();
-      if (imageKey.test(key) && /^https?:\/\//i.test(raw)) found.push(raw);
+      if (isImageContext && /^https?:\/\//i.test(raw)) found.push(raw);
       return;
     }
     if (typeof value !== "object" || seen.has(value)) return;
     seen.add(value);
     if (Array.isArray(value)) {
-      for (const item of value) visit(item, key, depth + 1);
+      for (const item of value) visit(item, key, depth + 1, isImageContext);
       return;
     }
-    for (const [childKey, childValue] of Object.entries(value)) visit(childValue, childKey, depth + 1);
+    for (const [childKey, childValue] of Object.entries(value)) {
+      visit(childValue, childKey, depth + 1, isImageContext);
+    }
   };
   for (const root of roots) visit(root);
   return [...new Set(found)];
@@ -378,8 +381,8 @@ async function fetchAloulaChannelLogo(channel: any, channelId: unknown): Promise
       if (!raw || raw.startsWith("data:")) continue;
       try {
         const imageUrl = new URL(raw, finalUrl);
-        if (imageUrl.protocol === "https:" && !imageUrl.username && !imageUrl.password &&
-            imageUrl.hostname !== "localhost" && !imageUrl.hostname.endsWith(".localhost")) {
+        if (imageUrl.protocol === "https:" && !imageUrl.username && !imageUrl.password) {
+          await validatePublicPlaylistUrl(imageUrl);
           return imageUrl.toString();
         }
       } catch {}
