@@ -19,7 +19,7 @@ This module is the shared discovery contract for website-backed TV sources.
 
 ## Current implementation status
 
-The current integration feeds snapshots from the existing authenticated WebView scanner into `WebsiteEngine`. The scanner now collects same-origin channel/live links and candidate images, shows the discovered channel pages, and lets the owner open a candidate in the same WebView session for further inspection. Existing HLS collection and the existing review/import flow remain in place. The current traversal is still user-guided: bounded automatic multi-page traversal and session-aware playback handoff are not implemented yet.
+The current integration feeds snapshots from the existing authenticated WebView scanner into `WebsiteEngine`. The owner can trigger a bounded same-site crawl from the existing WebView session. It scans the current page, follows discovered HTTPS channel/live links on the configured host, and collects page results without reading credentials, cookies or browser storage. The crawl is capped at 20 pages and 90 seconds, with a 15-second load timeout per page. The discovered-page list and existing HLS review/import flow remain available. The crawl is heuristic and user-triggered; it does not bypass site access controls or DRM. Session-aware playback handoff and provider-specific adapters are still pending.
 
 ## Compatibility
 
