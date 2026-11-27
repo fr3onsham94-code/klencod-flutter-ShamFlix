@@ -550,6 +550,27 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
       await validatePublicPlaylistUrl(new URL(safeUrl));
       const title = clean(channel.title || channel.name || source.name).slice(0, 100);
       if (!title) return null;
+      const imageCandidates = [
+        channel.logo_url, channel.logo, channel.image_url, channel.image,
+        channel.thumbnail_url, channel.thumbnail, channel.icon, channel.picture,
+        channel.poster, channel.channel_logo, channel.images?.logo,
+        channel.media?.logo, channel.branding?.logo,
+        playerData?.logo_url, playerData?.logo, playerData?.image_url,
+        playerData?.image, playerData?.thumbnail_url, playerData?.thumbnail,
+        playerData?.channel?.logo_url, playerData?.channel?.logo,
+      ];
+      const logo = imageCandidates.map((value: any) => {
+        const raw = typeof value === "string" ? value
+          : value && typeof value === "object" ? value.url || value.src || value.original || value.large || ""
+          : "";
+        if (typeof raw !== "string" || !raw.trim()) return "";
+        try {
+          const imageUrl = new URL(raw.trim(), "https://www.aloula.sa/");
+          if (imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password ||
+              imageUrl.hostname === "localhost" || imageUrl.hostname.endsWith(".localhost")) return "";
+          return imageUrl.toString();
+        } catch { return ""; }
+      }).find((value: string) => value.length > 0) || "";
       return {
         sourceId: source.id,
         sourceName: source.name,
@@ -557,7 +578,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         name: title,
         nameEn: title,
         tvgId: String(channel.id || ""),
-        logo: "",
+        logo,
         category: categoryOf("قنوات سعودية", title),
         url: safeUrl,
         position,
@@ -1010,10 +1031,14 @@ async function syncChannels(db: any) {
     const existing = byExternalKey.get(key) || byCanonicalName.get(key) || null;
     const assignedId = existing?.id && !assignedChannelIds.has(existing.id) ? existing.id : crypto.randomUUID();
     assignedChannelIds.add(assignedId);
+    // Keep an admin-edited display name when it differs from the imported source name.
+    // name_en remains the source-derived name, so the override survives future sync runs.
+    const hasDisplayNameOverride = !!existing?.name && !!existing?.name_en &&
+      String(existing.name).trim() !== String(existing.name_en).trim();
     const channelRow: Record<string,unknown> = {
       id: assignedId,
-      name: channelName,
-      name_en: baseChannelName(preferred.name),
+      name: hasDisplayNameOverride ? String(existing.name) : channelName,
+      name_en: hasDisplayNameOverride ? String(existing.name_en) : baseChannelName(preferred.name),
       aliases,
       category,
       stream_url: preferred.url,
