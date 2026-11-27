@@ -10,6 +10,7 @@ on:
       - ui/collapsible-admin-settings-packages
       - feature/supabase-usage-dashboard
       - feature/channel-playback-headers
+      - feature/fully-automatic-website-discovery
       - test/bulk-website-channel-import
   pull_request:
     branches:
