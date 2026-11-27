@@ -621,7 +621,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                               onChanged: (_) => setDialogState(() {}),
                             ),
                             const SizedBox(height: 8),
-                            const SizedBox(height: 8),
                             DropdownButtonFormField<String?>(
                               value: packageId,
                               isExpanded: true,
@@ -650,7 +649,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                       () => selectedPackageIds[pageUrl] = value,
                                     ),
                             ),
-                            ],
                           ],
                         ),
                       ),
