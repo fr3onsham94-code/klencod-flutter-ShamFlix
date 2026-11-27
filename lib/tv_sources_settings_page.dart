@@ -491,95 +491,239 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       ),
     );
     if (!mounted || result == null) return;
+
     final entries = (result['entries'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
-        .where((item) => (item['url']?.toString() ?? '').isNotEmpty)
+        .where((item) {
+          final stream = item['url']?.toString() ?? '';
+          return stream.startsWith('https://') &&
+              RegExp(r'\.m3u8(?:$|[?#])', caseSensitive: false).hasMatch(stream);
+        })
         .toList();
     if (entries.isEmpty) {
-      _message('لم نعثر على روابط HLS عامة قابلة للفحص في الصفحة الحالية', error: true);
+      _message('لم نعثر على روابط HLS صالحة ضمن الصفحات التي فحصتها', error: true);
       return;
     }
 
-    final nameController = TextEditingController(
-      text: (result['pageTitle']?.toString().trim().isNotEmpty ?? false)
-          ? result['pageTitle'].toString().trim()
-          : (source['name']?.toString() ?? 'قناة جديدة'),
-    );
-    String category = 'عامة';
-    String? packageId;
+    // One channel = one visited page; all HLS URLs found on that page are its servers.
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final entry in entries) {
+      final pageUrl = entry['pageUrl']?.toString() ?? '';
+      if (pageUrl.isEmpty) continue;
+      grouped.putIfAbsent(pageUrl, () => <Map<String, dynamic>>[]).add(entry);
+    }
+    if (grouped.isEmpty) {
+      _message('نتائج الفحص لا تحتوي على صفحات قنوات صالحة', error: true);
+      return;
+    }
+
+    const availableCategories = <String>[
+      'عامة', 'رياضية', 'إخبارية', 'أفلام', 'أطفال',
+      'ترفيهية', 'دينية', 'وثائقية', 'موسيقى',
+    ];
+    final pageUrls = grouped.keys.toList();
+    final nameControllers = <String, TextEditingController>{};
+    final selectedCategories = <String, Set<String>>{};
+    final selectedPackages = <String, Set<String>>{};
+    final selectedPages = <String, bool>{};
+    for (final pageUrl in pageUrls) {
+      final pageEntries = grouped[pageUrl]!;
+      final title = (pageEntries.first['label']?.toString().trim().isNotEmpty ?? false)
+          ? pageEntries.first['label'].toString().trim()
+          : (Uri.tryParse(pageUrl)?.host ?? 'قناة جديدة');
+      nameControllers[pageUrl] = TextEditingController(text: title);
+      selectedCategories[pageUrl] = <String>{'عامة'};
+      selectedPackages[pageUrl] = <String>{};
+      selectedPages[pageUrl] = true;
+    }
     bool redistributionConfirmed = false;
+
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           backgroundColor: AppTheme.panel,
-          title: Text('استيراد سيرفرات القناة', style: TextStyle(color: AppTheme.primary)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('تم العثور على ${entries.length} رابط HLS. ستُحفظ الروابط دون بيانات تسجيل الدخول أو ملفات تعريف الارتباط.',
-                  style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: nameController,
-                  style: TextStyle(color: AppTheme.text),
-                  decoration: const InputDecoration(labelText: 'اسم القناة'),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: category,
-                  decoration: const InputDecoration(labelText: 'تصنيف القناة'),
-                  items: const ['عامة','رياضية','إخبارية','أفلام','أطفال','ترفيهية','دينية','وثائقية','موسيقى']
-                      .map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
-                  onChanged: (value) => setDialogState(() => category = value ?? 'عامة'),
-                ),
-                if (_channelPackages.isNotEmpty) ...[
+          title: Text('مراجعة القنوات المستخرجة', style: TextStyle(color: AppTheme.primary)),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'تم جمع \${grouped.length} صفحة و\${entries.length} رابط HLS. كل صفحة ستُنشأ كقناة مستقلة، وروابطها كسيرفرات متعددة.',
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5),
+                  ),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<String?>(
-                    value: packageId,
-                    decoration: const InputDecoration(labelText: 'إضافة إلى باقة (اختياري)'),
-                    items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('بدون باقة إضافية')),
-                      ..._channelPackages.map((p) => DropdownMenuItem<String?>(
-                        value: p['id'].toString(),
-                        child: Text(p['name'].toString(), overflow: TextOverflow.ellipsis),
-                      )),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => setDialogState(() {
+                          for (final pageUrl in pageUrls) {
+                            selectedPages[pageUrl] = true;
+                          }
+                        }),
+                        child: const Text('تحديد الكل'),
+                      ),
+                      TextButton(
+                        onPressed: () => setDialogState(() {
+                          for (final pageUrl in pageUrls) {
+                            selectedPages[pageUrl] = false;
+                          }
+                        }),
+                        child: const Text('إلغاء التحديد'),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '\${selectedPages.values.where((value) => value).length} محددة',
+                        style: TextStyle(color: AppTheme.primary, fontSize: 11),
+                      ),
                     ],
-                    onChanged: (value) => setDialogState(() => packageId = value),
+                  ),
+                  ...pageUrls.map((pageUrl) {
+                    final pageEntries = grouped[pageUrl]!;
+                    final isSelected = selectedPages[pageUrl] == true;
+                    final categories = selectedCategories[pageUrl]!;
+                    final packages = selectedPackages[pageUrl]!;
+                    return Card(
+                      color: AppTheme.background,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: isSelected,
+                              activeColor: AppTheme.primary,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(
+                                nameControllers[pageUrl]!.text.isEmpty
+                                    ? 'قناة بدون اسم'
+                                    : nameControllers[pageUrl]!.text,
+                                style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Text(
+                                '\${pageEntries.length} سيرفر • \${Uri.tryParse(pageUrl)?.host ?? pageUrl}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: AppTheme.secondaryText, fontSize: 10),
+                              ),
+                              onChanged: (value) => setDialogState(
+                                () => selectedPages[pageUrl] = value == true,
+                              ),
+                            ),
+                            TextField(
+                              controller: nameControllers[pageUrl],
+                              enabled: isSelected,
+                              style: TextStyle(color: AppTheme.text),
+                              decoration: const InputDecoration(
+                                labelText: 'اسم القناة',
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 8),
+                            Text('التصنيفات (يمكن اختيار أكثر من تصنيف)',
+                              style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 2,
+                              children: availableCategories.map((category) => FilterChip(
+                                label: Text(category),
+                                selected: categories.contains(category),
+                                onSelected: !isSelected ? null : (value) => setDialogState(() {
+                                  if (value) {
+                                    categories.add(category);
+                                  } else {
+                                    categories.remove(category);
+                                  }
+                                }),
+                              )).toList(),
+                            ),
+                            if (_channelPackages.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text('الباقات (يمكن اختيار أكثر من باقة)',
+                                style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 2,
+                                children: _channelPackages.map((package) {
+                                  final id = package['id'].toString();
+                                  return FilterChip(
+                                    label: Text(package['name'].toString()),
+                                    selected: packages.contains(id),
+                                    onSelected: !isSelected ? null : (value) => setDialogState(() {
+                                      if (value) {
+                                        packages.add(id);
+                                      } else {
+                                        packages.remove(id);
+                                      }
+                                    }),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                            TextButton.icon(
+                              onPressed: () => GenUI.openUrl(pageUrl),
+                              icon: const Icon(Icons.open_in_new, size: 16),
+                              label: const Text('فتح صفحة المصدر'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.background,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'لن يتم استيراد روابط DRM أو مفاتيحها أو ملفات تعريف الارتباط. يجب أن تكون مخوّلاً بإتاحة هذه القنوات لجميع مستخدمي التطبيق.',
+                      style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: redistributionConfirmed,
+                    activeColor: AppTheme.primary,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (value) => setDialogState(
+                      () => redistributionConfirmed = value == true,
+                    ),
+                    title: Text(
+                      'أؤكد امتلاكي حق إعادة توزيع هذه القنوات للمستخدمين',
+                      style: TextStyle(color: AppTheme.text, fontSize: 12),
+                    ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppTheme.background, borderRadius: BorderRadius.circular(10)),
-                  child: Text(
-                    'لن يتم استيراد روابط DRM أو مفاتيحها أو ملفات تعريف الارتباط. يجب أن تكون مخوّلاً بإتاحة هذه القنوات لجميع مستخدمي التطبيق.',
-                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.4),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: redistributionConfirmed,
-                  activeColor: AppTheme.primary,
-                  onChanged: (value) => setDialogState(() => redistributionConfirmed = value == true),
-                  title: Text('أؤكد امتلاكي حق إعادة توزيع هذه القنوات للمستخدمين', style: TextStyle(color: AppTheme.text, fontSize: 12)),
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-              ],
+              ),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
             FilledButton(
-              onPressed: redistributionConfirmed && nameController.text.trim().isNotEmpty
+              onPressed: redistributionConfirmed &&
+                      selectedPages.values.any((value) => value) &&
+                      selectedPages.entries.every((item) =>
+                          !item.value || nameControllers[item.key]!.text.trim().isNotEmpty)
                   ? () => Navigator.pop(dialogContext, true)
                   : null,
               style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
-              child: const Text('استيراد القناة'),
+              child: const Text('استيراد القنوات المحددة'),
             ),
           ],
         ),
@@ -587,96 +731,143 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     );
 
     if (confirmed != true) {
-      nameController.dispose();
+      for (final controller in nameControllers.values) {
+        controller.dispose();
+      }
       return;
     }
-    final channelName = nameController.text.trim();
-    nameController.dispose();
-    final logoUrl = entries.first['logoUrl']?.toString().trim() ?? '';
-    try {
-      final sourceId = sourceIdForAdminWebsite(source);
-      final stableChannelKey = 'admin-web:' + source['id'].toString() + ':' +
-          Uri.encodeComponent(channelName.trim().toLowerCase());
-      final existing = await AuthService.client.from('channels')
-          .select('id')
-          .eq('external_source_key', stableChannelKey)
-          .maybeSingle();
-      String channelId;
-      if (existing != null) {
-        channelId = existing['id'].toString();
-        await AuthService.client.from('channels').update({
-          'name': channelName,
-          'name_en': channelName,
-          'category': category,
-          if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
-          'stream_url': entries.first['url'].toString(),
-          'is_live': true,
-          'is_published': true,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        }).eq('id', channelId);
-      } else {
-        final inserted = await AuthService.client.from('channels').insert({
-          'name': channelName,
-          'name_en': channelName,
-          'category': category,
-          if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
-          'stream_url': entries.first['url'].toString(),
-          'is_live': true,
-          'is_published': true,
-          'external_source_key': stableChannelKey,
-        }).select('id').single();
-        channelId = inserted['id'].toString();
-      }
 
-      var addedServers = 0;
-      for (var index = 0; index < entries.length; index++) {
-        final streamUrl = entries[index]['url'].toString();
-        final duplicate = await AuthService.client.from('playback_servers')
-            .select('id,source_id')
-            .eq('channel_id', channelId)
-            .eq('stream_url', streamUrl)
+    final selected = pageUrls.where((pageUrl) => selectedPages[pageUrl] == true).toList();
+    final sourceId = sourceIdForAdminWebsite(source);
+    var importedChannels = 0;
+    var addedServers = 0;
+    var failedChannels = 0;
+
+    for (final pageUrl in selected) {
+      final pageEntries = grouped[pageUrl]!;
+      final channelName = nameControllers[pageUrl]!.text.trim();
+      final categories = selectedCategories[pageUrl]!.toList();
+      final packages = selectedPackages[pageUrl]!.toList();
+      final logoUrl = pageEntries
+          .map((entry) => entry['logoUrl']?.toString().trim() ?? '')
+          .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+      try {
+        final stableChannelKey = 'admin-web:\${source['id']}:\${Uri.encodeComponent(pageUrl.toLowerCase())}';
+        final existing = await AuthService.client.from('channels')
+            .select('id')
+            .eq('external_source_key', stableChannelKey)
             .maybeSingle();
-        if (duplicate != null) {
-          if (duplicate['source_id'] == null || duplicate['source_id'] == sourceId) {
-            await AuthService.client.from('playback_servers').update({
-              'is_active': true,
-              'source_id': sourceId,
-              'source_seen_at': DateTime.now().toUtc().toIso8601String(),
-              'source_page_url': entries[index]['pageUrl']?.toString(),
-              'user_agent': entries[index]['userAgent']?.toString(),
-              'referer': entries[index]['referer']?.toString(),
-              'origin': entries[index]['origin']?.toString(),
-            }).eq('id', duplicate['id']);
-          }
-          continue;
+
+        late final String channelId;
+        if (existing != null) {
+          channelId = existing['id'].toString();
+          await AuthService.client.from('channels').update({
+            'name': channelName,
+            'name_en': channelName,
+            'category': categories.isNotEmpty ? categories.first : 'عامة',
+            if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
+            'stream_url': pageEntries.first['url'].toString(),
+            'is_live': true,
+            'is_published': true,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          }).eq('id', channelId);
+        } else {
+          final inserted = await AuthService.client.from('channels').insert({
+            'name': channelName,
+            'name_en': channelName,
+            'category': categories.isNotEmpty ? categories.first : 'عامة',
+            if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
+            'stream_url': pageEntries.first['url'].toString(),
+            'is_live': true,
+            'is_published': true,
+            'external_source_key': stableChannelKey,
+          }).select('id').single();
+          channelId = inserted['id'].toString();
         }
-        await AuthService.client.from('playback_servers').insert({
-          'channel_id': channelId,
-          'server_name': (source['name']?.toString() ?? 'موقع ويب') + ' • سيرفر ' + (index + 1).toString(),
-          'stream_url': streamUrl,
-          'sort_order': index,
-          'is_active': true,
-          'source_id': sourceId,
-          'source_seen_at': DateTime.now().toUtc().toIso8601String(),
-          'source_position': index,
-          'source_failures': 0,
-          'source_page_url': entries[index]['pageUrl']?.toString(),
-          'user_agent': entries[index]['userAgent']?.toString(),
-          'referer': entries[index]['referer']?.toString(),
-          'origin': entries[index]['origin']?.toString(),
-        });
-        addedServers++;
+
+        // Save every selected category in the trial-only relation table.
+        final categoryRows = categories.isEmpty
+            ? <Map<String, dynamic>>[]
+            : categories.map((category) => <String, dynamic>{
+                'channel_id': channelId,
+                'category': category,
+              }).toList();
+        if (categoryRows.isNotEmpty) {
+          await AuthService.client.from('channel_categories').upsert(
+            categoryRows,
+            onConflict: 'channel_id,category',
+            ignoreDuplicates: true,
+          );
+        }
+
+        for (var index = 0; index < pageEntries.length; index++) {
+          final entry = pageEntries[index];
+          final streamUrl = entry['url'].toString();
+          final duplicate = await AuthService.client.from('playback_servers')
+              .select('id,source_id')
+              .eq('channel_id', channelId)
+              .eq('stream_url', streamUrl)
+              .maybeSingle();
+          if (duplicate != null) {
+            if (duplicate['source_id'] == null || duplicate['source_id'] == sourceId) {
+              await AuthService.client.from('playback_servers').update({
+                'is_active': true,
+                'source_id': sourceId,
+                'source_seen_at': DateTime.now().toUtc().toIso8601String(),
+                'source_page_url': entry['pageUrl']?.toString(),
+                'user_agent': entry['userAgent']?.toString(),
+                'referer': entry['referer']?.toString(),
+                'origin': entry['origin']?.toString(),
+              }).eq('id', duplicate['id']);
+            }
+            continue;
+          }
+          await AuthService.client.from('playback_servers').insert({
+            'channel_id': channelId,
+            'server_name': (source['name']?.toString() ?? 'موقع ويب') +
+                ' • \${channelName} • سيرفر \${index + 1}',
+            'stream_url': streamUrl,
+            'sort_order': index,
+            'is_active': true,
+            'source_id': sourceId,
+            'source_seen_at': DateTime.now().toUtc().toIso8601String(),
+            'source_position': index,
+            'source_failures': 0,
+            'source_page_url': entry['pageUrl']?.toString(),
+            'user_agent': entry['userAgent']?.toString(),
+            'referer': entry['referer']?.toString(),
+            'origin': entry['origin']?.toString(),
+          });
+          addedServers++;
+        }
+
+        if (packages.isNotEmpty) {
+          await AuthService.client.from('content_package_items').upsert(
+            packages.map((packageId) => <String, dynamic>{
+              'package_id': packageId,
+              'content_type': 'channel',
+              'content_id': channelId,
+            }).toList(),
+            onConflict: 'package_id,content_type,content_id',
+            ignoreDuplicates: true,
+          );
+        }
+        importedChannels++;
+      } catch (error) {
+        failedChannels++;
+        debugPrint('Website channel import failed for $pageUrl: $error');
       }
-      if (packageId != null) {
-        await AuthService.client.from('content_package_items').upsert({
-          'package_id': packageId,
-          'content_type': 'channel',
-          'content_id': channelId,
-        }, onConflict: 'package_id,content_type,content_id', ignoreDuplicates: true);
-      }
-      if (mounted) _message('تم استيراد القناة «$channelName»؛ أضيف $addedServers سيرفر جديد من أصل ${entries.length}');
-    } catch (e) {
-      if (mounted) _message('تعذر استيراد القناة: $e', error: true);
+    }
+
+    for (final controller in nameControllers.values) {
+      controller.dispose();
+    }
+    if (mounted) {
+      _message(
+        'اكتمل الاستيراد: \${importedChannels} قناة، \${addedServers} سيرفر جديد' +
+            (failedChannels > 0 ? '، وفشل \${failedChannels} قناة' : ''),
+        error: failedChannels > 0 && importedChannels == 0,
+      );
     }
   }
 
