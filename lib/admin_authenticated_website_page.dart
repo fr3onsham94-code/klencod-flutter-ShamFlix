@@ -213,10 +213,12 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       if (!mounted) return;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(added > 0
-            ? 'تم العثور على $added رابط جديد. الإجمالي: ${_entries.length}'
-            : 'لم نعثر على روابط HLS جديدة في الصفحة الحالية.') +
-            ' صفحات قنوات مكتشفة: ${_discoveredPages.length}',
+        content: Text(
+          (added > 0
+              ? 'تم العثور على $added رابط جديد. الإجمالي: ${_entries.length}'
+              : 'لم نعثر على روابط HLS جديدة في الصفحة الحالية.') +
+          ' صفحات قنوات مكتشفة: ${_discoveredPages.length}',
+        ),
       ));
     } catch (error) {
       if (mounted) {
