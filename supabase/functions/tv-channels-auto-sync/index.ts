@@ -499,6 +499,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
   const pageUrl = new URL(source.url);
   if (!/(^|\.)aloula\.(?:sba\.sa|sa)$/i.test(pageUrl.hostname) ||
       !(pageUrl.pathname === "/" || pageUrl.pathname === "" ||
+        /^\/(?:[a-z]{2}\/)?live\/?$/i.test(pageUrl.pathname) ||
         /^\/(?:[a-z]{2}\/)?live\/[^/]+\/?$/i.test(pageUrl.pathname))) {
     throw new Error("Aloula adapter accepts the official website root or official live-channel pages");
   }
