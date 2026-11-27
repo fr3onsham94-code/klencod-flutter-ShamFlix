@@ -352,53 +352,142 @@ async function fetchGenericWebsite(source: PlaylistSource) {
   if (/\.(?:m3u8?|mpd)$/i.test(sourceUri.pathname)) {
     throw new Error("This is a playlist URL, not a website page; add it as an M3U source");
   }
-  const { finalUrl, body } = await fetchWebsitePage(source.url);
-  const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
-    body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
-  const pageTitle = titleMatch ? decodeWebsiteText(titleMatch[1]).slice(0, 100) : source.name;
-  const candidates = new Set<string>();
-  const patterns = [
-    /(?:href|src|data-src|data-hls|data-stream)\s*=\s*["']([^"']+)["']/gi,
-    /https?:\/\/[^"'\s<>\\]+/gi,
+
+  // Crawl only public pages on the exact source host. This discovers channel
+  // landing pages automatically without asking an admin to open them one by one.
+  const visited = new Set<string>();
+  const queue: Array<{url:string; hintedName:string; hintedLogo:string}> = [
+    {url: source.url, hintedName: "", hintedLogo: ""},
   ];
-  for (const pattern of patterns) {
-    for (const match of body.matchAll(pattern)) {
-      const raw = decodeWebsiteText(match[1] ?? match[0]).replace(/[),;\]}]+$/g, "");
+  const channelStreams = new Map<string, {
+    pageUrl:string; name:string; logo:string; streams:Set<string>;
+  }>();
+  const MAX_PAGES = 30;
+  const MAX_LINKS_PER_PAGE = 80;
+  const MAX_STREAMS_PER_CHANNEL = 12;
+
+  const safePageUrl = (raw: string, base: URL): string | null => {
+    try {
+      const u = new URL(raw, base);
+      if (u.protocol !== "https:" || u.hostname.toLowerCase() !== sourceUri.hostname.toLowerCase() ||
+          u.username || u.password || /\.(?:m3u8?|mpd|mp4|ts)$/i.test(u.pathname)) return null;
+      u.hash = "";
+      // Avoid crawling logout, account, search and unbounded query variants.
+      if (/(?:logout|log-out|signout|login|signin|register|account|profile|search|api|wp-admin)/i.test(u.pathname)) return null;
+      u.search = "";
+      return u.toString();
+    } catch { return null; }
+  };
+
+  const stripHtml = (value: string) => decodeWebsiteText(value.replace(/<[^>]*>/g, " "))
+    .replace(/[\u0000-\u001f]/g, " ").slice(0, 100);
+
+  while (queue.length && visited.size < MAX_PAGES) {
+    const item = queue.shift()!;
+    const normalized = safePageUrl(item.url, sourceUri);
+    if (!normalized || visited.has(normalized)) continue;
+    visited.add(normalized);
+
+    let page: {finalUrl:URL;body:string};
+    try { page = await fetchWebsitePage(normalized); } catch { continue; }
+    const body = page.body;
+    const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) ||
+      body.match(/property=["']og:title["'][^>]*content=["']([^"']+)/i);
+    const title = item.hintedName || (titleMatch ? stripHtml(titleMatch[1]) : source.name);
+    const logoMatch = body.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i) ||
+      body.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i);
+    let logo = item.hintedLogo || "";
+    if (!logo && logoMatch) {
       try {
-        const resolved = new URL(raw, finalUrl);
-        const safe = safeStreamUrl(resolved.toString());
-        if (safe && /\.(?:m3u8|mpd)$/i.test(new URL(safe).pathname)) candidates.add(safe);
+        const candidate = new URL(decodeWebsiteText(logoMatch[1]), page.finalUrl);
+        if (candidate.protocol === "https:" && candidate.hostname.toLowerCase() === sourceUri.hostname.toLowerCase()) logo = candidate.toString();
       } catch {}
-      if (candidates.size >= 40) break;
     }
-    if (candidates.size >= 40) break;
+
+    const candidates = new Set<string>();
+    const patterns = [
+      /(?:href|src|data-src|data-hls|data-stream|content)=["']([^"']+)["']/gi,
+      /https?:\/\/[^"'\s<>\\]+/gi,
+    ];
+    for (const pattern of patterns) {
+      for (const match of body.matchAll(pattern)) {
+        const raw = decodeWebsiteText(match[1] ?? match[0]).replace(/[),;\]}]+$/g, "");
+        try {
+          const resolved = new URL(raw, page.finalUrl);
+          const safe = safeStreamUrl(resolved.toString());
+          if (safe && /\.(?:m3u8|mpd)$/i.test(new URL(safe).pathname)) candidates.add(safe);
+        } catch {}
+        if (candidates.size >= MAX_STREAMS_PER_CHANNEL) break;
+      }
+      if (candidates.size >= MAX_STREAMS_PER_CHANNEL) break;
+    }
+
+    if (candidates.size) {
+      const channelName = stripHtml(title).replace(/\s*[|•-]\s*.+$/, "").trim() || source.name;
+      const key = canonicalKey("", channelName, source.id);
+      const current = channelStreams.get(key) || {
+        pageUrl: page.finalUrl.toString(), name: channelName, logo, streams: new Set<string>(),
+      };
+      if (!current.logo && logo) current.logo = logo;
+      for (const stream of candidates) {
+        try {
+          await validatePublicPlaylistUrl(new URL(stream));
+          current.streams.add(stream);
+        } catch {}
+      }
+      channelStreams.set(key, current);
+    }
+
+    // Discover linked channel pages from semantic navigation/card links.
+    // Only same-host HTML pages are queued; arbitrary third-party URLs are ignored.
+    const linkPattern = /<a\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi;
+    let links = 0;
+    for (const match of body.matchAll(linkPattern)) {
+      if (links >= MAX_LINKS_PER_PAGE || queue.length + visited.size >= MAX_PAGES * 3) break;
+      const href = match[2];
+      const attrs = match[1] + " " + match[3];
+      const linkText = stripHtml(match[4] || attrs.match(/(?:title|aria-label)=["']([^"']+)/i)?.[1] || "");
+      const image = match[4].match(/<img\b[^>]*(?:src|data-src)=["']([^"']+)["']/i)?.[1] || "";
+      const resolved = safePageUrl(href, page.finalUrl);
+      if (!resolved || visited.has(resolved) || queue.some(x => x.url === resolved)) continue;
+      // Favor links that look like channel/live pages and avoid generic site chrome.
+      const signal = /live|channel|tv|watch|قناة|مباشر|البث|القنوات/i.test(href + " " + linkText + " " + attrs);
+      if (!signal && links > 12) continue;
+      let hintedLogo = "";
+      if (image) {
+        try {
+          const imageUrl = new URL(decodeWebsiteText(image), page.finalUrl);
+          if (imageUrl.protocol === "https:" && imageUrl.hostname.toLowerCase() === sourceUri.hostname.toLowerCase()) hintedLogo = imageUrl.toString();
+        } catch {}
+      }
+      queue.push({url:resolved, hintedName:linkText, hintedLogo});
+      links++;
+    }
   }
+
   const entries: ReturnType<typeof parseM3u> = [];
   let position = 0;
-  for (const streamUrl of candidates) {
-    try {
-      await validatePublicPlaylistUrl(new URL(streamUrl));
-    } catch {
-      continue;
+  for (const channel of channelStreams.values()) {
+    for (const streamUrl of channel.streams) {
+      entries.push({
+        sourceId: source.id,
+        sourceName: source.name,
+        key: canonicalKey("", channel.name, source.id),
+        name: channel.name,
+        nameEn: channel.name,
+        tvgId: "",
+        logo: channel.logo,
+        category: categoryOf("", channel.name),
+        url: streamUrl,
+        position: position++,
+        tvgLanguage: "",
+        tvgCountry: "",
+        groupTitle: "",
+      });
     }
-    entries.push({
-      sourceId: source.id,
-      sourceName: source.name,
-      key: canonicalKey("", pageTitle, source.id),
-      name: pageTitle,
-      nameEn: pageTitle,
-      tvgId: "",
-      logo: "",
-      category: categoryOf("", pageTitle),
-      url: streamUrl,
-      position: position++,
-      tvgLanguage: "",
-      tvgCountry: "",
-      groupTitle: "",
-    });
   }
   if (!entries.length) {
-    throw new Error("Website page contains no supported public direct HLS/DASH stream links");
+    throw new Error("No public channel pages with direct HLS/DASH streams were discovered on this website");
   }
   return entries;
 }
