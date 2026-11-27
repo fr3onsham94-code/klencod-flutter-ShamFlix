@@ -1,6 +1,9 @@
 name: TV Channels Sync Checks
 
 on:
+  push:
+    branches:
+      - feature/fully-automatic-website-discovery
   pull_request:
     branches:
       - main
