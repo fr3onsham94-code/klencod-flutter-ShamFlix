@@ -677,6 +677,9 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
               'source_id': sourceId,
               'source_seen_at': DateTime.now().toUtc().toIso8601String(),
               'source_page_url': entries[index]['pageUrl']?.toString(),
+              'user_agent': entries[index]['userAgent']?.toString(),
+              'referer': entries[index]['referer']?.toString(),
+              'origin': entries[index]['origin']?.toString(),
             }).eq('id', duplicate['id']);
           }
           continue;
@@ -692,6 +695,9 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           'source_position': index,
           'source_failures': 0,
           'source_page_url': entries[index]['pageUrl']?.toString(),
+          'user_agent': entries[index]['userAgent']?.toString(),
+          'referer': entries[index]['referer']?.toString(),
+          'origin': entries[index]['origin']?.toString(),
         });
         addedServers++;
       }
