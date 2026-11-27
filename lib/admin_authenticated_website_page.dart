@@ -60,6 +60,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   return JSON.stringify({
     title: document.title || location.hostname,
     pageUrl: location.href,
+    userAgent: navigator.userAgent || '',
     media: Array.from(found.values()).slice(0, 60)
   });
 })()
@@ -117,6 +118,9 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         _entries.add({
           'url': url,
           'pageUrl': entryPageUrl,
+          'userAgent': decoded['userAgent']?.toString() ?? '',
+          'origin': Uri.tryParse(entryPageUrl)?.origin ?? '',
+          'referer': entryPageUrl,
           'label': value['label']?.toString() ?? _pageTitle,
         });
         added++;
