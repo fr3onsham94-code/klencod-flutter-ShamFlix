@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_auth_service.dart';
+import 'trial_mode.dart';
 
 class ShamFlixPresenceService {
   static const String _sessionKey = 'shamflix_presence_session_id';
@@ -11,7 +12,7 @@ class ShamFlixPresenceService {
   static bool _sending = false;
 
   static Future<void> start() async {
-    if (!AuthService.isInitialized) return;
+    if (kShamFlixTrialMode || !AuthService.isInitialized) return;
     _timer ??= Timer.periodic(
       const Duration(seconds: 60),
       (_) => unawaited(sendHeartbeat()),
@@ -25,7 +26,7 @@ class ShamFlixPresenceService {
   }
 
   static Future<void> sendHeartbeat() async {
-    if (!AuthService.isInitialized || _sending) return;
+    if (kShamFlixTrialMode || !AuthService.isInitialized || _sending) return;
     _sending = true;
     try {
       final prefs = await SharedPreferences.getInstance();

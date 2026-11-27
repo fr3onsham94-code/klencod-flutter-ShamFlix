@@ -21,6 +21,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 import 'app_theme.dart';
 import 'admin_auth_service.dart';
+import 'trial_mode.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
@@ -295,7 +296,7 @@ class ShamFlixLocalStore {
 }
 
 Future<void> syncShamFlixCloudData() async {
-  if (!ShamFlixCloudService.isAvailable) return;
+  if (kShamFlixTrialMode || !ShamFlixCloudService.isAvailable) return;
   try {
     final prefs = await SharedPreferences.getInstance();
     final userId = AuthService.client.auth.currentUser?.id;
@@ -363,9 +364,9 @@ Future<void> refreshManagedPlaybackSource({
   required String contentType,
   required String contentId,
 }) async {
-  if ((contentType != 'movie' && contentType != 'episode') || contentId.trim().isEmpty) return;
+  if (kShamFlixTrialMode || (contentType != 'movie' && contentType != 'episode') || contentId.trim().isEmpty) return;
   try {
-    await Supabase.instance.client.functions.invoke(
+    await AuthService.client.functions.invoke(
       'refresh-playback-link',
       body: {
         'contentType': contentType,
@@ -3129,6 +3130,10 @@ class _DetailsPageState extends State<DetailsPage> {
     List<Map<String, dynamic>> episodeQueue = const [],
     int episodeIndex = -1,
   }) async {
+    if (contentType == 'movie' || contentType == 'episode') {
+      await showPlaybackWelcomeIfNeeded(context);
+      if (!mounted) return;
+    }
     if (contentType != 'episode') {
       await saveWatchRecord(contentType: contentType, item: widget.item, title: title,
         isSeries: widget.isSeries, isChannel: widget.isChannel);
@@ -4392,6 +4397,84 @@ class _HlsQualityVariant {
   const _HlsQualityVariant({required this.label, required this.url, this.height, this.bandwidth, this.serverIndex});
 }
 
+
+Future<void> showPlaybackWelcomeIfNeeded(BuildContext context) async {
+  const defaultMessage = 'اهلا وسهلا بكم في تطبيق sham flix جميع الافلام والمسلسلات سيرفراتها تعمل باستمرار يرجى الانتظار عشر ثواني لجلب احدث سيرفر للمشاهدة';
+  final prefs = await SharedPreferences.getInstance();
+  final userKey = AuthService.userId ?? 'guest';
+  final dismissedKey = 'shamflix_player_welcome_dismissed_$userKey';
+  if (prefs.getBool(dismissedKey) == true || !context.mounted) return;
+
+  var enabled = true;
+  var message = defaultMessage;
+  try {
+    final row = await AuthService.client
+        .from('app_settings')
+        .select('setting_value')
+        .eq('setting_key', 'player_welcome')
+        .maybeSingle()
+        .timeout(const Duration(seconds: 4));
+    final value = row?['setting_value'];
+    if (value is Map) {
+      enabled = value['enabled'] != false;
+      final configuredMessage = value['message']?.toString().trim() ?? '';
+      if (configuredMessage.isNotEmpty) message = configuredMessage;
+    }
+  } catch (_) {
+    // Keep the built-in default message available when the network is unavailable.
+  }
+  if (!enabled || !context.mounted) return;
+
+  var dontShowAgain = false;
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: panel,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              Icon(Icons.waving_hand_rounded, color: gold),
+              const SizedBox(width: 8),
+              Expanded(child: Text('أهلاً وسهلاً بكم', style: TextStyle(color: gold, fontWeight: FontWeight.bold))),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, height: 1.8, fontSize: 15)),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: dontShowAgain,
+                  activeColor: gold,
+                  checkColor: Colors.white,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('عدم إظهار هذه الرسالة مرة أخرى', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  onChanged: (value) => setDialogState(() => dontShowAgain = value == true),
+                ),
+              ],
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.white, minimumSize: const Size(120, 44)),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (dontShowAgain) await prefs.setBool(dismissedKey, true);
+}
+
 class ShamFlixPlayerPage extends StatefulWidget {
   final String url;
   final String title;
@@ -4962,6 +5045,8 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     if (id.isEmpty) return;
     final number = valueOf(episode['episode_number'], '${targetIndex + 1}');
     final title = valueOf(episode['title'], 'الحلقة $number');
+    await showPlaybackWelcomeIfNeeded(context);
+    if (!mounted) return;
     setState(() { opening = true; controlsVisible = false; error = null; });
     try {
       await refreshManagedPlaybackSource(contentType: 'episode', contentId: id);
@@ -5050,7 +5135,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         controlsVisible = true;
       });
       try {
-        final response = await Supabase.instance.client.functions.invoke(
+        final response = await AuthService.client.functions.invoke(
           'refresh-playback-link',
           body: {
             'contentType': widget.contentType,
@@ -5158,7 +5243,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     if (checkKey.isEmpty || !_serverHealthCheckedKeys.add(checkKey)) return;
 
     try {
-      final response = await Supabase.instance.client.functions.invoke(
+      final response = await AuthService.client.functions.invoke(
         'refresh-playback-link',
         body: {
           'contentType': widget.contentType,

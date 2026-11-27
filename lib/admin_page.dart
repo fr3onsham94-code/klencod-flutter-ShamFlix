@@ -72,6 +72,11 @@ class _AdminPageState extends State<AdminPage> {
   final TextEditingController updateBuildController = TextEditingController();
   final TextEditingController updateApkController = TextEditingController();
   final TextEditingController updateNotesController = TextEditingController();
+  final TextEditingController playerWelcomeMessageController = TextEditingController(
+    text: 'اهلا وسهلا بكم في تطبيق sham flix جميع الافلام والمسلسلات سيرفراتها تعمل باستمرار يرجى الانتظار عشر ثواني لجلب احدث سيرفر للمشاهدة',
+  );
+  bool playerWelcomeEnabled = true;
+  bool playerWelcomeSaving = false;
   bool appSettingsLoading = false;
   bool appSettingsSaving = false;
   int catalogGridColumns = 5;
@@ -141,6 +146,7 @@ class _AdminPageState extends State<AdminPage> {
     updateBuildController.dispose();
     updateApkController.dispose();
     updateNotesController.dispose();
+    playerWelcomeMessageController.dispose();
     for (final controller in themeColorControllers.values) { controller.dispose(); }
     super.dispose();
   }
@@ -297,7 +303,7 @@ class _AdminPageState extends State<AdminPage> {
       final rows = await AuthService.client
           .from('app_settings')
           .select('setting_key,setting_value')
-          .inFilter('setting_key', ['invite_link', 'app_update']);
+          .inFilter('setting_key', ['invite_link', 'app_update', 'player_welcome']);
       for (final row in rows) {
         final key = row['setting_key']?.toString();
         final value = row['setting_value'];
@@ -305,6 +311,9 @@ class _AdminPageState extends State<AdminPage> {
           inviteLinkController.text = value is Map
               ? value['url']?.toString() ?? ''
               : value?.toString() ?? '';
+        } else if (key == 'player_welcome' && value is Map) {
+          playerWelcomeEnabled = value['enabled'] != false;
+          playerWelcomeMessageController.text = value['message']?.toString() ?? playerWelcomeMessageController.text;
         } else if (key == 'app_update' && value is Map) {
           updateVersionController.text = value['version']?.toString() ?? '';
           updateBuildController.text = value['build_number']?.toString() ?? '';
@@ -316,6 +325,27 @@ class _AdminPageState extends State<AdminPage> {
       if (mounted) showMessage('تعذر تحميل إعدادات الدعوة والتحديث: $e', isError: true);
     } finally {
       if (mounted) setState(() => appSettingsLoading = false);
+    }
+  }
+
+  Future<void> savePlayerWelcomeSetting() async {
+    if (playerWelcomeSaving) return;
+    final message = playerWelcomeMessageController.text.trim();
+    if (playerWelcomeEnabled && message.isEmpty) {
+      showMessage('اكتب نص الرسالة أو أوقف ظهورها', isError: true);
+      return;
+    }
+    setState(() => playerWelcomeSaving = true);
+    try {
+      await AuthService.client.from('app_settings').upsert({
+        'setting_key': 'player_welcome',
+        'setting_value': {'enabled': playerWelcomeEnabled, 'message': message},
+      }, onConflict: 'setting_key');
+      showMessage('تم حفظ رسالة الترحيب لجميع المستخدمين');
+    } catch (e) {
+      showMessage('تعذر حفظ رسالة الترحيب: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => playerWelcomeSaving = false);
     }
   }
 
@@ -778,6 +808,55 @@ class _AdminPageState extends State<AdminPage> {
             style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
           ),
         )],
+        ),
+        _settingsExpansion(
+          title: 'رسالة الترحيب قبل تشغيل المحتوى',
+          subtitle: 'تفعيل الرسالة وتعديل النص الذي يظهر عند فتح فيلم أو حلقة',
+          icon: Icons.mark_chat_unread_outlined,
+          children: [
+            Card(
+              color: adminPanel,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: playerWelcomeEnabled,
+                      activeColor: adminGold,
+                      onChanged: playerWelcomeSaving ? null : (value) => setState(() => playerWelcomeEnabled = value),
+                      title: Text('إظهار الرسالة للمستخدمين', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+                      subtitle: Text('تظهر قبل تشغيل الأفلام والحلقات فقط', style: TextStyle(color: AppTheme.secondaryText)),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: playerWelcomeMessageController,
+                      minLines: 3,
+                      maxLines: 6,
+                      textDirection: TextDirection.rtl,
+                      style: TextStyle(color: AppTheme.text),
+                      decoration: InputDecoration(
+                        labelText: 'نص رسالة الترحيب',
+                        labelStyle: TextStyle(color: AppTheme.secondaryText),
+                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: adminGold)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: playerWelcomeSaving ? null : savePlayerWelcomeSetting,
+                      style: FilledButton.styleFrom(backgroundColor: adminGold, foregroundColor: AppTheme.text),
+                      icon: playerWelcomeSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.save),
+                      label: const Text('حفظ رسالة الترحيب'),
+                    ),
+                    const SizedBox(height: 6),
+                    Text('اختيار المستخدم عدم إظهار الرسالة مرة أخرى يبقى محفوظاً على جهازه.', style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         _settingsExpansion(
           title: 'روابط التطبيق والتحديثات',

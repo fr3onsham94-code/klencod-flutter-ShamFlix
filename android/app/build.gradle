@@ -26,6 +26,8 @@ if (hasReleaseKeystore) {
     }
 }
 
+def isTrialBuild = System.getenv("SHAMFLIX_TRIAL_BUILD") == "true"
+
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
 if (flutterVersionCode == null) {
     flutterVersionCode = "1"
@@ -51,7 +53,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.shamflix.app"
+        applicationId = isTrialBuild ? "com.shamflix.app.trial" : "com.shamflix.app"
         minSdk = 24
         targetSdk = 36
         versionCode = flutterVersionCode.toInteger()

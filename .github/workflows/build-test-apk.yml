@@ -11,6 +11,7 @@ on:
       - feature/supabase-usage-dashboard
       - feature/channel-playback-headers
       - test/bulk-website-channel-import
+      - experimental/website-crawler-player-welcome
   pull_request:
     branches:
       - main
@@ -49,13 +50,15 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
-      - name: Build test APK
-        run: flutter build apk --debug --no-pub
+      - name: Build isolated trial APK
+        env:
+          SHAMFLIX_TRIAL_BUILD: 'true'
+        run: flutter build apk --debug --no-pub --dart-define=SHAMFLIX_TRIAL_MODE=true
 
       - name: Upload test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ShamFlix-test-debug-apk
+          name: ShamFlix-trial-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 14

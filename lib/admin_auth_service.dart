@@ -3,6 +3,8 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'trial_mode.dart';
+
 class AuthService {
   static const String ownerUserId = 'dda16adb-3b6e-4244-a028-83df88b7801d';
 
@@ -16,6 +18,17 @@ class AuthService {
       'shamflix://login-callback';
 
   static StreamSubscription<AuthState>? _authSubscription;
+  static SupabaseClient? _trialClient;
+
+  static SupabaseClient get client {
+    if (kShamFlixTrialMode) {
+      return _trialClient ??= SupabaseClient(
+        'http://127.0.0.1:54321',
+        'shamflix-trial-local-only',
+      );
+    }
+    return Supabase.instance.client;
+  }
 
   static String? accessToken;
   static String? refreshToken;
@@ -25,14 +38,23 @@ class AuthService {
   static bool isInitialized = false;
   static String? initializationError;
 
-  static SupabaseClient get client =>
-      Supabase.instance.client;
-
   static bool get isLoggedIn => isInitialized && accessToken != null;
 
   // تهيئة Supabase والاستماع إلى تغييرات تسجيل الدخول.
   static Future<bool> initialize() async {
     if (isInitialized) return true;
+    if (kShamFlixTrialMode) {
+      // No Supabase.initialize here: the trial build must never restore a real
+      // production session or send requests to the production project.
+      _trialClient ??= SupabaseClient(
+        'http://127.0.0.1:54321',
+        'shamflix-trial-local-only',
+      );
+      isInitialized = true;
+      initializationError = null;
+      _syncSession(null);
+      return true;
+    }
     try {
       await Supabase.initialize(
         url: _projectUrl,
@@ -83,6 +105,10 @@ class AuthService {
 
   // استعادة الجلسة التي يحفظها Supabase SDK تلقائياً.
   static Future<bool> restoreSession() async {
+    if (kShamFlixTrialMode) {
+      _syncSession(null);
+      return false;
+    }
     final session = client.auth.currentSession;
 
     _syncSession(session);
@@ -95,6 +121,9 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    if (kShamFlixTrialMode) {
+      throw StateError('تسجيل الدخول السحابي معطّل في النسخة التجريبية المعزولة.');
+    }
     final response = await client.auth.signUp(
       email: email.trim(),
       password: password,
@@ -115,6 +144,9 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    if (kShamFlixTrialMode) {
+      throw StateError('تسجيل الدخول السحابي معطّل في النسخة التجريبية المعزولة.');
+    }
     final response = await client.auth.signInWithPassword(
       email: email.trim(),
       password: password,
@@ -125,6 +157,9 @@ class AuthService {
 
   // تسجيل الدخول باستخدام Google.
   static Future<void> signInWithGoogle() async {
+    if (kShamFlixTrialMode) {
+      throw StateError('تسجيل الدخول السحابي معطّل في النسخة التجريبية المعزولة.');
+    }
     await client.auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: redirectUrl,
@@ -133,6 +168,9 @@ class AuthService {
 
   // ربط Google بالحساب المسجل دخوله حالياً.
   static Future<void> linkGoogle() async {
+    if (kShamFlixTrialMode) {
+      throw StateError('تسجيل الدخول السحابي معطّل في النسخة التجريبية المعزولة.');
+    }
     if (client.auth.currentSession == null) {
       throw Exception('يجب تسجيل الدخول أولاً لربط Google.');
     }
@@ -147,6 +185,9 @@ class AuthService {
   static Future<void> sendPasswordReset({
     required String email,
   }) async {
+    if (kShamFlixTrialMode) {
+      throw StateError('تسجيل الدخول السحابي معطّل في النسخة التجريبية المعزولة.');
+    }
     await client.auth.resetPasswordForEmail(
       email.trim(),
       redirectTo: redirectUrl,
@@ -157,6 +198,9 @@ class AuthService {
   static Future<void> updatePassword({
     required String password,
   }) async {
+    if (kShamFlixTrialMode) {
+      throw StateError('تسجيل الدخول السحابي معطّل في النسخة التجريبية المعزولة.');
+    }
     await client.auth.updateUser(
       UserAttributes(password: password),
     );
@@ -167,11 +211,16 @@ class AuthService {
   // تحديث الجلسة بعد العودة من رابط خارجي.
   // معالجة الرابط نفسها سننقلها إلى Supabase SDK في main.dart.
   static Future<void> handleAuthDeepLink(Uri uri) async {
+    if (kShamFlixTrialMode) return;
     await restoreSession();
   }
 
   // تسجيل الخروج.
   static Future<void> signOut() async {
+    if (kShamFlixTrialMode) {
+      _syncSession(null);
+      return;
+    }
     await client.auth.signOut();
     _syncSession(null);
   }
