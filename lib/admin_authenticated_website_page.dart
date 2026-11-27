@@ -32,6 +32,39 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
 (() => {
   const found = new Map();
   const sensitive = /(?:token|auth|signature|sig|jwt|session|cookie|access[_-]?key|api[_-]?key|key[_-]?pair|policy|hdnea|hdnts|expires|expire)/i;
+  const safeImage = (raw) => {
+    if (!raw || typeof raw !== 'string') return '';
+    try {
+      const u = new URL(raw.trim(), location.href);
+      if (u.protocol !== 'https:') return '';
+      for (const key of u.searchParams.keys()) if (sensitive.test(key)) return '';
+      u.hash = '';
+      return u.href;
+    } catch (_) { return ''; }
+  };
+  const imageCandidates = [];
+  const addImage = (raw, score) => {
+    const url = safeImage(raw);
+    if (!url || imageCandidates.some(item => item.url === url)) return;
+    imageCandidates.push({url, score});
+  };
+  document.querySelectorAll('meta[property="og:image"], meta[name="twitter:image"], meta[property="twitter:image"]').forEach(el => {
+    addImage(el.content || el.getAttribute('content'), 100);
+  });
+  document.querySelectorAll('img').forEach(el => {
+    const url = el.currentSrc || el.src || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || '';
+    const alt = ((el.alt || '') + ' ' + (el.title || '')).toLowerCase();
+    const width = el.naturalWidth || el.width || 0;
+    const height = el.naturalHeight || el.height || 0;
+    if (width > 0 && height > 0 && (width < 24 || height < 24 || width > 1600 || height > 1200)) return;
+    let score = 20;
+    if (/logo|channel|live|قناة|شعار|الكأس|alkass/.test(alt)) score += 45;
+    if (width >= 40 && width <= 500 && height >= 30 && height <= 500) score += 15;
+    if (/avatar|user|profile|icon|sprite|banner|ad|advert/.test(alt)) score -= 50;
+    addImage(url, score);
+  });
+  imageCandidates.sort((a, b) => b.score - a.score);
+  const logoUrl = imageCandidates.length ? imageCandidates[0].url : '';
   const add = (raw) => {
     if (!raw || typeof raw !== 'string') return;
     try {
@@ -61,6 +94,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     title: document.title || location.hostname,
     pageUrl: location.href,
     userAgent: navigator.userAgent || '',
+    logoUrl,
     media: Array.from(found.values()).slice(0, 60)
   });
 })()
@@ -122,6 +156,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
           'origin': Uri.tryParse(entryPageUrl)?.origin ?? '',
           'referer': entryPageUrl,
           'label': value['label']?.toString() ?? _pageTitle,
+          'logoUrl': decoded['logoUrl']?.toString() ?? '',
         });
         added++;
       }
