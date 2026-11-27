@@ -759,7 +759,9 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     for (final pageUrl in selected) {
       final pageEntries = grouped[pageUrl]!;
       final channelName = nameControllers[pageUrl]!.text.trim();
-      final categories = selectedCategories[pageUrl]!.toList();
+      final categories = selectedCategories[pageUrl]!.isEmpty
+          ? <String>['عامة']
+          : selectedCategories[pageUrl]!.toList();
       final packages = selectedPackages[pageUrl]!.toList();
       final logoUrl = pageEntries
           .map((entry) => entry['logoUrl']?.toString().trim() ?? '')
@@ -796,6 +798,21 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
             'external_source_key': stableChannelKey,
           }).select('id').single();
           channelId = inserted['id'].toString();
+        }
+
+        // Keep the relation table in sync with the categories selected for this channel.
+        final previousCategories = await AuthService.client
+            .from('channel_categories')
+            .select('category')
+            .eq('channel_id', channelId);
+        for (final previous in previousCategories) {
+          final previousName = previous['category']?.toString() ?? '';
+          if (previousName.isNotEmpty && !categories.contains(previousName)) {
+            await AuthService.client.from('channel_categories')
+                .delete()
+                .eq('channel_id', channelId)
+                .eq('category', previousName);
+          }
         }
 
         // Save every selected category in the trial-only relation table.
