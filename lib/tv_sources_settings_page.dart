@@ -670,11 +670,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                                 }).toList(),
                               ),
                             ],
-                            TextButton.icon(
-                              onPressed: () => GenUI.openUrl(pageUrl),
-                              icon: const Icon(Icons.open_in_new, size: 16),
-                              label: const Text('فتح صفحة المصدر'),
-                            ),
                           ],
                         ),
                       ),
@@ -738,6 +733,24 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     }
 
     final selected = pageUrls.where((pageUrl) => selectedPages[pageUrl] == true).toList();
+
+    // Safety gate: the multi-category relation exists only in the isolated trial schema.
+    // Never create or modify channels on the production project when that schema is absent.
+    try {
+      await AuthService.client.from('channel_categories').select('channel_id').limit(1);
+    } catch (error) {
+      for (final controller in nameControllers.values) {
+        controller.dispose();
+      }
+      if (mounted) {
+        _message(
+          'لم يبدأ الاستيراد: قاعدة البيانات المتصلة لا تحتوي جدول التصنيفات المتعددة الخاص بالنسخة التجريبية. لم يتم حفظ أي قناة. اربط التطبيق بقاعدة الاختبار أولاً.',
+          error: true,
+        );
+      }
+      return;
+    }
+
     final sourceId = sourceIdForAdminWebsite(source);
     var importedChannels = 0;
     var addedServers = 0;
