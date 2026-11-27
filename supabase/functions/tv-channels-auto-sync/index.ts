@@ -312,6 +312,55 @@ async function fetchPlaylist(source: PlaylistSource, db: any) {
   return entries;
 }
 
+async function fetchAloulaChannelLogo(channel: any, channelId: unknown): Promise<string> {
+  const slug = clean(channel?.url || "").replace(/^\\/+|\\/+$/g, "");
+  if (!slug || !/^[a-z0-9-]+$/i.test(slug)) return "";
+  try {
+    // The public Aloula channel API exposes stream metadata but not channel artwork.
+    // Its official channel page contains the image metadata used by the website.
+    const pageUrl = new URL(
+      "/en/channel/" + encodeURIComponent(String(channelId)) + "/" + encodeURIComponent(slug),
+      "https://aloula.sba.sa",
+    );
+    const { finalUrl, body } = await fetchWebsitePage(pageUrl.toString());
+    const candidates: string[] = [];
+    for (const match of body.matchAll(/<meta\\b[^>]*>/gi)) {
+      const attrs = parseAttrs(match[0]);
+      const key = String(attrs.property || attrs.name || "").toLowerCase();
+      if (["og:image", "og:image:url", "twitter:image", "twitter:image:src"].includes(key) && attrs.content) {
+        candidates.push(attrs.content);
+      }
+    }
+    for (const match of body.matchAll(/<link\\b[^>]*>/gi)) {
+      const attrs = parseAttrs(match[0]);
+      if (String(attrs.rel || "").toLowerCase().split(/\\s+/).includes("image_src") && attrs.href) {
+        candidates.push(attrs.href);
+      }
+    }
+    for (const match of body.matchAll(/<img\\b[^>]*>/gi)) {
+      const attrs = parseAttrs(match[0]);
+      const hint = (attrs.alt || "") + " " + (attrs.class || "") + " " + (attrs.id || "");
+      if (/logo|channel|قناة/i.test(hint)) {
+        candidates.push(attrs.src || attrs["data-src"] || attrs["data-original"] || "");
+      }
+    }
+    for (const rawValue of candidates) {
+      const raw = decodeWebsiteText(rawValue);
+      if (!raw || raw.startsWith("data:")) continue;
+      try {
+        const imageUrl = new URL(raw, finalUrl);
+        if (imageUrl.protocol === "https:" && !imageUrl.username && !imageUrl.password &&
+            imageUrl.hostname !== "localhost" && !imageUrl.hostname.endsWith(".localhost")) {
+          return imageUrl.toString();
+        }
+      } catch {}
+    }
+  } catch {
+    // Missing artwork must not prevent an otherwise valid live channel from syncing.
+  }
+  return "";
+}
+
 async function fetchWebsitePage(url: string): Promise<{ finalUrl: URL; body: string }> {
   let current = new URL(url);
   let response: Response | null = null;
@@ -559,7 +608,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
         playerData?.image, playerData?.thumbnail_url, playerData?.thumbnail,
         playerData?.channel?.logo_url, playerData?.channel?.logo,
       ];
-      const logo = imageCandidates.map((value: any) => {
+      const logoFromApi = imageCandidates.map((value: any) => {
         const raw = typeof value === "string" ? value
           : value && typeof value === "object" ? value.url || value.src || value.original || value.large || ""
           : "";
@@ -571,6 +620,7 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
           return imageUrl.toString();
         } catch { return ""; }
       }).find((value: string) => value.length > 0) || "";
+      const logo = logoFromApi || await fetchAloulaChannelLogo(channel, channelId);
       return {
         sourceId: source.id,
         sourceName: source.name,
@@ -1022,6 +1072,7 @@ async function syncChannels(db: any) {
     const uniqueStreams = [...new Map(entries.map(e => [e.sourceId + "|" + e.url,e])).values()];
     const preferred = uniqueStreams.find(x => x.sourceId === "iptv-org") ||
       uniqueStreams.find(x => x.sourceId === "nexus") || uniqueStreams[0];
+    const preferredLogo = uniqueStreams.find(x => typeof x.logo === "string" && x.logo.trim())?.logo || preferred.logo || "";
     const categoryCounts = new Map<string,number>();
     for (const e of uniqueStreams) categoryCounts.set(e.category,(categoryCounts.get(e.category)||0)+1);
     const category = [...categoryCounts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] || "عامة";
@@ -1042,7 +1093,7 @@ async function syncChannels(db: any) {
       aliases,
       category,
       stream_url: preferred.url,
-      logo_url: preferred.logo || null,
+      logo_url: preferredLogo || null,
       is_live: true,
       is_published: true,
       external_source_key: key,
