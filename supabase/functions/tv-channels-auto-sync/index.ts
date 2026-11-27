@@ -438,20 +438,20 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
 
   const entries = await Promise.all(liveChannels.map(async (channel: any, position: number) => {
     try {
-      let streamUrl = typeof channel?.streams?.hls === "string" ? channel.streams.hls : "";
-      if (!streamUrl) {
-        const channelId = channel?.id ?? channel?.channel_id;
-        if (channelId == null || String(channelId).trim().length === 0) return null;
-        const playerUrl = new URL(
-          "https://aloula.faulio.com/api/v1.1/channels/" + encodeURIComponent(String(channelId)) + "/player",
-        );
-        await validatePublicPlaylistUrl(playerUrl);
-        const playerResponse = await fetch(playerUrl, { headers, signal: AbortSignal.timeout(20000) });
-        if (!playerResponse.ok) return null;
-        const playerData = await playerResponse.json();
-        streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls
-          : typeof playerData?.data?.streams?.hls === "string" ? playerData.data.streams.hls : "";
-      }
+      // Always ask the official player endpoint for a current signed URL.
+      // The catalogue's embedded streams.hls value can be stale by playback time.
+      const channelId = channel?.id ?? channel?.channel_id;
+      if (channelId == null || String(channelId).trim().length === 0) return null;
+      const playerUrl = new URL(
+        "https://aloula.faulio.com/api/v1.1/channels/" + encodeURIComponent(String(channelId)) + "/player",
+      );
+      await validatePublicPlaylistUrl(playerUrl);
+      const playerResponse = await fetch(playerUrl, { headers, signal: AbortSignal.timeout(20000) });
+      if (!playerResponse.ok) return null;
+      const playerData = await playerResponse.json();
+      const streamUrl = typeof playerData?.streams?.hls === "string" ? playerData.streams.hls
+        : typeof playerData?.data?.streams?.hls === "string" ? playerData.data.streams.hls
+        : typeof playerData?.settings?.protocols?.hls === "string" ? playerData.settings.protocols.hls : "";
       const safeUrl = safeStreamUrl(streamUrl);
       if (!safeUrl) return null;
       await validatePublicPlaylistUrl(new URL(safeUrl));
