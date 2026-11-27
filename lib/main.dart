@@ -3928,6 +3928,93 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
     if (mounted) setState(() => loading = false);
   }
 
+  Future<String> _resolveAloulaLiveUrl(Map<String, dynamic> channel) async {
+    String normalize(String value) => value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '')
+        .replaceAll(RegExp(r'[\s\-_]+'), '')
+        .replaceAll(RegExp(r'[أإآ]'), 'ا')
+        .replaceAll('ى', 'ي');
+
+    final channelNames = <String>{
+      normalize(channel['name_en']?.toString() ?? ''),
+      normalize(channel['name']?.toString() ?? ''),
+    }..remove('');
+    if (channelNames.isEmpty) {
+      throw StateError('اسم قناة الأولى غير متوفر لتحديث رابط البث');
+    }
+
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      Future<dynamic> getJson(Uri uri) async {
+        final request = await client.getUrl(uri).timeout(const Duration(seconds: 10));
+        request.headers.set('User-Agent',
+            'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36');
+        request.headers.set('Origin', 'https://www.aloula.sa');
+        request.headers.set('Referer', 'https://www.aloula.sa/');
+        request.headers.set('Accept', 'application/json');
+        final response = await request.close().timeout(const Duration(seconds: 12));
+        final body = await utf8.decoder.bind(response).join().timeout(const Duration(seconds: 12));
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw HttpException('Aloula API HTTP ${response.statusCode}', uri: uri);
+        }
+        return jsonDecode(body);
+      }
+
+      final payload = await getJson(Uri.parse('https://aloula.faulio.com/api/v1/channels'));
+      final rows = payload is List
+          ? payload
+          : payload is Map && payload['channels'] is List
+              ? payload['channels'] as List
+              : payload is Map && payload['data'] is List
+                  ? payload['data'] as List
+                  : const <dynamic>[];
+      Map<String, dynamic>? matched;
+      for (final item in rows) {
+        if (item is! Map) continue;
+        final row = Map<String, dynamic>.from(item);
+        final live = row['has_live'] == true ||
+            row['has_live'] == 1 ||
+            row['has_live']?.toString().toLowerCase() == 'true';
+        if (!live) continue;
+        final apiNames = <String>{
+          normalize(row['title']?.toString() ?? ''),
+          normalize(row['name']?.toString() ?? ''),
+        }..remove('');
+        if (apiNames.any(channelNames.contains)) {
+          matched = row;
+          break;
+        }
+      }
+      if (matched == null) {
+        throw StateError('لم يتم العثور على بث مباشر مطابق لقناة الأولى');
+      }
+
+      final channelId = matched['id'] ?? matched['channel_id'];
+      if (channelId == null || channelId.toString().trim().isEmpty) {
+        throw StateError('معرّف قناة الأولى غير متوفر');
+      }
+      final playerPayload = await getJson(Uri.parse(
+          'https://aloula.faulio.com/api/v1.1/channels/${Uri.encodeComponent(channelId.toString())}/player'));
+      final streams = playerPayload is Map ? playerPayload['streams'] : null;
+      final data = playerPayload is Map ? playerPayload['data'] : null;
+      final nestedStreams = data is Map ? data['streams'] : null;
+      final settings = playerPayload is Map ? playerPayload['settings'] : null;
+      final protocols = settings is Map ? settings['protocols'] : null;
+      final rawUrl = (streams is Map ? streams['hls'] : null) ??
+          (nestedStreams is Map ? nestedStreams['hls'] : null) ??
+          (protocols is Map ? protocols['hls'] : null);
+      final uri = Uri.tryParse(rawUrl?.toString() ?? '');
+      if (uri == null || uri.scheme != 'https' ||
+          !uri.path.toLowerCase().endsWith('.m3u8')) {
+        throw StateError('الأولى لم تُرجع رابط HLS صالحاً للقناة');
+      }
+      return uri.toString();
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   Future<void> _playChannel(Map<String, dynamic> channel) async {
     if (starting) return;
     setState(() => starting = true);
@@ -3943,11 +4030,40 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
         }
       }
       final id = channel['id']?.toString() ?? '';
-      final servers = id.isEmpty ? <Map<String, dynamic>>[] :
+      var servers = id.isEmpty ? <Map<String, dynamic>>[] :
           await SupabaseService.getPlaybackServers(contentType: 'channel', contentId: id);
-      final url = servers.isNotEmpty
+      var url = servers.isNotEmpty
           ? valueOf(servers.first['stream_url'])
           : valueOf(channel['stream_url']);
+
+      // Aloula issues time-limited HLS URLs. Resolve a fresh player URL at tap time.
+      final aloulaIndex = servers.indexWhere((server) =>
+          valueOf(server['source_id']).startsWith('website:aloula:'));
+      if (aloulaIndex >= 0) {
+        try {
+          final freshUrl = await _resolveAloulaLiveUrl(channel);
+          final refreshedServers = servers
+              .map((server) => Map<String, dynamic>.from(server))
+              .toList();
+          final aloulaServer = {
+            ...refreshedServers.removeAt(aloulaIndex),
+            'stream_url': freshUrl,
+          };
+          refreshedServers.insert(0, aloulaServer);
+          servers = refreshedServers;
+          url = freshUrl;
+        } catch (error) {
+          // Keep another source as a fallback when the same channel has one.
+          if (aloulaIndex == 0 && servers.length > 1) {
+            final fallbackServer = servers.removeAt(1);
+            servers.removeAt(0);
+            servers.insert(0, fallbackServer);
+            url = valueOf(fallbackServer['stream_url']);
+          } else if (servers.length == 1) {
+            rethrow;
+          }
+        }
+      }
       final uri = Uri.tryParse(url);
       if (url.isEmpty || uri == null || !uri.hasScheme) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
