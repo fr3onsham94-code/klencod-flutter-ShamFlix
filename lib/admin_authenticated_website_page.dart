@@ -31,7 +31,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   static const String _scanScript = r'''
 (() => {
   const found = new Map();
-  const sensitive = /(?:token|auth|signature|sig|jwt|session|cookie|access[_-]?key|api[_-]?key)/i;
+  const sensitive = /(?:token|auth|signature|sig|jwt|session|cookie|access[_-]?key|api[_-]?key|key[_-]?pair|policy|hdnea|hdnts|expires|expire)/i;
   const add = (raw) => {
     if (!raw || typeof raw !== 'string') return;
     try {
