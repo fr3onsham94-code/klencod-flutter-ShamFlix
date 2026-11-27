@@ -805,7 +805,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       Row(children: [
         Expanded(child: Text('المواقع المضافة', style: TextStyle(
           color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15))),
-        Text('\${websiteSources.length} موقع', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+        Text('${websiteSources.length} موقع', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
       ]),
       if (websiteSources.isEmpty) Card(color: AppTheme.panel, child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
@@ -887,7 +887,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       Row(children: [
         Expanded(child: Text('مصادر M3U وXtream', style: TextStyle(
           color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15))),
-        Text('\${others.length}', style: TextStyle(color: AppTheme.secondaryText)),
+        Text('${others.length}', style: TextStyle(color: AppTheme.secondaryText)),
       ]),
       if (others.isEmpty) Padding(padding: const EdgeInsets.all(20),
         child: Center(child: Text('لا توجد مصادر أخرى مضافة', style: TextStyle(color: AppTheme.secondaryText)))),
@@ -915,7 +915,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       Row(children: [
         Expanded(child: Text('المصادر الأساسية', style: TextStyle(
           color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15))),
-        Text('\${builtinSources.length} مصدر', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+        Text('${builtinSources.length} مصدر', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
       ]),
       ...builtinSources.map((s) => _sourceCard(s, AppTheme.text, AppTheme.secondaryText)),
     ],
