@@ -155,6 +155,10 @@ class GenericWebsiteDiscoveryAdapter implements WebsiteDiscoveryAdapter {
     r'/(?:channel|channels|live|live-tv|tv|watch)(?:/|$)',
     caseSensitive: false,
   );
+  static final RegExp _sensitiveQuery = RegExp(
+    r'token|auth|signature|sig|jwt|session|cookie|access[_-]?key|api[_-]?key|policy|hdnea|hdnts|expires|expire',
+    caseSensitive: false,
+  );
   static final RegExp _noise = RegExp(
     r'login|logout|register|signup|account|profile|subscribe|payment|'
     r'privacy|terms|contact|search|category|categories',
@@ -179,6 +183,7 @@ class GenericWebsiteDiscoveryAdapter implements WebsiteDiscoveryAdapter {
           label.isEmpty ||
           _noise.hasMatch(uri.path) ||
           !_channelPath.hasMatch(uri.path) ||
+          uri.queryParameters.keys.any(_sensitiveQuery.hasMatch) ||
           !seen.add(uri.toString())) {
         continue;
       }
@@ -211,7 +216,8 @@ class GenericWebsiteDiscoveryAdapter implements WebsiteDiscoveryAdapter {
     final resolved = uri == null ? base.resolve(raw.trim()) : uri;
     if (resolved.scheme != 'https' ||
         resolved.userInfo.isNotEmpty ||
-        resolved.host.isEmpty) {
+        resolved.host.isEmpty ||
+        resolved.queryParameters.keys.any(_sensitiveQuery.hasMatch)) {
       return null;
     }
     return resolved.toString();
