@@ -666,17 +666,19 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       for (var index = 0; index < entries.length; index++) {
         final streamUrl = entries[index]['url'].toString();
         final duplicate = await AuthService.client.from('playback_servers')
-            .select('id')
+            .select('id,source_id')
             .eq('channel_id', channelId)
             .eq('stream_url', streamUrl)
             .maybeSingle();
         if (duplicate != null) {
-          await AuthService.client.from('playback_servers').update({
-            'is_active': true,
-            'source_id': sourceId,
-            'source_seen_at': DateTime.now().toUtc().toIso8601String(),
-            'source_page_url': entries[index]['pageUrl']?.toString(),
-          }).eq('id', duplicate['id']);
+          if (duplicate['source_id'] == null || duplicate['source_id'] == sourceId) {
+            await AuthService.client.from('playback_servers').update({
+              'is_active': true,
+              'source_id': sourceId,
+              'source_seen_at': DateTime.now().toUtc().toIso8601String(),
+              'source_page_url': entries[index]['pageUrl']?.toString(),
+            }).eq('id', duplicate['id']);
+          }
           continue;
         }
         await AuthService.client.from('playback_servers').insert({
@@ -825,7 +827,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
         ? 'Xtream • ' + (source['xtream_server_url']?.toString() ?? '')
         : sourceType == 'm3u_file' ? 'ملف M3U مرفوع' : source['playlist_url']?.toString() ?? '';
     final typeLabel = isWebsite
-        ? 'موقع بث • ' + (_websiteAdapterOf(source) == 'aloula' ? 'Aloula' : 'استخراج تلقائي')
+        ? 'موقع بث • ' + (_websiteAdapterOf(source) == 'aloula' ? 'Aloula' : 'استخراج عام + استيراد إداري')
         : source['is_builtin'] == true ? 'مصدر أساسي'
         : sourceType == 'xtream' ? 'مصدر Xtream'
         : sourceType == 'm3u_file' ? 'ملف M3U' : 'مصدر M3U';
@@ -895,7 +897,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('أدخل الموقع واختر طريقة الاستخراج. يجب أن تكون القنوات وروابط البث متاحة للعامة ومصرحاً باستخدامها.',
+              Text('يمكنك فتح الموقع وتسجيل الدخول بحساب المالك، ثم استيراد روابط HLS المصرّح بإتاحتها لجميع مستخدمي التطبيق.',
                 style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
               const SizedBox(height: 14),
               TextField(controller: _websiteNameController, style: TextStyle(color: AppTheme.text),
