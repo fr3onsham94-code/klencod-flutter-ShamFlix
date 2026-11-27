@@ -19,7 +19,7 @@ This module is the shared discovery contract for website-backed TV sources.
 
 ## Current implementation status
 
-This commit adds the reusable model, adapter contract, conservative generic adapter and registry. The existing authenticated WebView scanner and public server-side crawler are not replaced by this foundation yet. The next integration step is to feed authenticated WebView page snapshots into this engine, then add bounded automatic traversal of same-site channel pages and a session-aware playback handoff.
+The current integration feeds snapshots from the existing authenticated WebView scanner into `WebsiteEngine`. The scanner now collects same-origin channel/live links and candidate images, shows the discovered channel pages, and lets the owner open a candidate in the same WebView session for further inspection. Existing HLS collection and the existing review/import flow remain in place. The current traversal is still user-guided: bounded automatic multi-page traversal and session-aware playback handoff are not implemented yet.
 
 ## Compatibility
 
