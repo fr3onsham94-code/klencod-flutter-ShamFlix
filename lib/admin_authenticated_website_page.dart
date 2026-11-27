@@ -137,9 +137,6 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       }
       if (decoded is! Map) throw const FormatException('Invalid scan result');
       final pageUrl = decoded['pageUrl']?.toString() ?? '';
-      if (_scannedPageUrl != null && _scannedPageUrl != pageUrl) {
-        _entries.clear();
-      }
       _scannedPageUrl = pageUrl;
       _pageTitle = decoded['title']?.toString() ?? widget.title;
       final media = decoded['media'] is List ? decoded['media'] as List : const [];
@@ -222,7 +219,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
               color: AppTheme.background,
               child: Text(
-                'سجّل دخولك وتصفّح صفحة قناة واحدة، ثم اضغط زر الفحص. يمكن تكرار الفحص بعد تشغيل القناة لجمع سيرفراتها. لا تُقرأ كلمات المرور أو ملفات تعريف الارتباط ولا تُستخرج مفاتيح DRM.',
+                'تصفّح صفحات القنوات المسموح لك بإعادة توزيعها واضغط فحص في كل صفحة. سنحتفظ بنتائج جميع الصفحات، ونجمع روابط كل صفحة كسيرفرات للقناة نفسها. لا تُقرأ كلمات المرور أو ملفات تعريف الارتباط ولا تُستخرج مفاتيح DRM.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.5),
               ),
