@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'admin_auth_service.dart';
 import 'app_theme.dart';
+import 'admin_authenticated_website_page.dart';
 
 class TvSourcesSettingsPage extends StatefulWidget {
   const TvSourcesSettingsPage({super.key});
@@ -505,6 +506,215 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     }
   }
 
+  Future<void> _openAuthenticatedWebsite(Map<String, dynamic> source) async {
+    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
+      _message('هذه الميزة مخصصة لصاحب التطبيق فقط', error: true);
+      return;
+    }
+    final url = source['playlist_url']?.toString() ?? '';
+    final urlError = _validateHttpsUrl(url);
+    if (urlError != null) {
+      _message(urlError, error: true);
+      return;
+    }
+
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminAuthenticatedWebsitePage(
+          url: url,
+          title: source['name']?.toString() ?? 'موقع القنوات',
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    final entries = (result['entries'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .where((item) => (item['url']?.toString() ?? '').isNotEmpty)
+        .toList();
+    if (entries.isEmpty) {
+      _message('لم نعثر على روابط HLS عامة قابلة للفحص في الصفحة الحالية', error: true);
+      return;
+    }
+
+    final nameController = TextEditingController(
+      text: (result['pageTitle']?.toString().trim().isNotEmpty ?? false)
+          ? result['pageTitle'].toString().trim()
+          : (source['name']?.toString() ?? 'قناة جديدة'),
+    );
+    String category = 'عامة';
+    String? packageId;
+    bool redistributionConfirmed = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.panel,
+          title: Text('استيراد سيرفرات القناة', style: TextStyle(color: AppTheme.primary)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('تم العثور على ${entries.length} رابط HLS. ستُحفظ الروابط دون بيانات تسجيل الدخول أو ملفات تعريف الارتباط.',
+                  style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  style: TextStyle(color: AppTheme.text),
+                  decoration: const InputDecoration(labelText: 'اسم القناة'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: category,
+                  decoration: const InputDecoration(labelText: 'تصنيف القناة'),
+                  items: const ['عامة','رياضية','إخبارية','أفلام','أطفال','ترفيهية','دينية','وثائقية','موسيقى']
+                      .map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
+                  onChanged: (value) => setDialogState(() => category = value ?? 'عامة'),
+                ),
+                if (_channelPackages.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String?>(
+                    value: packageId,
+                    decoration: const InputDecoration(labelText: 'إضافة إلى باقة (اختياري)'),
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('بدون باقة إضافية')),
+                      ..._channelPackages.map((p) => DropdownMenuItem<String?>(
+                        value: p['id'].toString(),
+                        child: Text(p['name'].toString(), overflow: TextOverflow.ellipsis),
+                      )),
+                    ],
+                    onChanged: (value) => setDialogState(() => packageId = value),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: AppTheme.background, borderRadius: BorderRadius.circular(10)),
+                  child: Text(
+                    'لن يتم استيراد روابط DRM أو مفاتيحها أو ملفات تعريف الارتباط. يجب أن تكون مخوّلاً بإتاحة هذه القنوات لجميع مستخدمي التطبيق.',
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: redistributionConfirmed,
+                  activeColor: AppTheme.primary,
+                  onChanged: (value) => setDialogState(() => redistributionConfirmed = value == true),
+                  title: Text('أؤكد امتلاكي حق إعادة توزيع هذه القنوات للمستخدمين', style: TextStyle(color: AppTheme.text, fontSize: 12)),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+            FilledButton(
+              onPressed: redistributionConfirmed && nameController.text.trim().isNotEmpty
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
+              child: const Text('استيراد القناة'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) {
+      nameController.dispose();
+      return;
+    }
+    final channelName = nameController.text.trim();
+    nameController.dispose();
+    try {
+      final sourceId = sourceIdForAdminWebsite(source);
+      final stableChannelKey = 'admin-web:' + source['id'].toString() + ':' +
+          channelName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\\u0600-\\u06FF]+'), '-');
+      final existing = await AuthService.client.from('channels')
+          .select('id')
+          .eq('external_source_key', stableChannelKey)
+          .maybeSingle();
+      String channelId;
+      if (existing != null) {
+        channelId = existing['id'].toString();
+        await AuthService.client.from('channels').update({
+          'name': channelName,
+          'name_en': channelName,
+          'category': category,
+          'stream_url': entries.first['url'].toString(),
+          'is_live': true,
+          'is_published': true,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', channelId);
+      } else {
+        final inserted = await AuthService.client.from('channels').insert({
+          'name': channelName,
+          'name_en': channelName,
+          'category': category,
+          'stream_url': entries.first['url'].toString(),
+          'is_live': true,
+          'is_published': true,
+          'external_source_key': stableChannelKey,
+        }).select('id').single();
+        channelId = inserted['id'].toString();
+      }
+
+      var addedServers = 0;
+      for (var index = 0; index < entries.length; index++) {
+        final streamUrl = entries[index]['url'].toString();
+        final duplicate = await AuthService.client.from('playback_servers')
+            .select('id')
+            .eq('channel_id', channelId)
+            .eq('stream_url', streamUrl)
+            .maybeSingle();
+        if (duplicate != null) {
+          await AuthService.client.from('playback_servers').update({
+            'is_active': true,
+            'source_id': sourceId,
+            'source_seen_at': DateTime.now().toUtc().toIso8601String(),
+            'source_page_url': entries[index]['pageUrl']?.toString(),
+          }).eq('id', duplicate['id']);
+          continue;
+        }
+        await AuthService.client.from('playback_servers').insert({
+          'channel_id': channelId,
+          'server_name': (source['name']?.toString() ?? 'موقع ويب') + ' • سيرفر ' + (index + 1).toString(),
+          'stream_url': streamUrl,
+          'sort_order': index,
+          'is_active': true,
+          'source_id': sourceId,
+          'source_seen_at': DateTime.now().toUtc().toIso8601String(),
+          'source_position': index,
+          'source_failures': 0,
+          'source_page_url': entries[index]['pageUrl']?.toString(),
+        });
+        addedServers++;
+      }
+      if (packageId != null) {
+        await AuthService.client.from('content_package_items').upsert({
+          'package_id': packageId,
+          'content_type': 'channel',
+          'content_id': channelId,
+        }, onConflict: 'package_id,content_type,content_id', ignoreDuplicates: true);
+      }
+      if (mounted) _message('تم استيراد القناة «$channelName»؛ أضيف $addedServers سيرفر جديد من أصل ${entries.length}');
+    } catch (e) {
+      if (mounted) _message('تعذر استيراد القناة: $e', error: true);
+    }
+  }
+
+  String sourceIdForAdminWebsite(Map<String, dynamic> source) {
+    final key = source['source_key']?.toString() ?? '';
+    final parts = key.split(':');
+    if (parts.length == 4 && parts[0] == 'website') {
+      return 'website:' + parts[1] + ':' + parts[3];
+    }
+    return 'website:auto:' + source['id'].toString();
+  }
+
   Future<void> _setActive(Map<String, dynamic> source, bool active) async {
     try {
       await AuthService.client.from('tv_channel_sources').update({
@@ -637,6 +847,12 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
               child: Row(
                 children: [
                   Expanded(child: Text(_lastStatus(source), style: TextStyle(color: source['last_error'] == null ? muted : Colors.orangeAccent, fontSize: 11))),
+                  if (isWebsite)
+                    IconButton(
+                      tooltip: 'تسجيل الدخول واستيراد القنوات',
+                      onPressed: () => _openAuthenticatedWebsite(source),
+                      icon: Icon(Icons.login, color: AppTheme.primary),
+                    ),
                   if (isWebsite)
                     IconButton(tooltip: 'تعديل موقع البث', onPressed: () => _editWebsiteSource(source),
                       icon: Icon(Icons.edit_outlined, color: AppTheme.primary)),
