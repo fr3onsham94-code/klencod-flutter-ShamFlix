@@ -518,14 +518,9 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       return;
     }
 
-    const availableCategories = <String>[
-      'عامة', 'رياضية', 'إخبارية', 'أفلام', 'أطفال',
-      'ترفيهية', 'دينية', 'وثائقية', 'موسيقى',
-    ];
     final pageUrls = grouped.keys.toList();
     final nameControllers = <String, TextEditingController>{};
-    final selectedCategories = <String, Set<String>>{};
-    final selectedPackages = <String, Set<String>>{};
+    final selectedPackageIds = <String, String?>{};
     final selectedPages = <String, bool>{};
     for (final pageUrl in pageUrls) {
       final pageEntries = grouped[pageUrl]!;
@@ -533,8 +528,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           ? pageEntries.first['label'].toString().trim()
           : (Uri.tryParse(pageUrl)?.host ?? 'قناة جديدة');
       nameControllers[pageUrl] = TextEditingController(text: title);
-      selectedCategories[pageUrl] = <String>{'عامة'};
-      selectedPackages[pageUrl] = <String>{};
+      selectedPackageIds[pageUrl] = null;
       selectedPages[pageUrl] = true;
     }
     bool redistributionConfirmed = false;
@@ -586,8 +580,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                   ...pageUrls.map((pageUrl) {
                     final pageEntries = grouped[pageUrl]!;
                     final isSelected = selectedPages[pageUrl] == true;
-                    final categories = selectedCategories[pageUrl]!;
-                    final packages = selectedPackages[pageUrl]!;
+                    final packageId = selectedPackageIds[pageUrl];
                     return Card(
                       color: AppTheme.background,
                       margin: const EdgeInsets.only(bottom: 10),
@@ -628,47 +621,35 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                               onChanged: (_) => setDialogState(() {}),
                             ),
                             const SizedBox(height: 8),
-                            Text('التصنيفات (يمكن اختيار أكثر من تصنيف)',
-                              style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 2,
-                              children: availableCategories.map((category) => FilterChip(
-                                label: Text(category),
-                                selected: categories.contains(category),
-                                onSelected: !isSelected ? null : (value) => setDialogState(() {
-                                  if (value) {
-                                    categories.add(category);
-                                  } else {
-                                    categories.remove(category);
-                                  }
-                                }),
-                              )).toList(),
-                            ),
-                            if (_channelPackages.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text('الباقات (يمكن اختيار أكثر من باقة)',
-                                style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 2,
-                                children: _channelPackages.map((package) {
-                                  final id = package['id'].toString();
-                                  return FilterChip(
-                                    label: Text(package['name'].toString()),
-                                    selected: packages.contains(id),
-                                    onSelected: !isSelected ? null : (value) => setDialogState(() {
-                                      if (value) {
-                                        packages.add(id);
-                                      } else {
-                                        packages.remove(id);
-                                      }
-                                    }),
-                                  );
-                                }).toList(),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String?>(
+                              value: packageId,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'الباقة الخاصة بهذه القناة',
+                                isDense: true,
                               ),
+                              items: [
+                                const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text('بدون باقة'),
+                                ),
+                                ..._channelPackages.map((package) =>
+                                  DropdownMenuItem<String?>(
+                                    value: package['id'].toString(),
+                                    child: Text(
+                                      package['name'].toString(),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged: !isSelected
+                                  ? null
+                                  : (value) => setDialogState(
+                                      () => selectedPackageIds[pageUrl] = value,
+                                    ),
+                            ),
                             ],
                           ],
                         ),
@@ -734,23 +715,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
 
     final selected = pageUrls.where((pageUrl) => selectedPages[pageUrl] == true).toList();
 
-    // Safety gate: the multi-category relation exists only in the isolated trial schema.
-    // Never create or modify channels on the production project when that schema is absent.
-    try {
-      await AuthService.client.from('channel_categories').select('channel_id').limit(1);
-    } catch (error) {
-      for (final controller in nameControllers.values) {
-        controller.dispose();
-      }
-      if (mounted) {
-        _message(
-          'لم يبدأ الاستيراد: قاعدة البيانات المتصلة لا تحتوي جدول التصنيفات المتعددة الخاص بالنسخة التجريبية. لم يتم حفظ أي قناة. اربط التطبيق بقاعدة الاختبار أولاً.',
-          error: true,
-        );
-      }
-      return;
-    }
-
     final sourceId = sourceIdForAdminWebsite(source);
     var importedChannels = 0;
     var addedServers = 0;
@@ -759,10 +723,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     for (final pageUrl in selected) {
       final pageEntries = grouped[pageUrl]!;
       final channelName = nameControllers[pageUrl]!.text.trim();
-      final categories = selectedCategories[pageUrl]!.isEmpty
-          ? <String>['عامة']
-          : selectedCategories[pageUrl]!.toList();
-      final packages = selectedPackages[pageUrl]!.toList();
+      final packageId = selectedPackageIds[pageUrl];
       final logoUrl = pageEntries
           .map((entry) => entry['logoUrl']?.toString().trim() ?? '')
           .firstWhere((value) => value.isNotEmpty, orElse: () => '');
@@ -779,7 +740,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           await AuthService.client.from('channels').update({
             'name': channelName,
             'name_en': channelName,
-            'category': categories.isNotEmpty ? categories.first : 'عامة',
+            'category': 'عامة',
             if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
             'stream_url': pageEntries.first['url'].toString(),
             'is_live': true,
@@ -790,7 +751,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           final inserted = await AuthService.client.from('channels').insert({
             'name': channelName,
             'name_en': channelName,
-            'category': categories.isNotEmpty ? categories.first : 'عامة',
+            'category': 'عامة',
             if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
             'stream_url': pageEntries.first['url'].toString(),
             'is_live': true,
@@ -798,36 +759,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
             'external_source_key': stableChannelKey,
           }).select('id').single();
           channelId = inserted['id'].toString();
-        }
-
-        // Keep the relation table in sync with the categories selected for this channel.
-        final previousCategories = await AuthService.client
-            .from('channel_categories')
-            .select('category')
-            .eq('channel_id', channelId);
-        for (final previous in previousCategories) {
-          final previousName = previous['category']?.toString() ?? '';
-          if (previousName.isNotEmpty && !categories.contains(previousName)) {
-            await AuthService.client.from('channel_categories')
-                .delete()
-                .eq('channel_id', channelId)
-                .eq('category', previousName);
-          }
-        }
-
-        // Save every selected category in the trial-only relation table.
-        final categoryRows = categories.isEmpty
-            ? <Map<String, dynamic>>[]
-            : categories.map((category) => <String, dynamic>{
-                'channel_id': channelId,
-                'category': category,
-              }).toList();
-        if (categoryRows.isNotEmpty) {
-          await AuthService.client.from('channel_categories').upsert(
-            categoryRows,
-            onConflict: 'channel_id,category',
-            ignoreDuplicates: true,
-          );
         }
 
         for (var index = 0; index < pageEntries.length; index++) {
@@ -871,16 +802,12 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           addedServers++;
         }
 
-        if (packages.isNotEmpty) {
-          await AuthService.client.from('content_package_items').upsert(
-            packages.map((packageId) => <String, dynamic>{
-              'package_id': packageId,
-              'content_type': 'channel',
-              'content_id': channelId,
-            }).toList(),
-            onConflict: 'package_id,content_type,content_id',
-            ignoreDuplicates: true,
-          );
+        if (packageId != null && packageId.isNotEmpty) {
+          await AuthService.client.from('content_package_items').upsert({
+            'package_id': packageId,
+            'content_type': 'channel',
+            'content_id': channelId,
+          }, onConflict: 'package_id,content_type,content_id', ignoreDuplicates: true);
         }
         importedChannels++;
       } catch (error) {
