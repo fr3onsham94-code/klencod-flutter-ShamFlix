@@ -156,7 +156,12 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   String? _safeCrawlUrl(String raw) {
     final uri = Uri.tryParse(raw.trim());
     if (uri == null || uri.scheme != 'https' || uri.host != _crawlHost ||
-        uri.userInfo.isNotEmpty || uri.fragment.isNotEmpty) return null;
+        uri.userInfo.isNotEmpty) return null;
+    final sensitiveQuery = RegExp(
+      r'(token|auth|signature|jwt|session|cookie|access[_-]?key|api[_-]?key|policy|expires?)',
+      caseSensitive: false,
+    );
+    if (uri.queryParameters.keys.any((key) => sensitiveQuery.hasMatch(key))) return null;
     const blockedExtensions = <String>{
       '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico',
       '.css', '.js', '.json', '.xml', '.pdf', '.zip', '.rar',
