@@ -313,7 +313,7 @@ async function fetchPlaylist(source: PlaylistSource, db: any) {
 }
 
 async function fetchAloulaChannelLogo(channel: any, channelId: unknown): Promise<string> {
-  const slug = clean(channel?.url || "").replace(/^\\/+|\\/+$/g, "");
+  const slug = clean(channel?.url || "").replace(/^\/+|\/+$/g, "");
   if (!slug || !/^[a-z0-9-]+$/i.test(slug)) return "";
   try {
     // The public Aloula channel API exposes stream metadata but not channel artwork.
@@ -324,20 +324,20 @@ async function fetchAloulaChannelLogo(channel: any, channelId: unknown): Promise
     );
     const { finalUrl, body } = await fetchWebsitePage(pageUrl.toString());
     const candidates: string[] = [];
-    for (const match of body.matchAll(/<meta\\b[^>]*>/gi)) {
+    for (const match of body.matchAll(/<meta\b[^>]*>/gi)) {
       const attrs = parseAttrs(match[0]);
       const key = String(attrs.property || attrs.name || "").toLowerCase();
       if (["og:image", "og:image:url", "twitter:image", "twitter:image:src"].includes(key) && attrs.content) {
         candidates.push(attrs.content);
       }
     }
-    for (const match of body.matchAll(/<link\\b[^>]*>/gi)) {
+    for (const match of body.matchAll(/<link\b[^>]*>/gi)) {
       const attrs = parseAttrs(match[0]);
-      if (String(attrs.rel || "").toLowerCase().split(/\\s+/).includes("image_src") && attrs.href) {
+      if (String(attrs.rel || "").toLowerCase().split(/\s+/).includes("image_src") && attrs.href) {
         candidates.push(attrs.href);
       }
     }
-    for (const match of body.matchAll(/<img\\b[^>]*>/gi)) {
+    for (const match of body.matchAll(/<img\b[^>]*>/gi)) {
       const attrs = parseAttrs(match[0]);
       const hint = (attrs.alt || "") + " " + (attrs.class || "") + " " + (attrs.id || "");
       if (/logo|channel|قناة/i.test(hint)) {
