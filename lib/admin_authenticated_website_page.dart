@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,9 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   late final WebViewController _controller;
   int _progress = 0;
   bool _scanning = false;
+  Timer? _autoStartTimer;
+  bool _autoStartTriggered = false;
+  bool _waitingForLogin = false;
   int _visitedPages = 0;
   int _queuedPages = 0;
   String _crawlStatus = '';
@@ -143,6 +147,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
           if (mounted) setState(() => _progress = 100);
           final waiter = _pageLoadCompleter;
           if (waiter != null && !waiter.isCompleted) waiter.complete();
+          _armAutomaticCrawl();
         },
         onWebResourceError: (error) {
           if (error.isForMainFrame == true && mounted) {
@@ -151,6 +156,59 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         },
       ))
       ..loadRequest(Uri.parse(widget.url));
+  }
+
+  void _armAutomaticCrawl() {
+    if (_autoStartTriggered || _autoStartTimer != null) return;
+    _autoStartTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => unawaited(_checkAutomaticCrawlStart()),
+    );
+  }
+
+  Future<void> _checkAutomaticCrawlStart() async {
+    if (!mounted || _scanning || _autoStartTriggered || _progress < 100) return;
+    try {
+      const loginCheck = r"""
+        (() => {
+          const visible = (el) => !!el && el.getClientRects().length > 0 &&
+            getComputedStyle(el).visibility !== 'hidden' &&
+            getComputedStyle(el).display !== 'none';
+          const password = Array.from(document.querySelectorAll('input[type="password"]')).some(visible);
+          const loginPath = /\\/(login|signin|sign-in|auth)(\\/|$)/i.test(location.pathname);
+          return JSON.stringify({loginRequired: password || loginPath});
+        })()
+      """;
+      final raw = await _controller.runJavaScriptReturningResult(loginCheck);
+      dynamic decoded = raw;
+      if (decoded is String) {
+        decoded = jsonDecode(decoded);
+        if (decoded is String) decoded = jsonDecode(decoded);
+      }
+      final loginRequired = decoded is Map && decoded['loginRequired'] == true;
+      if (loginRequired) {
+        if (!_waitingForLogin && mounted) {
+          setState(() {
+            _waitingForLogin = true;
+            _crawlStatus = 'سجّل الدخول إلى الموقع؛ سيبدأ الفحص تلقائياً بعد اكتمال تسجيل الدخول.';
+          });
+        }
+        return;
+      }
+
+      _autoStartTriggered = true;
+      _autoStartTimer?.cancel();
+      _autoStartTimer = null;
+      if (mounted) {
+        setState(() {
+          _waitingForLogin = false;
+          _crawlStatus = 'تم فتح الموقع، وسيبدأ الزحف التلقائي الآن...';
+        });
+      }
+      await _crawlSite();
+    } catch (_) {
+      // Retry on the next timer tick; login pages and slow sites may still be loading.
+    }
   }
 
   String? _safeCrawlUrl(String raw) {
@@ -208,6 +266,9 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
 
   Future<void> _crawlSite() async {
     if (_scanning) return;
+    _autoStartTriggered = true;
+    _autoStartTimer?.cancel();
+    _autoStartTimer = null;
     final currentUrl = await _controller.currentUrl();
     final initialUri = Uri.tryParse(currentUrl ?? widget.url);
     if (initialUri == null || initialUri.scheme != 'https' ||
@@ -317,6 +378,12 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     }
   }
 
+  @override
+  void dispose() {
+    _autoStartTimer?.cancel();
+    super.dispose();
+  }
+
   void _finish() {
     Navigator.pop<Map<String, dynamic>>(context, {
       'entries': List<Map<String, String>>.from(_entries),
@@ -371,7 +438,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
               color: AppTheme.background,
               child: Text(
-                'سجّل الدخول إلى الموقع أولاً إذا طُلب منك، ثم اضغط زر الزحف ليفحص تلقائياً حتى 120 صفحة داخل النطاق نفسه وبعمق أقصاه 4 مستويات. راجع النتائج قبل الاستيراد. لا يتم تجاوز CAPTCHA أو DRM أو استخراج كلمات المرور وملفات تعريف الارتباط أو بيانات الجلسة.',
+                'سيبدأ الزحف تلقائياً بعد تحميل الموقع أو بعد إتمام تسجيل الدخول إذا طُلب منك، حتى 120 صفحة داخل النطاق نفسه وبعمق أقصاه 4 مستويات. يمكنك بدءه يدوياً من زر الزحف عند الحاجة، وراجع النتائج قبل الاستيراد. لا يتم تجاوز CAPTCHA أو DRM أو استخراج كلمات المرور وملفات تعريف الارتباط أو بيانات الجلسة.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.5),
               ),
