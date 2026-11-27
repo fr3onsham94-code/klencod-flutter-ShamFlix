@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'admin_auth_service.dart';
 import 'app_theme.dart';
+import 'admin_authenticated_website_page.dart';
 
 class TvSourcesSettingsPage extends StatefulWidget {
   const TvSourcesSettingsPage({super.key});
@@ -26,7 +27,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
 
   List<Map<String, dynamic>> _sources = [];
   List<Map<String, dynamic>> _channelPackages = [];
-  String _websiteAdapter = 'auto';
   String? _websitePackageId;
   Uint8List? _playlistBytes;
   String? _playlistFileName;
@@ -155,11 +155,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
   bool _isWebsiteSource(Map<String, dynamic> source) =>
       (source['source_key']?.toString() ?? '').startsWith('website:');
 
-  String _websiteAdapterOf(Map<String, dynamic> source) {
-    final parts = (source['source_key']?.toString() ?? '').split(':');
-    return parts.length == 4 && parts[0] == 'website' ? parts[1] : 'auto';
-  }
-
   String? _websitePackageOf(Map<String, dynamic> source) {
     final parts = (source['source_key']?.toString() ?? '').split(':');
     return parts.length == 4 && parts[0] == 'website' && parts[2] != 'auto' ? parts[2] : null;
@@ -167,11 +162,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
 
   String _websiteSourceKey(String adapter, String? packageId, String id) =>
       'website:' + adapter + ':' + ((packageId == null || packageId.isEmpty) ? 'auto' : packageId) + ':' + id;
-
-  bool _isAloulaSourceUrl(Uri uri) =>
-      {'aloula.sba.sa', 'www.aloula.sa', 'aloula.sa'}.contains(uri.host.toLowerCase()) &&
-      (uri.path == '/' || uri.path.isEmpty ||
-          (uri.pathSegments.length == 2 && uri.pathSegments[0] == 'live' && uri.pathSegments[1].isNotEmpty));
 
   Future<void> _addWebsiteSource() async {
     if (_saving) return;
@@ -181,15 +171,11 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     if (name.isEmpty || name.length > 80) { _message('اكتب اسماً للمصدر لا يتجاوز 80 حرفاً', error: true); return; }
     final urlError = _validateHttpsUrl(url);
     final uri = Uri.tryParse(url);
-    if (urlError != null || uri == null || (_websiteAdapter == 'aloula' && !_isAloulaSourceUrl(uri)) ||
-        (_websiteAdapter == 'auto' && _isAloulaSourceUrl(uri))) {
-      _message(urlError ?? (_websiteAdapter == 'aloula'
-          ? 'محول Aloula يقبل الموقع الرئيسي أو رابط قناة مباشر'
-          : 'هذا موقع Aloula؛ اختر Aloula من طريقة الاستخراج حتى يتم استيراد كتالوج القنوات'), error: true);
+    if (urlError != null || uri == null) {
+      _message(urlError ?? 'تحقق من رابط الموقع', error: true);
       return;
     }
-    if (_websiteAdapter == 'auto' &&
-        ['.m3u', '.m3u8', '.mpd'].any((extension) => uri.path.toLowerCase().endsWith(extension))) {
+    if (['.m3u', '.m3u8', '.mpd'].any((extension) => uri.path.toLowerCase().endsWith(extension))) {
       _message('هذا رابط قائمة أو بث مباشر، أضفه من قسم مصادر M3U وليس كموقع ويب', error: true);
       return;
     }
@@ -201,12 +187,12 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       }).select('id').single();
       insertedId = inserted['id'].toString();
       await AuthService.client.from('tv_channel_sources').update({
-        'source_key': _websiteSourceKey(_websiteAdapter, _websitePackageId, insertedId),
+        'source_key': _websiteSourceKey('auto', _websitePackageId, insertedId),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', insertedId);
       _websiteNameController.clear();
       _websiteUrlController.clear();
-      setState(() { _websiteAdapter = 'auto'; _websitePackageId = null; });
+      setState(() { _websitePackageId = null; });
       await _loadSources();
       if (mounted) _message('تمت إضافة موقع البث؛ جارٍ استخراج القنوات...');
       await _syncNow();
@@ -225,11 +211,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     final id = source['id'].toString();
     final nameController = TextEditingController(text: source['name']?.toString() ?? '');
     final urlController = TextEditingController(text: source['playlist_url']?.toString() ?? '');
-    var adapter = _websiteAdapterOf(source);
-    final existingUri = Uri.tryParse(source['playlist_url']?.toString() ?? '');
-    if (adapter == 'auto' && existingUri != null && _isAloulaSourceUrl(existingUri)) {
-      adapter = 'aloula';
-    }
     var packageId = _websitePackageOf(source);
     if (!_channelPackages.any((p) => p['id'].toString() == packageId)) packageId = null;
     final saved = await showDialog<bool>(
@@ -245,19 +226,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
             TextField(controller: urlController, keyboardType: TextInputType.url, textDirection: TextDirection.ltr,
               style: TextStyle(color: AppTheme.text), decoration: const InputDecoration(labelText: 'رابط الموقع')),
             const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              value: adapter, decoration: const InputDecoration(labelText: 'طريقة الاستخراج'),
-              items: const [
-                DropdownMenuItem(value: 'auto', child: Text('صفحة قناة عامة')),
-                DropdownMenuItem(value: 'aloula', child: Text('كتالوج Aloula – قنوات الهيئة')),
-              ],
-              onChanged: (value) => setDialogState(() {
-                adapter = value ?? 'auto';
-                if (adapter == 'aloula' && urlController.text.trim().isEmpty) {
-                  urlController.text = 'https://aloula.sba.sa/';
-                }
-              }),
-            ),
             if (_channelPackages.isNotEmpty) ...[
               const SizedBox(height: 10),
               DropdownButtonFormField<String?>(
@@ -270,9 +238,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                 onChanged: (value) => setDialogState(() => packageId = value),
               ),
             ],
-            Text(adapter == 'aloula'
-              ? 'محول Aloula يستورد القنوات الحية العامة من كتالوج الهيئة، ويحتاج رابط الموقع الرسمي.'
-              : 'الاستخراج التلقائي يفحص صفحة عامة وروابط صفحات القنوات المرتبطة بها فقط؛ لا يقرأ محتوى يتطلب تسجيل دخول أو DRM.',
+            Text('الاكتشاف التلقائي يفحص صفحات الموقع وروابط القنوات التي يمكن الوصول إليها؛ لا يتجاوز تسجيل الدخول أو DRM.',
               style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
           ])),
           actions: [
@@ -287,16 +253,14 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       final url = urlController.text.trim();
       final uri = Uri.tryParse(url);
       final urlError = _validateHttpsUrl(url);
-      if (name.isEmpty || name.length > 80 || urlError != null ||
-          (adapter == 'aloula' && (uri == null || !_isAloulaSourceUrl(uri))) ||
-          (adapter == 'auto' && uri != null && _isAloulaSourceUrl(uri))) {
-        _message(urlError ?? 'تحقق من الاسم والرابط ونوع محول الموقع؛ موقع Aloula يحتاج اختيار محول Aloula', error: true);
+      if (name.isEmpty || name.length > 80 || urlError != null || uri == null) {
+        _message(urlError ?? 'تحقق من الاسم والرابط', error: true);
       } else {
         try {
           await AuthService.client.from('tv_channel_sources').update({
             'name': name,
             'playlist_url': url,
-            'source_key': _websiteSourceKey(adapter, packageId, id),
+            'source_key': _websiteSourceKey('auto', packageId, id),
             'updated_at': DateTime.now().toUtc().toIso8601String(),
           }).eq('id', id);
           await _syncNow();
@@ -505,6 +469,447 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     }
   }
 
+  Future<void> _openAuthenticatedWebsite(Map<String, dynamic> source) async {
+    if (!AuthService.isLoggedIn || !AuthService.isOwner) {
+      _message('هذه الميزة مخصصة لصاحب التطبيق فقط', error: true);
+      return;
+    }
+    final url = source['playlist_url']?.toString() ?? '';
+    final urlError = _validateHttpsUrl(url);
+    if (urlError != null) {
+      _message(urlError, error: true);
+      return;
+    }
+
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminAuthenticatedWebsitePage(
+          url: url,
+          title: source['name']?.toString() ?? 'موقع القنوات',
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+
+    final entries = (result['entries'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .where((item) {
+          final stream = item['url']?.toString() ?? '';
+          return stream.startsWith('https://') &&
+              RegExp(r'\.m3u8(?:$|[?#])', caseSensitive: false).hasMatch(stream);
+        })
+        .toList();
+    if (entries.isEmpty) {
+      _message('لم نعثر على روابط HLS صالحة ضمن الصفحات التي فحصتها', error: true);
+      return;
+    }
+
+    // One channel = one visited page; all HLS URLs found on that page are its servers.
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final entry in entries) {
+      final pageUrl = entry['pageUrl']?.toString() ?? '';
+      if (pageUrl.isEmpty) continue;
+      grouped.putIfAbsent(pageUrl, () => <Map<String, dynamic>>[]).add(entry);
+    }
+    if (grouped.isEmpty) {
+      _message('نتائج الفحص لا تحتوي على صفحات قنوات صالحة', error: true);
+      return;
+    }
+
+    const availableCategories = <String>[
+      'عامة', 'رياضية', 'إخبارية', 'أفلام', 'أطفال',
+      'ترفيهية', 'دينية', 'وثائقية', 'موسيقى',
+    ];
+    final pageUrls = grouped.keys.toList();
+    final nameControllers = <String, TextEditingController>{};
+    final selectedCategories = <String, Set<String>>{};
+    final selectedPackages = <String, Set<String>>{};
+    final selectedPages = <String, bool>{};
+    for (final pageUrl in pageUrls) {
+      final pageEntries = grouped[pageUrl]!;
+      final title = (pageEntries.first['label']?.toString().trim().isNotEmpty ?? false)
+          ? pageEntries.first['label'].toString().trim()
+          : (Uri.tryParse(pageUrl)?.host ?? 'قناة جديدة');
+      nameControllers[pageUrl] = TextEditingController(text: title);
+      selectedCategories[pageUrl] = <String>{'عامة'};
+      selectedPackages[pageUrl] = <String>{};
+      selectedPages[pageUrl] = true;
+    }
+    bool redistributionConfirmed = false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.panel,
+          title: Text('مراجعة القنوات المستخرجة', style: TextStyle(color: AppTheme.primary)),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'تم جمع ${grouped.length} صفحة و${entries.length} رابط HLS. كل صفحة ستُنشأ كقناة مستقلة، وروابطها كسيرفرات متعددة.',
+                    style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => setDialogState(() {
+                          for (final pageUrl in pageUrls) {
+                            selectedPages[pageUrl] = true;
+                          }
+                        }),
+                        child: const Text('تحديد الكل'),
+                      ),
+                      TextButton(
+                        onPressed: () => setDialogState(() {
+                          for (final pageUrl in pageUrls) {
+                            selectedPages[pageUrl] = false;
+                          }
+                        }),
+                        child: const Text('إلغاء التحديد'),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${selectedPages.values.where((value) => value).length} محددة',
+                        style: TextStyle(color: AppTheme.primary, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                  ...pageUrls.map((pageUrl) {
+                    final pageEntries = grouped[pageUrl]!;
+                    final isSelected = selectedPages[pageUrl] == true;
+                    final categories = selectedCategories[pageUrl]!;
+                    final packages = selectedPackages[pageUrl]!;
+                    return Card(
+                      color: AppTheme.background,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: isSelected,
+                              activeColor: AppTheme.primary,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(
+                                nameControllers[pageUrl]!.text.isEmpty
+                                    ? 'قناة بدون اسم'
+                                    : nameControllers[pageUrl]!.text,
+                                style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Text(
+                                '${pageEntries.length} سيرفر • ${Uri.tryParse(pageUrl)?.host ?? pageUrl}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: AppTheme.secondaryText, fontSize: 10),
+                              ),
+                              onChanged: (value) => setDialogState(
+                                () => selectedPages[pageUrl] = value == true,
+                              ),
+                            ),
+                            TextField(
+                              controller: nameControllers[pageUrl],
+                              enabled: isSelected,
+                              style: TextStyle(color: AppTheme.text),
+                              decoration: const InputDecoration(
+                                labelText: 'اسم القناة',
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                            const SizedBox(height: 8),
+                            Text('التصنيفات (يمكن اختيار أكثر من تصنيف)',
+                              style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 2,
+                              children: availableCategories.map((category) => FilterChip(
+                                label: Text(category),
+                                selected: categories.contains(category),
+                                onSelected: !isSelected ? null : (value) => setDialogState(() {
+                                  if (value) {
+                                    categories.add(category);
+                                  } else {
+                                    categories.remove(category);
+                                  }
+                                }),
+                              )).toList(),
+                            ),
+                            if (_channelPackages.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text('الباقات (يمكن اختيار أكثر من باقة)',
+                                style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 2,
+                                children: _channelPackages.map((package) {
+                                  final id = package['id'].toString();
+                                  return FilterChip(
+                                    label: Text(package['name'].toString()),
+                                    selected: packages.contains(id),
+                                    onSelected: !isSelected ? null : (value) => setDialogState(() {
+                                      if (value) {
+                                        packages.add(id);
+                                      } else {
+                                        packages.remove(id);
+                                      }
+                                    }),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.background,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'لن يتم استيراد روابط DRM أو مفاتيحها أو ملفات تعريف الارتباط. يجب أن تكون مخوّلاً بإتاحة هذه القنوات لجميع مستخدمي التطبيق.',
+                      style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: redistributionConfirmed,
+                    activeColor: AppTheme.primary,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (value) => setDialogState(
+                      () => redistributionConfirmed = value == true,
+                    ),
+                    title: Text(
+                      'أؤكد امتلاكي حق إعادة توزيع هذه القنوات للمستخدمين',
+                      style: TextStyle(color: AppTheme.text, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: redistributionConfirmed &&
+                      selectedPages.values.any((value) => value) &&
+                      selectedPages.entries.every((item) =>
+                          !item.value || nameControllers[item.key]!.text.trim().isNotEmpty)
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
+              child: const Text('استيراد القنوات المحددة'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) {
+      for (final controller in nameControllers.values) {
+        controller.dispose();
+      }
+      return;
+    }
+
+    final selected = pageUrls.where((pageUrl) => selectedPages[pageUrl] == true).toList();
+
+    // Safety gate: the multi-category relation exists only in the isolated trial schema.
+    // Never create or modify channels on the production project when that schema is absent.
+    try {
+      await AuthService.client.from('channel_categories').select('channel_id').limit(1);
+    } catch (error) {
+      for (final controller in nameControllers.values) {
+        controller.dispose();
+      }
+      if (mounted) {
+        _message(
+          'لم يبدأ الاستيراد: قاعدة البيانات المتصلة لا تحتوي جدول التصنيفات المتعددة الخاص بالنسخة التجريبية. لم يتم حفظ أي قناة. اربط التطبيق بقاعدة الاختبار أولاً.',
+          error: true,
+        );
+      }
+      return;
+    }
+
+    final sourceId = sourceIdForAdminWebsite(source);
+    var importedChannels = 0;
+    var addedServers = 0;
+    var failedChannels = 0;
+
+    for (final pageUrl in selected) {
+      final pageEntries = grouped[pageUrl]!;
+      final channelName = nameControllers[pageUrl]!.text.trim();
+      final categories = selectedCategories[pageUrl]!.isEmpty
+          ? <String>['عامة']
+          : selectedCategories[pageUrl]!.toList();
+      final packages = selectedPackages[pageUrl]!.toList();
+      final logoUrl = pageEntries
+          .map((entry) => entry['logoUrl']?.toString().trim() ?? '')
+          .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+      try {
+        final stableChannelKey = 'admin-web:${source['id']}:${Uri.encodeComponent(pageUrl.toLowerCase())}';
+        final existing = await AuthService.client.from('channels')
+            .select('id')
+            .eq('external_source_key', stableChannelKey)
+            .maybeSingle();
+
+        late final String channelId;
+        if (existing != null) {
+          channelId = existing['id'].toString();
+          await AuthService.client.from('channels').update({
+            'name': channelName,
+            'name_en': channelName,
+            'category': categories.isNotEmpty ? categories.first : 'عامة',
+            if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
+            'stream_url': pageEntries.first['url'].toString(),
+            'is_live': true,
+            'is_published': true,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          }).eq('id', channelId);
+        } else {
+          final inserted = await AuthService.client.from('channels').insert({
+            'name': channelName,
+            'name_en': channelName,
+            'category': categories.isNotEmpty ? categories.first : 'عامة',
+            if (logoUrl.isNotEmpty) 'logo_url': logoUrl,
+            'stream_url': pageEntries.first['url'].toString(),
+            'is_live': true,
+            'is_published': true,
+            'external_source_key': stableChannelKey,
+          }).select('id').single();
+          channelId = inserted['id'].toString();
+        }
+
+        // Keep the relation table in sync with the categories selected for this channel.
+        final previousCategories = await AuthService.client
+            .from('channel_categories')
+            .select('category')
+            .eq('channel_id', channelId);
+        for (final previous in previousCategories) {
+          final previousName = previous['category']?.toString() ?? '';
+          if (previousName.isNotEmpty && !categories.contains(previousName)) {
+            await AuthService.client.from('channel_categories')
+                .delete()
+                .eq('channel_id', channelId)
+                .eq('category', previousName);
+          }
+        }
+
+        // Save every selected category in the trial-only relation table.
+        final categoryRows = categories.isEmpty
+            ? <Map<String, dynamic>>[]
+            : categories.map((category) => <String, dynamic>{
+                'channel_id': channelId,
+                'category': category,
+              }).toList();
+        if (categoryRows.isNotEmpty) {
+          await AuthService.client.from('channel_categories').upsert(
+            categoryRows,
+            onConflict: 'channel_id,category',
+            ignoreDuplicates: true,
+          );
+        }
+
+        for (var index = 0; index < pageEntries.length; index++) {
+          final entry = pageEntries[index];
+          final streamUrl = entry['url'].toString();
+          final duplicate = await AuthService.client.from('playback_servers')
+              .select('id,source_id')
+              .eq('channel_id', channelId)
+              .eq('stream_url', streamUrl)
+              .maybeSingle();
+          if (duplicate != null) {
+            if (duplicate['source_id'] == null || duplicate['source_id'] == sourceId) {
+              await AuthService.client.from('playback_servers').update({
+                'is_active': true,
+                'source_id': sourceId,
+                'source_seen_at': DateTime.now().toUtc().toIso8601String(),
+                'source_page_url': entry['pageUrl']?.toString(),
+                'user_agent': entry['userAgent']?.toString(),
+                'referer': entry['referer']?.toString(),
+                'origin': entry['origin']?.toString(),
+              }).eq('id', duplicate['id']);
+            }
+            continue;
+          }
+          await AuthService.client.from('playback_servers').insert({
+            'channel_id': channelId,
+            'server_name': (source['name']?.toString() ?? 'موقع ويب') +
+                ' • ${channelName} • سيرفر ${index + 1}',
+            'stream_url': streamUrl,
+            'sort_order': index,
+            'is_active': true,
+            'source_id': sourceId,
+            'source_seen_at': DateTime.now().toUtc().toIso8601String(),
+            'source_position': index,
+            'source_failures': 0,
+            'source_page_url': entry['pageUrl']?.toString(),
+            'user_agent': entry['userAgent']?.toString(),
+            'referer': entry['referer']?.toString(),
+            'origin': entry['origin']?.toString(),
+          });
+          addedServers++;
+        }
+
+        if (packages.isNotEmpty) {
+          await AuthService.client.from('content_package_items').upsert(
+            packages.map((packageId) => <String, dynamic>{
+              'package_id': packageId,
+              'content_type': 'channel',
+              'content_id': channelId,
+            }).toList(),
+            onConflict: 'package_id,content_type,content_id',
+            ignoreDuplicates: true,
+          );
+        }
+        importedChannels++;
+      } catch (error) {
+        failedChannels++;
+        debugPrint('Website channel import failed for $pageUrl: $error');
+      }
+    }
+
+    for (final controller in nameControllers.values) {
+      controller.dispose();
+    }
+    if (mounted) {
+      _message(
+        'اكتمل الاستيراد: ${importedChannels} قناة، ${addedServers} سيرفر جديد' +
+            (failedChannels > 0 ? '، وفشل ${failedChannels} قناة' : ''),
+        error: failedChannels > 0 && importedChannels == 0,
+      );
+    }
+  }
+
+  String sourceIdForAdminWebsite(Map<String, dynamic> source) {
+    final key = source['source_key']?.toString() ?? '';
+    final parts = key.split(':');
+    if (parts.length == 4 && parts[0] == 'website') {
+      return 'website:' + parts[1] + ':' + parts[3];
+    }
+    return 'website:auto:' + source['id'].toString();
+  }
+
   Future<void> _setActive(Map<String, dynamic> source, bool active) async {
     try {
       await AuthService.client.from('tv_channel_sources').update({
@@ -615,7 +1020,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
         ? 'Xtream • ' + (source['xtream_server_url']?.toString() ?? '')
         : sourceType == 'm3u_file' ? 'ملف M3U مرفوع' : source['playlist_url']?.toString() ?? '';
     final typeLabel = isWebsite
-        ? 'موقع بث • ' + (_websiteAdapterOf(source) == 'aloula' ? 'Aloula' : 'استخراج تلقائي')
+        ? 'موقع بث • اكتشاف تلقائي + استيراد إداري'
         : source['is_builtin'] == true ? 'مصدر أساسي'
         : sourceType == 'xtream' ? 'مصدر Xtream'
         : sourceType == 'm3u_file' ? 'ملف M3U' : 'مصدر M3U';
@@ -637,6 +1042,12 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
               child: Row(
                 children: [
                   Expanded(child: Text(_lastStatus(source), style: TextStyle(color: source['last_error'] == null ? muted : Colors.orangeAccent, fontSize: 11))),
+                  if (isWebsite && AuthService.isOwner)
+                    IconButton(
+                      tooltip: 'تسجيل الدخول واستيراد القنوات',
+                      onPressed: () => _openAuthenticatedWebsite(source),
+                      icon: Icon(Icons.login, color: AppTheme.primary),
+                    ),
                   if (isWebsite)
                     IconButton(tooltip: 'تعديل موقع البث', onPressed: () => _editWebsiteSource(source),
                       icon: Icon(Icons.edit_outlined, color: AppTheme.primary)),
@@ -668,8 +1079,8 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       if (_limitReached) _message('وصلت للحد الأقصى: 20 مصدراً إضافياً', error: true);
       return;
     }
-    if (_websiteNameController.text.trim().isEmpty) _websiteNameController.text = 'موقع قنوات جديد';
-    if (_websiteUrlController.text.trim().isEmpty) _websiteUrlController.text = 'https://';
+    _websiteNameController.clear();
+    _websiteUrlController.clear();
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -679,7 +1090,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           content: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('أدخل الموقع واختر طريقة الاستخراج. يجب أن تكون القنوات وروابط البث متاحة للعامة ومصرحاً باستخدامها.',
+              Text('يمكنك فتح الموقع وتسجيل الدخول بحساب المالك، ثم استيراد روابط HLS المصرّح بإتاحتها لجميع مستخدمي التطبيق.',
                 style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
               const SizedBox(height: 14),
               TextField(controller: _websiteNameController, style: TextStyle(color: AppTheme.text),
@@ -688,21 +1099,6 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
               TextField(controller: _websiteUrlController, keyboardType: TextInputType.url,
                 textDirection: TextDirection.ltr, style: TextStyle(color: AppTheme.text),
                 decoration: const InputDecoration(labelText: 'رابط الموقع', hintText: 'https://example.com')),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: _websiteAdapter, decoration: const InputDecoration(labelText: 'طريقة استخراج القنوات'),
-                items: const [
-                  DropdownMenuItem(value: 'auto', child: Text('اكتشاف تلقائي للمواقع العامة')),
-                  DropdownMenuItem(value: 'aloula', child: Text('الأولى السعودية – محول مخصص')),
-                ],
-                onChanged: (value) => setDialogState(() {
-                  _websiteAdapter = value ?? 'auto';
-                  if (_websiteAdapter == 'aloula') {
-                    _websiteNameController.text = 'قنوات سعودية';
-                    _websiteUrlController.text = 'https://aloula.sba.sa/';
-                  }
-                }),
-              ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String?>(
                 value: _websitePackageId, decoration: const InputDecoration(labelText: 'الباقة المستهدفة'),
@@ -814,7 +1210,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
           const SizedBox(height: 10),
           Text('ما أضفت أي موقع قنوات لسه', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
           const SizedBox(height: 5),
-          Text('ابدأ بإضافة موقع عام أو استخدم محول الأولى السعودية.',
+          Text('ابدأ بإضافة موقع قنوات ليتم اكتشافه تلقائياً.',
             textAlign: TextAlign.center, style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
         ]),
       )),
