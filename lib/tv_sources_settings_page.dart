@@ -241,16 +241,34 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       final channels = rows.map((row) => Map<String, dynamic>.from(row)).toList();
       if (channels.isEmpty || !mounted) return;
 
-      final selectedPackages = <String, String?>{
-        for (final channel in channels) channel['id'].toString(): null,
+      final selectedPackages = <String, Set<String>>{
+        for (final channel in channels) channel['id'].toString(): <String>{},
       };
+      final nameControllers = <String, TextEditingController>{
+        for (final channel in channels)
+          channel['id'].toString(): TextEditingController(
+            text: channel['name']?.toString() ?? '',
+          ),
+      };
+      final existingAssignments = await AuthService.client
+          .from('content_package_items')
+          .select('content_id,package_id')
+          .eq('content_type', 'channel')
+          .inFilter('content_id', channelIds);
+      for (final assignment in existingAssignments) {
+        final channelId = assignment['content_id']?.toString() ?? '';
+        final packageId = assignment['package_id']?.toString() ?? '';
+        if (selectedPackages.containsKey(channelId) && packageId.isNotEmpty) {
+          selectedPackages[channelId]!.add(packageId);
+        }
+      }
       final confirmed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
             backgroundColor: AppTheme.panel,
-            title: Text('اختيار باقة لكل قناة', style: TextStyle(color: AppTheme.primary)),
+            title: Text('مراجعة القنوات المكتشفة', style: TextStyle(color: AppTheme.primary)),
             content: SizedBox(
               width: 560,
               child: SingleChildScrollView(
@@ -258,12 +276,13 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'اكتشف شامفليكس ' + channels.length.toString() + ' قناة تلقائياً. اختر باقة مستقلة لكل قناة، أو اتركها بدون باقة.',
+                      'اكتشف شامفليكس ${channels.length} قناة. يمكنك تعديل الاسم واختيار أكثر من باقة لكل قناة.',
                       style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5),
                     ),
                     const SizedBox(height: 10),
                     ...channels.map((channel) {
                       final id = channel['id'].toString();
+                      final logo = channel['logo_url']?.toString() ?? '';
                       return Card(
                         color: AppTheme.background,
                         margin: const EdgeInsets.only(bottom: 8),
@@ -272,37 +291,59 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Text(
-                                channel['name']?.toString() ?? 'قناة بدون اسم',
-                                style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 6),
-                              DropdownButtonFormField<String?>(
-                                initialValue: selectedPackages[id],
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'باقة القناة',
-                                  isDense: true,
-                                ),
-                                items: [
-                                  const DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text('بدون باقة'),
-                                  ),
-                                  ..._channelPackages.map((package) =>
-                                    DropdownMenuItem<String?>(
-                                      value: package['id'].toString(),
-                                      child: Text(
-                                        package['name'].toString(),
-                                        overflow: TextOverflow.ellipsis,
+                              Row(
+                                children: [
+                                  if (logo.isNotEmpty)
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Image.network(
+                                        logo,
+                                        width: 42,
+                                        height: 42,
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: AppTheme.primary, size: 32),
+                                      ),
+                                    )
+                                  else
+                                    Icon(Icons.live_tv, color: AppTheme.primary, size: 32),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: nameControllers[id],
+                                      style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold),
+                                      decoration: const InputDecoration(
+                                        labelText: 'اسم القناة',
+                                        isDense: true,
                                       ),
                                     ),
                                   ),
                                 ],
-                                onChanged: (value) => setDialogState(
-                                  () => selectedPackages[id] = value,
-                                ),
                               ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'الباقات (يمكن اختيار أكثر من باقة)',
+                                style: TextStyle(color: AppTheme.secondaryText, fontSize: 12),
+                              ),
+                              ..._channelPackages.map((package) {
+                                final packageId = package['id'].toString();
+                                return CheckboxListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  value: selectedPackages[id]!.contains(packageId),
+                                  activeColor: AppTheme.primary,
+                                  title: Text(
+                                    package['name'].toString(),
+                                    style: TextStyle(color: AppTheme.text, fontSize: 13),
+                                  ),
+                                  onChanged: (checked) => setDialogState(() {
+                                    if (checked == true) {
+                                      selectedPackages[id]!.add(packageId);
+                                    } else {
+                                      selectedPackages[id]!.remove(packageId);
+                                    }
+                                  }),
+                                );
+                              }),
                             ],
                           ),
                         ),
@@ -320,29 +361,64 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
                 style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
-                child: const Text('حفظ الباقات'),
+                child: const Text('حفظ التعديلات والباقات'),
               ),
             ],
           ),
         ),
       );
-      if (confirmed != true) return;
+      if (confirmed != true) {
+        for (final controller in nameControllers.values) {
+          controller.dispose();
+        }
+        return;
+      }
 
       var assigned = 0;
+      var renamed = 0;
+      final automaticPackageIds = _channelPackages
+          .where((package) => (package['name']?.toString() ?? '').startsWith('قنوات تلقائية — '))
+          .map((package) => package['id'].toString())
+          .toSet();
+      final selectedPairs = <String>{};
       for (final entry in selectedPackages.entries) {
-        final packageId = entry.value;
-        if (packageId == null || packageId.isEmpty) continue;
-        await AuthService.client.from('content_package_items').upsert({
-          'package_id': packageId,
-          'content_type': 'channel',
-          'content_id': entry.key,
-        }, onConflict: 'package_id,content_type,content_id', ignoreDuplicates: true);
-        assigned++;
+        final channelId = entry.key;
+        final newName = nameControllers[channelId]?.text.trim() ?? '';
+        final originalName = channels.firstWhere((channel) => channel['id'].toString() == channelId)['name']?.toString() ?? '';
+        if (newName.isNotEmpty && newName != originalName) {
+          await AuthService.client.from('channels').update({
+            'name': newName,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          }).eq('id', channelId);
+          renamed++;
+        }
+        for (final packageId in entry.value) {
+          selectedPairs.add('$channelId|$packageId');
+          await AuthService.client.from('content_package_items').upsert({
+            'package_id': packageId,
+            'content_type': 'channel',
+            'content_id': channelId,
+          }, onConflict: 'package_id,content_type,content_id', ignoreDuplicates: true);
+          assigned++;
+        }
+      }
+      for (final assignment in existingAssignments) {
+        final channelId = assignment['content_id']?.toString() ?? '';
+        final packageId = assignment['package_id']?.toString() ?? '';
+        if (channelId.isEmpty || packageId.isEmpty ||
+            automaticPackageIds.contains(packageId) ||
+            selectedPairs.contains('$channelId|$packageId')) continue;
+        await AuthService.client.from('content_package_items')
+            .delete()
+            .eq('content_type', 'channel')
+            .eq('content_id', channelId)
+            .eq('package_id', packageId);
+      }
+      for (final controller in nameControllers.values) {
+        controller.dispose();
       }
       if (mounted) {
-        _message(assigned > 0
-            ? 'تم حفظ باقات $assigned قناة'
-            : 'تم اكتشاف القنوات؛ لم يتم تعيين باقات');
+        _message('تم حفظ التعديلات: تغيير أسماء $renamed قناة وإسناد $assigned عضوية باقة');
       }
     } catch (error) {
       if (mounted) _message('تم الاكتشاف، لكن تعذر فتح اختيار الباقات: $error', error: true);
