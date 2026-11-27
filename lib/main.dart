@@ -3931,8 +3931,8 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
   Future<String> _resolveAloulaLiveUrl(Map<String, dynamic> channel) async {
     String normalize(String value) => value
         .toLowerCase()
-        .replaceAll(RegExp(r'[\\u064B-\\u065F\\u0670]'), '')
-        .replaceAll(RegExp(r'[\\s\\-_]+'), '')
+        .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '')
+        .replaceAll(RegExp(r'[\s\-_]+'), '')
         .replaceAll(RegExp(r'[أإآ]'), 'ا')
         .replaceAll('ى', 'ي');
 
@@ -4001,13 +4001,9 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
       final nestedStreams = data is Map ? data['streams'] : null;
       final settings = playerPayload is Map ? playerPayload['settings'] : null;
       final protocols = settings is Map ? settings['protocols'] : null;
-      final rawUrl = streams is Map
-          ? streams['hls']
-          : nestedStreams is Map
-              ? nestedStreams['hls']
-              : protocols is Map
-                  ? protocols['hls']
-                  : null;
+      final rawUrl = (streams is Map ? streams['hls'] : null) ??
+          (nestedStreams is Map ? nestedStreams['hls'] : null) ??
+          (protocols is Map ? protocols['hls'] : null);
       final uri = Uri.tryParse(rawUrl?.toString() ?? '');
       if (uri == null || uri.scheme != 'https' ||
           !uri.path.toLowerCase().endsWith('.m3u8')) {
@@ -4058,7 +4054,14 @@ class _ChannelsPackagesPageState extends State<ChannelsPackagesPage> {
           url = freshUrl;
         } catch (error) {
           // Keep another source as a fallback when the same channel has one.
-          if (servers.length == 1) rethrow;
+          if (aloulaIndex == 0 && servers.length > 1) {
+            final fallbackServer = servers.removeAt(1);
+            servers.removeAt(0);
+            servers.insert(0, fallbackServer);
+            url = valueOf(fallbackServer['stream_url']);
+          } else if (servers.length == 1) {
+            rethrow;
+          }
         }
       }
       final uri = Uri.tryParse(url);
