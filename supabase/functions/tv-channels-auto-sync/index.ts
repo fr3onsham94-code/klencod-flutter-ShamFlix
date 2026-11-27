@@ -321,7 +321,7 @@ function collectAloulaImageUrls(...roots: any[]): string[] {
     const isImageContext = inheritedImageContext || imageKey.test(key);
     if (typeof value === "string") {
       const raw = value.trim();
-      if (isImageContext && /^https?:\/\//i.test(raw)) found.push(raw);
+      if (isImageContext && (/^https?:\/\//i.test(raw) || /^\/(?!\/)/.test(raw) || /^\.\.?\//.test(raw))) found.push(raw);
       return;
     }
     if (typeof value !== "object" || seen.has(value)) return;
