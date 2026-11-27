@@ -175,7 +175,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
             getComputedStyle(el).visibility !== 'hidden' &&
             getComputedStyle(el).display !== 'none';
           const password = Array.from(document.querySelectorAll('input[type="password"]')).some(visible);
-          const loginPath = /\\/(login|signin|sign-in|auth)(\\/|$)/i.test(location.pathname);
+          const loginPath = /\/(login|signin|sign-in|auth)(\/|$)/i.test(location.pathname);
           return JSON.stringify({loginRequired: password || loginPath});
         })()
       """;
