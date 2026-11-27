@@ -204,15 +204,22 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   Future<void> _crawlSite() async {
     if (_scanning) return;
     final currentUrl = await _controller.currentUrl();
-    final startUrl = _safeCrawlUrl(currentUrl ?? widget.url);
+    final initialUri = Uri.tryParse(currentUrl ?? widget.url);
+    if (initialUri == null || initialUri.scheme != 'https' ||
+        initialUri.host.isEmpty || initialUri.userInfo.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('رابط البداية غير صالح أو غير آمن.')),
+      );
+      return;
+    }
+    _crawlHost = initialUri.host;
+    final startUrl = _safeCrawlUrl(initialUri.toString());
     if (startUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('رابط البداية غير صالح أو خارج نطاق الموقع الآمن.')),
       );
       return;
     }
-
-    _crawlHost = Uri.parse(startUrl).host;
     _visitedUrls.clear();
     _queuedUrls.clear();
     _crawlQueue.clear();
@@ -271,14 +278,14 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
           for (final link in links) {
             final safeUrl = _safeCrawlUrl(link.toString());
             if (safeUrl == null || _visitedUrls.contains(safeUrl) ||
-                !_queuedUrls.add(safeUrl)) continue;
+                _queuedUrls.length >= 3000 || !_queuedUrls.add(safeUrl)) continue;
             _crawlQueue.add({'url': safeUrl, 'depth': depth + 1});
             _queuedPages++;
           }
         }
         if (mounted) {
           setState(() {
-            _crawlStatus = 'تم فحص $_visitedPages صفحة • \${_entries.length} رابط تشغيل • $_queuedPages صفحة ضمن قائمة الفحص';
+            _crawlStatus = 'تم فحص $_visitedPages صفحة • ${_entries.length} رابط تشغيل • $_queuedPages صفحة ضمن قائمة الفحص';
           });
         }
       }
@@ -290,7 +297,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
               : 'توقف الفحص عند الحد الآمن البالغ $maxPages صفحة.';
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('اكتمل الفحص: $_visitedPages صفحة، \${_entries.length} رابط تشغيل تم جمعه.'),
+          content: Text('اكتمل الفحص: $_visitedPages صفحة، ${_entries.length} رابط تشغيل تم جمعه.'),
         ));
       }
     } catch (error) {
