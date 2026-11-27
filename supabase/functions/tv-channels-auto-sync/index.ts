@@ -312,6 +312,29 @@ async function fetchPlaylist(source: PlaylistSource, db: any) {
   return entries;
 }
 
+function collectAloulaImageUrls(...roots: any[]): string[] {
+  const found: string[] = [];
+  const seen = new Set<any>();
+  const imageKey = /logo|image|thumbnail|poster|icon|picture|artwork|avatar|cover/i;
+  const visit = (value: any, key = "", depth = 0) => {
+    if (value == null || depth > 7) return;
+    if (typeof value === "string") {
+      const raw = value.trim();
+      if (imageKey.test(key) && /^https?:\/\//i.test(raw)) found.push(raw);
+      return;
+    }
+    if (typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, key, depth + 1);
+      return;
+    }
+    for (const [childKey, childValue] of Object.entries(value)) visit(childValue, childKey, depth + 1);
+  };
+  for (const root of roots) visit(root);
+  return [...new Set(found)];
+}
+
 async function fetchAloulaChannelLogo(channel: any, channelId: unknown): Promise<string> {
   const slug = clean(channel?.url || "").replace(/^\/+|\/+$/g, "");
   if (!slug || !/^[a-z0-9-]+$/i.test(slug)) return "";
@@ -340,9 +363,15 @@ async function fetchAloulaChannelLogo(channel: any, channelId: unknown): Promise
     for (const match of body.matchAll(/<img\b[^>]*>/gi)) {
       const attrs = parseAttrs(match[0]);
       const hint = (attrs.alt || "") + " " + (attrs.class || "") + " " + (attrs.id || "");
-      if (/logo|channel|قناة/i.test(hint)) {
-        candidates.push(attrs.src || attrs["data-src"] || attrs["data-original"] || "");
+      if (/logo|channel|قناة|sbc|saudia|sports|quran|radio/i.test(hint)) {
+        candidates.push(attrs.src || attrs["data-src"] || attrs["data-original"] || attrs["data-lazy-src"] || "");
+        const srcset = attrs.srcset || attrs["data-srcset"] || "";
+        if (srcset) candidates.push(srcset.split(",")[0].trim().split(/\s+/)[0]);
       }
+    }
+    // Also inspect image URLs embedded in the page's hydration JSON.
+    for (const match of body.matchAll(/["'](?:logo|logo_url|image|image_url|thumbnail|thumbnail_url|channel_logo)["']\s*:\s*["']([^"']+)["']/gi)) {
+      candidates.push(match[1]);
     }
     for (const rawValue of candidates) {
       const raw = decodeWebsiteText(rawValue);
@@ -599,27 +628,18 @@ async function fetchAloulaWebsite(source: PlaylistSource) {
       await validatePublicPlaylistUrl(new URL(safeUrl));
       const title = clean(channel.title || channel.name || source.name).slice(0, 100);
       if (!title) return null;
-      const imageCandidates = [
-        channel.logo_url, channel.logo, channel.image_url, channel.image,
-        channel.thumbnail_url, channel.thumbnail, channel.icon, channel.picture,
-        channel.poster, channel.channel_logo, channel.images?.logo,
-        channel.media?.logo, channel.branding?.logo,
-        playerData?.logo_url, playerData?.logo, playerData?.image_url,
-        playerData?.image, playerData?.thumbnail_url, playerData?.thumbnail,
-        playerData?.channel?.logo_url, playerData?.channel?.logo,
-      ];
-      const logoFromApi = imageCandidates.map((value: any) => {
-        const raw = typeof value === "string" ? value
-          : value && typeof value === "object" ? value.url || value.src || value.original || value.large || ""
-          : "";
-        if (typeof raw !== "string" || !raw.trim()) return "";
+      // Walk nested channel/player payloads because Aloula's image fields vary by channel.
+      const imageCandidates = collectAloulaImageUrls(channel, playerData);
+      let logoFromApi = "";
+      for (const raw of imageCandidates) {
         try {
-          const imageUrl = new URL(raw.trim(), "https://www.aloula.sa/");
-          if (imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password ||
-              imageUrl.hostname === "localhost" || imageUrl.hostname.endsWith(".localhost")) return "";
-          return imageUrl.toString();
-        } catch { return ""; }
-      }).find((value: string) => value.length > 0) || "";
+          const imageUrl = new URL(raw, "https://www.aloula.sa/");
+          if (imageUrl.protocol !== "https:" || imageUrl.username || imageUrl.password) continue;
+          await validatePublicPlaylistUrl(imageUrl);
+          logoFromApi = imageUrl.toString();
+          break;
+        } catch {}
+      }
       const logo = logoFromApi || await fetchAloulaChannelLogo(channel, channelId);
       return {
         sourceId: source.id,
