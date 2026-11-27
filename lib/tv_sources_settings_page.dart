@@ -36,6 +36,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
   bool _builtinImportEnabled = true;
   bool _builtinControlAvailable = false;
   bool _showBuiltinSources = false;
+  int _selectedTab = 0;
   String? _error;
 
   @override
@@ -662,251 +663,312 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
     return 'آخر فحص: ${checked.toLocal()} • $count قناة مطابقة';
   }
 
+  Future<void> _showAddWebsiteDialog() async {
+    if (_saving || _limitReached) {
+      if (_limitReached) _message('وصلت للحد الأقصى: 20 مصدراً إضافياً', error: true);
+      return;
+    }
+    if (_websiteNameController.text.trim().isEmpty) _websiteNameController.text = 'موقع قنوات جديد';
+    if (_websiteUrlController.text.trim().isEmpty) _websiteUrlController.text = 'https://';
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.panel,
+          title: Text('إضافة موقع قنوات', style: TextStyle(color: AppTheme.primary)),
+          content: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('أدخل الموقع واختر طريقة الاستخراج. يجب أن تكون القنوات وروابط البث متاحة للعامة ومصرحاً باستخدامها.',
+                style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
+              const SizedBox(height: 14),
+              TextField(controller: _websiteNameController, style: TextStyle(color: AppTheme.text),
+                decoration: const InputDecoration(labelText: 'اسم الموقع')),
+              const SizedBox(height: 10),
+              TextField(controller: _websiteUrlController, keyboardType: TextInputType.url,
+                textDirection: TextDirection.ltr, style: TextStyle(color: AppTheme.text),
+                decoration: const InputDecoration(labelText: 'رابط الموقع', hintText: 'https://example.com')),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: _websiteAdapter, decoration: const InputDecoration(labelText: 'طريقة استخراج القنوات'),
+                items: const [
+                  DropdownMenuItem(value: 'auto', child: Text('اكتشاف تلقائي للمواقع العامة')),
+                  DropdownMenuItem(value: 'aloula', child: Text('الأولى السعودية – محول مخصص')),
+                ],
+                onChanged: (value) => setDialogState(() {
+                  _websiteAdapter = value ?? 'auto';
+                  if (_websiteAdapter == 'aloula') {
+                    _websiteNameController.text = 'قنوات سعودية';
+                    _websiteUrlController.text = 'https://aloula.sba.sa/';
+                  }
+                }),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String?>(
+                value: _websitePackageId, decoration: const InputDecoration(labelText: 'الباقة المستهدفة'),
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('تصنيف تلقائي حسب البلد والفئة')),
+                  ..._channelPackages.map((p) => DropdownMenuItem<String?>(
+                    value: p['id'].toString(), child: Text(p['name'].toString(), overflow: TextOverflow.ellipsis))),
+                ],
+                onChanged: (value) => setDialogState(() => _websitePackageId = value),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: AppTheme.background, borderRadius: BorderRadius.circular(10)),
+                child: Text('سيتم حفظ المصدر ثم تشغيل مزامنة المصادر الحالية. لا يتم تجاوز تسجيل الدخول أو DRM أو القيود الجغرافية.',
+                  style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.4)),
+              ),
+            ],
+          )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.primary), child: const Text('حفظ وفحص')),
+          ],
+        ),
+      ),
+    );
+    if (saved == true) await _addWebsiteSource();
+  }
+
+  Widget _sectionTab(String label, IconData icon, int index) {
+    final selected = _selectedTab == index;
+    return Expanded(child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => setState(() => _selectedTab = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 5),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.primary.withOpacity(0.16) : AppTheme.panel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? AppTheme.primary : Colors.white12)),
+        child: Column(children: [
+          Icon(icon, color: selected ? AppTheme.primary : AppTheme.secondaryText, size: 19),
+          const SizedBox(height: 5),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: selected ? AppTheme.primary : AppTheme.secondaryText,
+              fontSize: 11, fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+        ]),
+      ),
+    ));
+  }
+
+  Widget _statTile(String label, String value, IconData icon) => Expanded(child: Container(
+    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+    decoration: BoxDecoration(color: AppTheme.background, borderRadius: BorderRadius.circular(12)),
+    child: Column(children: [
+      Icon(icon, color: AppTheme.primary, size: 18),
+      const SizedBox(height: 5),
+      Text(value, style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold, fontSize: 17)),
+      Text(label, textAlign: TextAlign.center, style: TextStyle(color: AppTheme.secondaryText, fontSize: 10)),
+    ]),
+  ));
+
+  Widget _websiteSourcesTab(List<Map<String, dynamic>> websiteSources) {
+    final activeCount = websiteSources.where((s) => s['is_active'] == true).length;
+    final failedCount = websiteSources.where((s) => (s['last_error']?.toString() ?? '').isNotEmpty).length;
+    return ListView(padding: const EdgeInsets.fromLTRB(14, 8, 14, 20), children: [
+      Card(color: AppTheme.panel, child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Icon(Icons.public, color: AppTheme.primary, size: 22), const SizedBox(width: 8),
+            Expanded(child: Text('مصادر مواقع القنوات', style: TextStyle(
+              color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 16))),
+          ]),
+          const SizedBox(height: 6),
+          Text('أضف مواقع القنوات العامة، وراجع نتائج المزامنة، وعدّل المصادر أو أوقفها دون المساس بالمصادر الأخرى.',
+            style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5)),
+          const SizedBox(height: 14),
+          Row(children: [
+            _statTile('المواقع', websiteSources.length.toString(), Icons.language),
+            const SizedBox(width: 8), _statTile('النشطة', activeCount.toString(), Icons.check_circle_outline),
+            const SizedBox(width: 8), _statTile('تحتاج فحص', failedCount.toString(), Icons.warning_amber_outlined),
+          ]),
+          const SizedBox(height: 14),
+          FilledButton.icon(onPressed: _saving || _limitReached ? null : _showAddWebsiteDialog,
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13)),
+            icon: const Icon(Icons.add), label: const Text('إضافة موقع قنوات جديد')),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(onPressed: _saving ? null : () async {
+            final success = await _syncNow();
+            await _loadSources();
+            if (success && mounted) _message('اكتملت مزامنة المصادر؛ راجع حالة كل موقع أدناه');
+          }, icon: const Icon(Icons.travel_explore), label: const Text('فحص وتحديث جميع المصادر')),
+        ]),
+      )),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: Text('المواقع المضافة', style: TextStyle(
+          color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15))),
+        Text('\${websiteSources.length} موقع', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+      ]),
+      if (websiteSources.isEmpty) Card(color: AppTheme.panel, child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+        child: Column(children: [
+          Icon(Icons.travel_explore, color: AppTheme.secondaryText, size: 38),
+          const SizedBox(height: 10),
+          Text('ما أضفت أي موقع قنوات لسه', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 5),
+          Text('ابدأ بإضافة موقع عام أو استخدم محول الأولى السعودية.',
+            textAlign: TextAlign.center, style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+        ]),
+      )),
+      ...websiteSources.map((s) => _sourceCard(s, AppTheme.text, AppTheme.secondaryText)),
+      const SizedBox(height: 8),
+      Card(color: AppTheme.panel, child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.info_outline, color: AppTheme.primary, size: 19), const SizedBox(width: 8),
+          Expanded(child: Text('حالة الفحص وعدد القنوات يعكسان آخر مزامنة مسجلة. زر الفحص العام يشغّل مزامنة المصادر كلها، وليس فحصاً منفرداً لموقع واحد.',
+            style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.5))),
+        ]),
+      )),
+    ]);
+  }
+
+  Widget _otherSourcesTab(List<Map<String, dynamic>> customSources) {
+    final others = customSources.where((s) => !_isWebsiteSource(s)).toList();
+    return ListView(padding: const EdgeInsets.all(14), children: [
+      Card(color: AppTheme.panel, child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('إضافة قائمة M3U / M3U8', style: TextStyle(color: AppTheme.primary, fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text('أضف قائمة عامة عبر HTTPS. الحد الأقصى 20 مصدراً إضافياً إجمالاً.',
+            style: TextStyle(color: AppTheme.secondaryText, fontSize: 12)),
+          const SizedBox(height: 12),
+          TextField(controller: _nameController, style: TextStyle(color: AppTheme.text),
+            decoration: const InputDecoration(labelText: 'اسم المصدر')),
+          const SizedBox(height: 10),
+          TextField(controller: _urlController, keyboardType: TextInputType.url, textDirection: TextDirection.ltr,
+            style: TextStyle(color: AppTheme.text),
+            decoration: const InputDecoration(labelText: 'رابط M3U / M3U8', hintText: 'https://example.com/playlist.m3u')),
+          const SizedBox(height: 12),
+          FilledButton.icon(onPressed: _saving ? null : _addM3uUrlSource,
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+            icon: const Icon(Icons.add_link), label: const Text('إضافة قائمة M3U')),
+        ]),
+      )),
+      const SizedBox(height: 10),
+      Card(color: AppTheme.panel, child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('إضافة Xtream أو ملف اشتراك', style: TextStyle(color: AppTheme.primary, fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text('يدعم بيانات Xtream أو رفع ملف TXT أو M3U/M3U8. بيانات الدخول لا تظهر ضمن قائمة المصادر.',
+            style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.4)),
+          const SizedBox(height: 12),
+          TextField(controller: _xtreamNameController, style: TextStyle(color: AppTheme.text),
+            decoration: const InputDecoration(labelText: 'اسم المصدر')),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(onPressed: _saving ? null : _pickXtreamFile,
+            icon: const Icon(Icons.upload_file), label: Text(_playlistFileName ?? 'استيراد ملف TXT أو M3U')),
+          const SizedBox(height: 10),
+          TextField(controller: _serverController, keyboardType: TextInputType.url, textDirection: TextDirection.ltr,
+            style: TextStyle(color: AppTheme.text), decoration: const InputDecoration(labelText: 'رابط السيرفر (HTTPS)')),
+          const SizedBox(height: 10),
+          TextField(controller: _usernameController, textDirection: TextDirection.ltr, style: TextStyle(color: AppTheme.text),
+            decoration: const InputDecoration(labelText: 'اسم المستخدم')),
+          const SizedBox(height: 10),
+          TextField(controller: _passwordController, obscureText: true, textDirection: TextDirection.ltr,
+            style: TextStyle(color: AppTheme.text), decoration: const InputDecoration(labelText: 'كلمة المرور')),
+          const SizedBox(height: 12),
+          FilledButton.icon(onPressed: _saving ? null : _addXtreamSource,
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+            icon: const Icon(Icons.add_link), label: const Text('إضافة مصدر Xtream')),
+        ]),
+      )),
+      const SizedBox(height: 12),
+      Row(children: [
+        Expanded(child: Text('مصادر M3U وXtream', style: TextStyle(
+          color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15))),
+        Text('\${others.length}', style: TextStyle(color: AppTheme.secondaryText)),
+      ]),
+      if (others.isEmpty) Padding(padding: const EdgeInsets.all(20),
+        child: Center(child: Text('لا توجد مصادر أخرى مضافة', style: TextStyle(color: AppTheme.secondaryText)))),
+      ...others.map((s) => _sourceCard(s, AppTheme.text, AppTheme.secondaryText)),
+    ]);
+  }
+
+  Widget _builtInSourcesTab(List<Map<String, dynamic>> builtinSources) => ListView(
+    padding: const EdgeInsets.all(14),
+    children: [
+      Card(color: AppTheme.panel, child: SwitchListTile(
+        value: _builtinImportEnabled,
+        onChanged: !_builtinControlAvailable || _builtinBusy ? null : _setBuiltinImportEnabled,
+        activeColor: AppTheme.primary,
+        secondary: _builtinBusy
+          ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+          : Icon(Icons.public, color: AppTheme.primary),
+        title: Text('استيراد المصادر المدمجة', style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold)),
+        subtitle: Text(_builtinControlAvailable
+          ? (_builtinImportEnabled ? 'مفعّل — المصادر المدمجة تُحدّث تلقائياً' : 'متوقف — مع الاحتفاظ بالمصادر المخصصة')
+          : 'التحكم يحتاج تحديث خدمة الخادم قبل تفعيله',
+          style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+      )),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: Text('المصادر الأساسية', style: TextStyle(
+          color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15))),
+        Text('\${builtinSources.length} مصدر', style: TextStyle(color: AppTheme.secondaryText, fontSize: 11)),
+      ]),
+      ...builtinSources.map((s) => _sourceCard(s, AppTheme.text, AppTheme.secondaryText)),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
-    final textColor = AppTheme.text;
-    final muted = AppTheme.secondaryText;
-    final builtinSources = _sources.where((source) => source['is_builtin'] == true).toList();
-    final customSources = _sources.where((source) => source['is_builtin'] != true).toList();
+    final websiteSources = _sources.where((s) => s['is_builtin'] != true && _isWebsiteSource(s)).toList();
+    final customSources = _sources.where((s) => s['is_builtin'] != true).toList();
+    final builtinSources = _sources.where((s) => s['is_builtin'] == true).toList();
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: AppTheme.background,
         appBar: AppBar(
           backgroundColor: AppTheme.background,
-          title: Text('مصادر قنوات IPTV', style: TextStyle(color: AppTheme.primary)),
+          title: Text('إدارة مصادر القنوات', style: TextStyle(color: AppTheme.primary)),
           actions: [
-            IconButton(
-              tooltip: 'مزامنة القنوات الآن',
+            IconButton(tooltip: 'مزامنة جميع المصادر',
               onPressed: _loading || _saving ? null : () async { await _syncNow(); await _loadSources(); },
-              icon: Icon(Icons.sync, color: AppTheme.primary),
-            ),
-            IconButton(
-              tooltip: 'تحديث القائمة',
-              onPressed: _loading ? null : _loadSources,
-              icon: Icon(Icons.refresh, color: AppTheme.primary),
-            ),
+              icon: Icon(Icons.sync, color: AppTheme.primary)),
+            IconButton(tooltip: 'تحديث القائمة', onPressed: _loading ? null : _loadSources,
+              icon: Icon(Icons.refresh, color: AppTheme.primary)),
           ],
         ),
         body: _loading
-            ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
-            : _error != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: muted)),
-                        const SizedBox(height: 12),
-                        FilledButton(onPressed: _loadSources, child: const Text('إعادة المحاولة')),
-                      ]),
-                    ),
-                  )
-                : RefreshIndicator(
-                    color: AppTheme.primary,
-                    onRefresh: _loadSources,
-                    child: ListView(
-                      padding: const EdgeInsets.all(14),
-                      children: [
-                        Card(
-                          color: AppTheme.panel,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text('إضافة رابط M3U / M3U8', style: TextStyle(color: AppTheme.primary, fontSize: 17, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 6),
-                                Text('أضف رابط قائمة عامة عبر HTTPS. الحد الأقصى 20 مصدراً إضافياً.', style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
-                                const SizedBox(height: 14),
-                                TextField(
-                                  controller: _nameController,
-                                  style: TextStyle(color: textColor),
-                                  decoration: InputDecoration(labelText: 'اسم المصدر', labelStyle: TextStyle(color: muted)),
-                                ),
-                                const SizedBox(height: 10),
-                                TextField(
-                                  controller: _urlController,
-                                  keyboardType: TextInputType.url,
-                                  textDirection: TextDirection.ltr,
-                                  style: TextStyle(color: textColor),
-                                  decoration: InputDecoration(labelText: 'رابط M3U / M3U8', hintText: 'https://example.com/playlist.m3u', labelStyle: TextStyle(color: muted)),
-                                ),
-                                const SizedBox(height: 14),
-                                FilledButton.icon(
-                                  onPressed: _saving ? null : _addM3uUrlSource,
-                                  style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
-                                  icon: const Icon(Icons.add_link),
-                                  label: Text(_saving ? 'جارٍ الإضافة...' : 'إضافة رابط M3U'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Card(
-                          color: AppTheme.panel,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text('إضافة موقع بث مباشر', style: TextStyle(color: AppTheme.primary, fontSize: 17, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 6),
-                                Text('اختر نوع الموقع قبل الإضافة: Aloula يستورد كتالوج القنوات الحية، والاستخراج التلقائي يقرأ صفحة عامة ويجمع روابط HLS/DASH الظاهرة فقط. لا يتم تجاوز تسجيل الدخول أو DRM أو الحماية.', style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
-                                const SizedBox(height: 12),
-                                TextField(controller: _websiteNameController, style: TextStyle(color: textColor),
-                                  decoration: InputDecoration(labelText: 'اسم المصدر', labelStyle: TextStyle(color: muted))),
-                                const SizedBox(height: 10),
-                                TextField(controller: _websiteUrlController, keyboardType: TextInputType.url, textDirection: TextDirection.ltr,
-                                  style: TextStyle(color: textColor), decoration: InputDecoration(labelText: 'رابط صفحة البث', hintText: 'https://example.com/live/channel', labelStyle: TextStyle(color: muted))),
-                                const SizedBox(height: 10),
-                                DropdownButtonFormField<String>(
-                                  value: _websiteAdapter, decoration: InputDecoration(labelText: 'طريقة الاستخراج', labelStyle: TextStyle(color: muted)),
-                                  items: const [
-                                    DropdownMenuItem(value: 'auto', child: Text('صفحة قناة عامة – استخراج تلقائي')),
-                                    DropdownMenuItem(value: 'aloula', child: Text('كتالوج Aloula – القنوات السعودية')),
-                                  ],
-                                  onChanged: _saving ? null : (v) => setState(() {
-                                    final next = v ?? 'auto';
-                                    _websiteAdapter = next;
-                                    if (next == 'aloula') {
-                                      if (_websiteNameController.text.trim().isEmpty) _websiteNameController.text = 'قنوات سعودية';
-                                      if (_websiteUrlController.text.trim().isEmpty) _websiteUrlController.text = 'https://aloula.sba.sa/';
-                                    }
-                                  }),
-                                ),
-                                if (_channelPackages.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  DropdownButtonFormField<String?>(
-                                    value: _websitePackageId, decoration: InputDecoration(labelText: 'إضافة القنوات إلى باقة', labelStyle: TextStyle(color: muted)),
-                                    items: [
-                                      const DropdownMenuItem<String?>(value: null, child: Text('تلقائي حسب البلد والفئة')),
-                                      ..._channelPackages.map((p) => DropdownMenuItem<String?>(value: p['id'].toString(), child: Text(p['name'].toString(), overflow: TextOverflow.ellipsis))),
-                                    ],
-                                    onChanged: _saving ? null : (v) => setState(() => _websitePackageId = v),
-                                  ),
-                                ] else Padding(padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    _websiteAdapter == 'aloula'
-                                        ? 'لا توجد باقات مخصصة؛ ستُصنّف قنوات Aloula تلقائياً ضمن السعودية.'
-                                        : 'لا توجد باقات مخصصة؛ ستُصنّف القنوات حسب بيانات الموقع.',
-                                    style: TextStyle(color: muted, fontSize: 11))),
-                                const SizedBox(height: 14),
-                                FilledButton.icon(
-                                  onPressed: _saving ? null : _addWebsiteSource,
-                                  style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
-                                  icon: const Icon(Icons.live_tv),
-                                  label: Text(_saving ? 'جارٍ الإضافة...' : 'إضافة مواقع قنوات'),
-                                ),
-                                const SizedBox(height: 22),
-                                Text('إضافة Xtream أو ملف اشتراك', style: TextStyle(color: AppTheme.primary, fontSize: 17, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 6),
-                                Text('يدعم إدخال بيانات Xtream يدوياً، أو قراءة TXT، أو رفع ملف M3U/M3U8 محفوظ من اشتراكك. بيانات الدخول لا تظهر ضمن قائمة المصادر.', style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  controller: _xtreamNameController,
-                                  style: TextStyle(color: textColor),
-                                  decoration: InputDecoration(labelText: 'اسم المصدر', labelStyle: TextStyle(color: muted)),
-                                ),
-                                const SizedBox(height: 10),
-                                OutlinedButton.icon(
-                                  onPressed: _saving ? null : _pickXtreamFile,
-                                  icon: const Icon(Icons.upload_file),
-                                  label: Text(_playlistFileName ?? 'استيراد ملف TXT أو M3U'),
-                                ),
-                                const SizedBox(height: 10),
-                                TextField(
-                                  controller: _serverController,
-                                  keyboardType: TextInputType.url,
-                                  textDirection: TextDirection.ltr,
-                                  style: TextStyle(color: textColor),
-                                  decoration: InputDecoration(labelText: 'رابط السيرفر (HTTPS)', hintText: 'https://server.example:port', labelStyle: TextStyle(color: muted)),
-                                ),
-                                const SizedBox(height: 10),
-                                TextField(
-                                  controller: _usernameController,
-                                  textDirection: TextDirection.ltr,
-                                  style: TextStyle(color: textColor),
-                                  decoration: InputDecoration(labelText: 'اسم المستخدم', labelStyle: TextStyle(color: muted)),
-                                ),
-                                const SizedBox(height: 10),
-                                TextField(
-                                  controller: _passwordController,
-                                  obscureText: true,
-                                  textDirection: TextDirection.ltr,
-                                  style: TextStyle(color: textColor),
-                                  decoration: InputDecoration(labelText: 'كلمة المرور', labelStyle: TextStyle(color: muted)),
-                                ),
-                                const SizedBox(height: 14),
-                                FilledButton.icon(
-                                  onPressed: _saving ? null : _addXtreamSource,
-                                  style: FilledButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
-                                  icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.add_link),
-                                  label: Text(_saving ? 'جارٍ الإضافة...' : 'إضافة مصدر Xtream'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Card(
-                          color: AppTheme.panel,
-                          child: ListTile(
-                            leading: Icon(Icons.schedule, color: AppTheme.primary),
-                            title: Text('التحديث التلقائي كل ساعة', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                            subtitle: Text('إيقاف أي مصدر يمنع تحديثه دون حذف القنوات وروابط البث التي سبق استيرادها.', style: TextStyle(color: muted, fontSize: 12)),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Card(
-                          color: AppTheme.panel,
-                          child: SwitchListTile(
-                            value: _builtinImportEnabled,
-                            onChanged: !_builtinControlAvailable || _builtinBusy ? null : _setBuiltinImportEnabled,
-                            activeColor: AppTheme.primary,
-                            secondary: _builtinBusy
-                                ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
-                                : Icon(Icons.public, color: AppTheme.primary),
-                            title: Text('استيراد المصادر المدمجة', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                            subtitle: Text(
-                              _builtinControlAvailable
-                                  ? (_builtinImportEnabled ? 'مفعّل — القنوات المدمجة تُحدّث تلقائياً' : 'متوقف — تختفي قنواتها فوراً مع الحفاظ على المصادر المخصصة')
-                                  : 'التحكم يحتاج تحديث خدمة الخادم قبل تفعيله',
-                              style: TextStyle(color: muted, fontSize: 12),
-                            ),
-                          ),
-                        ),
-                        Card(
-                          color: AppTheme.panel,
-                          child: Column(
-                            children: [
-                              ListTile(
-                                leading: Icon(Icons.list_alt, color: AppTheme.primary),
-                                title: Text('المصادر المدمجة', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                                subtitle: Text('${builtinSources.length} مصدر', style: TextStyle(color: muted, fontSize: 12)),
-                                trailing: Icon(_showBuiltinSources ? Icons.expand_less : Icons.expand_more, color: AppTheme.primary),
-                                onTap: () => setState(() => _showBuiltinSources = !_showBuiltinSources),
-                              ),
-                              if (_showBuiltinSources)
-                                ...builtinSources.map((source) => _sourceCard(source, textColor, muted)),
-                            ],
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Expanded(child: Text('المصادر المخصصة', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 16))),
-                            Text('${customSources.length}', style: TextStyle(color: muted)),
-                          ],
-                        ),
-                        if (customSources.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Center(child: Text('لا توجد مصادر مخصصة', style: TextStyle(color: muted))),
-                          ),
-                        ...customSources.map((source) => _sourceCard(source, textColor, muted)),
-                      ],
-                    ),
-                  ),
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          : _error != null
+            ? Center(child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: AppTheme.secondaryText)),
+                  const SizedBox(height: 12),
+                  FilledButton(onPressed: _loadSources, child: const Text('إعادة المحاولة')),
+                ]),
+              ))
+            : Column(children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  child: Row(children: [
+                    _sectionTab('مواقع القنوات', Icons.language, 0),
+                    const SizedBox(width: 7),
+                    _sectionTab('M3U وXtream', Icons.playlist_play, 1),
+                    const SizedBox(width: 7),
+                    _sectionTab('مصادر مدمجة', Icons.library_books_outlined, 2),
+                  ]),
+                ),
+                Expanded(child: IndexedStack(index: _selectedTab, children: [
+                  _websiteSourcesTab(websiteSources),
+                  _otherSourcesTab(customSources),
+                  _builtInSourcesTab(builtinSources),
+                ])),
+              ]),
       ),
     );
   }
