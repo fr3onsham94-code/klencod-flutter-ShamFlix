@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -23,6 +24,14 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   late final WebViewController _controller;
   int _progress = 0;
   bool _scanning = false;
+  int _visitedPages = 0;
+  int _queuedPages = 0;
+  String _crawlStatus = '';
+  String? _crawlHost;
+  Completer<void>? _pageLoadCompleter;
+  final List<Map<String, dynamic>> _crawlQueue = [];
+  final Set<String> _visitedUrls = <String>{};
+  final Set<String> _queuedUrls = <String>{};
   String? _pageError;
   String? _scannedPageUrl;
   String _pageTitle = '';
@@ -90,11 +99,28 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     performance.getEntriesByType('resource').forEach(entry => add(entry.name));
   } catch (_) {}
 
+  const pageLabel =
+    document.querySelector('h1')?.innerText?.trim() ||
+    document.querySelector('meta[property="og:title"]')?.content?.trim() ||
+    document.title || location.hostname;
+  const links = Array.from(document.querySelectorAll('a[href]'))
+    .map(el => {
+      try {
+        const u = new URL(el.href, location.href);
+        if (u.protocol !== 'https:' || u.host !== location.host) return '';
+        for (const key of u.searchParams.keys()) if (sensitive.test(key)) return '';
+        u.hash = '';
+        return u.href;
+      } catch (_) { return ''; }
+    })
+    .filter(Boolean);
   return JSON.stringify({
     title: document.title || location.hostname,
+    pageLabel,
     pageUrl: location.href,
     userAgent: navigator.userAgent || '',
     logoUrl,
+    links: Array.from(new Set(links)).slice(0, 250),
     media: Array.from(found.values()).slice(0, 60)
   });
 })()
@@ -115,6 +141,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         },
         onPageFinished: (_) {
           if (mounted) setState(() => _progress = 100);
+          final waiter = _pageLoadCompleter;
+          if (waiter != null && !waiter.isCompleted) waiter.complete();
         },
         onWebResourceError: (error) {
           if (error.isForMainFrame == true && mounted) {
@@ -125,52 +153,154 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       ..loadRequest(Uri.parse(widget.url));
   }
 
-  Future<void> _scanCurrentPage() async {
+  String? _safeCrawlUrl(String raw) {
+    final uri = Uri.tryParse(raw.trim());
+    if (uri == null || uri.scheme != 'https' || uri.host != _crawlHost ||
+        uri.userInfo.isNotEmpty || uri.fragment.isNotEmpty) return null;
+    const blockedExtensions = <String>{
+      '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico',
+      '.css', '.js', '.json', '.xml', '.pdf', '.zip', '.rar',
+      '.mp3', '.mp4', '.mkv', '.webm', '.m3u', '.m3u8', '.mpd',
+      '.woff', '.woff2', '.ttf', '.map',
+    };
+    final path = uri.path.toLowerCase();
+    if (blockedExtensions.any(path.endsWith)) return null;
+    final blockedPath = RegExp(r'/(logout|signout|delete-account|wp-admin)(/|$)', caseSensitive: false);
+    if (blockedPath.hasMatch(path)) return null;
+    return uri.replace(fragment: '').toString();
+  }
+
+  Future<Map<String, dynamic>> _scanCurrentPage() async {
+    final raw = await _controller.runJavaScriptReturningResult(_scanScript);
+    dynamic decoded = raw;
+    if (decoded is String) {
+      decoded = jsonDecode(decoded);
+      if (decoded is String) decoded = jsonDecode(decoded);
+    }
+    if (decoded is! Map) throw const FormatException('Invalid scan result');
+    final pageUrl = decoded['pageUrl']?.toString() ?? '';
+    final pageLabel = decoded['pageLabel']?.toString().trim() ?? '';
+    _scannedPageUrl = pageUrl;
+    _pageTitle = decoded['title']?.toString() ?? widget.title;
+    final media = decoded['media'] is List ? decoded['media'] as List : const [];
+    for (final value in media.whereType<Map>()) {
+      final url = value['url']?.toString() ?? '';
+      final entryPageUrl = value['pageUrl']?.toString() ?? pageUrl;
+      if (url.isEmpty || !url.startsWith('https://')) continue;
+      if (_entries.any((item) => item['url'] == url)) continue;
+      _entries.add({
+        'url': url,
+        'pageUrl': entryPageUrl,
+        'userAgent': decoded['userAgent']?.toString() ?? '',
+        'origin': Uri.tryParse(entryPageUrl)?.origin ?? '',
+        'referer': entryPageUrl,
+        'label': pageLabel.isNotEmpty ? pageLabel : (value['label']?.toString() ?? _pageTitle),
+        'logoUrl': decoded['logoUrl']?.toString() ?? '',
+      });
+    }
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  Future<void> _crawlSite() async {
     if (_scanning) return;
-    setState(() => _scanning = true);
+    final currentUrl = await _controller.currentUrl();
+    final startUrl = _safeCrawlUrl(currentUrl ?? widget.url);
+    if (startUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('رابط البداية غير صالح أو خارج نطاق الموقع الآمن.')),
+      );
+      return;
+    }
+
+    _crawlHost = Uri.parse(startUrl).host;
+    _visitedUrls.clear();
+    _queuedUrls.clear();
+    _crawlQueue.clear();
+    _entries.clear();
+    _visitedPages = 0;
+    _queuedPages = 1;
+    _crawlQueue.add({'url': startUrl, 'depth': 0});
+    _queuedUrls.add(startUrl);
+    setState(() {
+      _scanning = true;
+      _crawlStatus = 'بدء فحص صفحات الموقع...';
+    });
+
     try {
-      final raw = await _controller.runJavaScriptReturningResult(_scanScript);
-      dynamic decoded = raw;
-      if (decoded is String) {
-        decoded = jsonDecode(decoded);
-        if (decoded is String) decoded = jsonDecode(decoded);
+      const maxPages = 120;
+      const maxDepth = 4;
+      while (_crawlQueue.isNotEmpty && _visitedPages < maxPages && mounted) {
+        final task = _crawlQueue.removeAt(0);
+        final url = task['url'].toString();
+        final depth = task['depth'] as int;
+        if (!_visitedUrls.add(url)) continue;
+
+        if (mounted) {
+          setState(() {
+            _visitedPages = _visitedUrls.length;
+            _crawlStatus = 'يفحص الصفحة $_visitedPages من $maxPages';
+          });
+        }
+
+        final loadedUrl = await _controller.currentUrl();
+        if (loadedUrl != url) {
+          final waiter = Completer<void>();
+          _pageLoadCompleter = waiter;
+          await _controller.loadRequest(Uri.parse(url));
+          try {
+            await waiter.future.timeout(const Duration(seconds: 25));
+          } catch (_) {
+            continue;
+          } finally {
+            if (identical(_pageLoadCompleter, waiter)) _pageLoadCompleter = null;
+          }
+        } else {
+          await Future<void>.delayed(const Duration(milliseconds: 1200));
+        }
+
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+        Map<String, dynamic> result;
+        try {
+          result = await _scanCurrentPage();
+        } catch (_) {
+          continue;
+        }
+
+        final links = result['links'] is List ? result['links'] as List : const [];
+        if (depth < maxDepth) {
+          for (final link in links) {
+            final safeUrl = _safeCrawlUrl(link.toString());
+            if (safeUrl == null || _visitedUrls.contains(safeUrl) ||
+                !_queuedUrls.add(safeUrl)) continue;
+            _crawlQueue.add({'url': safeUrl, 'depth': depth + 1});
+            _queuedPages++;
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _crawlStatus = 'تم فحص $_visitedPages صفحة • \${_entries.length} رابط تشغيل • $_queuedPages صفحة ضمن قائمة الفحص';
+          });
+        }
       }
-      if (decoded is! Map) throw const FormatException('Invalid scan result');
-      final pageUrl = decoded['pageUrl']?.toString() ?? '';
-      _scannedPageUrl = pageUrl;
-      _pageTitle = decoded['title']?.toString() ?? widget.title;
-      final media = decoded['media'] is List ? decoded['media'] as List : const [];
-      var added = 0;
-      for (final value in media.whereType<Map>()) {
-        final url = value['url']?.toString() ?? '';
-        final entryPageUrl = value['pageUrl']?.toString() ?? pageUrl;
-        if (url.isEmpty || !url.startsWith('https://')) continue;
-        if (_entries.any((item) => item['url'] == url)) continue;
-        _entries.add({
-          'url': url,
-          'pageUrl': entryPageUrl,
-          'userAgent': decoded['userAgent']?.toString() ?? '',
-          'origin': Uri.tryParse(entryPageUrl)?.origin ?? '',
-          'referer': entryPageUrl,
-          'label': value['label']?.toString() ?? _pageTitle,
-          'logoUrl': decoded['logoUrl']?.toString() ?? '',
+
+      if (mounted) {
+        setState(() {
+          _crawlStatus = _crawlQueue.isEmpty
+              ? 'اكتمل الزحف إلى صفحات الموقع.'
+              : 'توقف الفحص عند الحد الآمن البالغ $maxPages صفحة.';
         });
-        added++;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('اكتمل الفحص: $_visitedPages صفحة، \${_entries.length} رابط تشغيل تم جمعه.'),
+        ));
       }
-      if (!mounted) return;
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(added > 0
-            ? 'تم العثور على $added رابط جديد. الإجمالي: ${_entries.length}'
-            : 'لم نعثر على روابط HLS جديدة في الصفحة الحالية.'),
-      ));
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذر فحص الصفحة: $error')),
+          SnackBar(content: Text('توقف فحص الموقع: $error')),
         );
       }
     } finally {
+      _pageLoadCompleter = null;
       if (mounted) setState(() => _scanning = false);
     }
   }
@@ -193,14 +323,14 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
           title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           actions: [
             IconButton(
-              tooltip: 'فحص روابط الصفحة',
-              onPressed: _scanning ? null : _scanCurrentPage,
+              tooltip: 'الزحف التلقائي إلى صفحات الموقع',
+              onPressed: _scanning ? null : _crawlSite,
               icon: _scanning
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.travel_explore),
             ),
             TextButton(
-              onPressed: _entries.isEmpty ? null : _finish,
+              onPressed: _scanning || _entries.isEmpty ? null : _finish,
               child: Text('جمع ${_entries.length}', style: const TextStyle(color: Colors.white)),
             ),
           ],
@@ -209,6 +339,16 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
           children: [
             if (_progress < 100)
               LinearProgressIndicator(value: _progress / 100, color: AppTheme.primary),
+            if (_scanning)
+              LinearProgressIndicator(color: AppTheme.primary),
+            if (_crawlStatus.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                color: AppTheme.panel,
+                child: Text(_crawlStatus, textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.text, fontSize: 11)),
+              ),
             Expanded(
               child: _pageError != null
                   ? Center(child: Text(_pageError!, style: const TextStyle(color: Colors.white70)))
@@ -219,7 +359,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
               color: AppTheme.background,
               child: Text(
-                'تصفّح صفحات القنوات المسموح لك بإعادة توزيعها واضغط فحص في كل صفحة. سنحتفظ بنتائج جميع الصفحات، ونجمع روابط كل صفحة كسيرفرات للقناة نفسها. لا تُقرأ كلمات المرور أو ملفات تعريف الارتباط ولا تُستخرج مفاتيح DRM.',
+                'سجّل الدخول إلى الموقع أولاً إذا طُلب منك، ثم اضغط زر الزحف ليفحص تلقائياً حتى 120 صفحة داخل النطاق نفسه وبعمق أقصاه 4 مستويات. راجع النتائج قبل الاستيراد. لا يتم تجاوز CAPTCHA أو DRM أو استخراج كلمات المرور وملفات تعريف الارتباط أو بيانات الجلسة.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.5),
               ),
