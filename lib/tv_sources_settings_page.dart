@@ -179,7 +179,16 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       _message('هذا رابط قائمة أو بث مباشر، أضفه من قسم مصادر M3U وليس كموقع ويب', error: true);
       return;
     }
-    final websiteAdapter = RegExp(r'(^|\\.)aloula\\.(?:sba\\.sa|sa)    try {
+    final host = uri.host.toLowerCase();
+    final websiteAdapter = host == 'aloula.sba.sa' ||
+            host.endsWith('.aloula.sba.sa') ||
+            host == 'aloula.sa' ||
+            host.endsWith('.aloula.sa')
+        ? 'aloula'
+        : 'auto';
+    setState(() => _saving = true);
+    String? insertedId;
+    try {
       final inserted = await AuthService.client.from('tv_channel_sources').insert({
         'name': name, 'source_type': 'm3u_url', 'playlist_url': url, 'is_active': true,
       }).select('id').single();
