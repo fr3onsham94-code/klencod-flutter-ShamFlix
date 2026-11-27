@@ -2270,6 +2270,24 @@ class _AccountPageState extends State<AccountPage> {
             ),
           ),
           const SizedBox(height: 15),
+          accountTile(
+            icon: Icons.live_tv_rounded,
+            title: appText('شووف - البث المباشر', 'Shoof - Live TV', 'Shoof - Canlı TV'),
+            subtitle: appText(
+              'تسجيل الدخول ومشاهدة قنوات الكأس داخل ShamFlix',
+              'Sign in and watch Al Kass channels inside ShamFlix',
+              'ShamFlix içinde oturum açıp Al Kass kanallarını izleyin',
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ShamFlixWebPage(
+                  url: 'https://shoof.alkass.net/live-tv',
+                  title: 'شووف - البث المباشر',
+                ),
+              ),
+            ),
+          ),
           accountTile(icon: Icons.favorite_outline, title: appText('المفضلة', 'Favorites', 'Favoriler'), subtitle: appText('أفلامك ومسلسلاتك المحفوظة', 'Your saved movies and series', 'Kaydettiğiniz film ve diziler'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
           accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText(appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'), 'What you watched recently', 'Son izledikleriniz'),
@@ -2357,6 +2375,24 @@ class _AccountPageState extends State<AccountPage> {
               },
             ),
 
+          accountTile(
+            icon: Icons.live_tv_rounded,
+            title: appText('شووف - البث المباشر', 'Shoof - Live TV', 'Shoof - Canlı TV'),
+            subtitle: appText(
+              'تسجيل الدخول ومشاهدة قنوات الكأس داخل ShamFlix',
+              'Sign in and watch Al Kass channels inside ShamFlix',
+              'ShamFlix içinde oturum açıp Al Kass kanallarını izleyin',
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ShamFlixWebPage(
+                  url: 'https://shoof.alkass.net/live-tv',
+                  title: 'شووف - البث المباشر',
+                ),
+              ),
+            ),
+          ),
           accountTile(icon: Icons.favorite_outline, title: appText('المفضلة', 'Favorites', 'Favoriler'), subtitle: appText('أفلامك ومسلسلاتك المحفوظة', 'Your saved movies and series', 'Kaydettiğiniz film ve diziler'),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()))),
           accountTile(icon: Icons.history, title: appText('سجل المشاهدة', 'Watch History', 'İzleme Geçmişi'), subtitle: appText(appText('آخر ما شاهدته', 'What you watched recently', 'Son izledikleriniz'), 'What you watched recently', 'Son izledikleriniz'),
