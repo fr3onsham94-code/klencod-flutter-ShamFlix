@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,9 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   late final WebViewController _controller;
   int _progress = 0;
   bool _scanning = false;
+  bool _crawling = false;
+  Completer<void>? _pageLoadCompleter;
+  final Set<String> _visitedPageUrls = <String>{};
   String? _pageError;
   String? _scannedPageUrl;
   String _pageTitle = '';
@@ -139,6 +143,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         },
         onPageFinished: (_) {
           if (mounted) setState(() => _progress = 100);
+          final completer = _pageLoadCompleter;
+          if (completer != null && !completer.isCompleted) completer.complete();
         },
         onWebResourceError: (error) {
           if (error.isForMainFrame == true && mounted) {
@@ -149,8 +155,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       ..loadRequest(Uri.parse(widget.url));
   }
 
-  Future<void> _scanCurrentPage() async {
-    if (_scanning) return;
+  Future<void> _scanCurrentPage({bool fromCrawler = false, bool showMessage = true}) async {
+    if (_scanning && !fromCrawler) return;
     setState(() => _scanning = true);
     try {
       final raw = await _controller.runJavaScriptReturningResult(_scanScript);
@@ -184,7 +190,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
             startUrl: widget.url,
             authenticationMode: WebsiteAuthenticationMode.interactiveWebView,
             allowedHosts: [siteUri.host],
-            maxPages: 1,
+            maxPages: 20,
           ),
           pages: [snapshot],
         );
@@ -210,16 +216,19 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         });
         added++;
       }
+      _visitedPageUrls.add(pageUrl);
       if (!mounted) return;
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-          (added > 0
-              ? 'تم العثور على $added رابط جديد. الإجمالي: ${_entries.length}'
-              : 'لم نعثر على روابط HLS جديدة في الصفحة الحالية.') +
-          ' صفحات قنوات مكتشفة: ${_discoveredPages.length}',
-        ),
-      ));
+      if (showMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            (added > 0
+                ? 'تم العثور على $added رابط جديد. الإجمالي: ${_entries.length}'
+                : 'لم نعثر على روابط HLS جديدة في الصفحة الحالية.') +
+            ' صفحات قنوات مكتشفة: ${_discoveredPages.length}',
+          ),
+        ));
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -228,6 +237,83 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _autoDiscoverPages() async {
+    if (_crawling || _scanning) return;
+    final siteUri = Uri.tryParse(widget.url);
+    if (siteUri == null || siteUri.scheme != 'https' || siteUri.host.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('رابط الموقع غير صالح للزحف الآمن')),
+      );
+      return;
+    }
+
+    setState(() => _crawling = true);
+    var visitedThisRun = 0;
+    var failedPages = 0;
+    final stopwatch = Stopwatch()..start();
+    try {
+      await _scanCurrentPage(fromCrawler: true, showMessage: false);
+      final queue = <String>[
+        ..._discoveredPages.keys.where((url) => !_visitedPageUrls.contains(url)),
+      ];
+      final queued = queue.toSet();
+
+      while (queue.isNotEmpty &&
+          visitedThisRun < 20 &&
+          stopwatch.elapsed < const Duration(seconds: 90) &&
+          mounted) {
+        final nextUrl = queue.removeAt(0);
+        final uri = Uri.tryParse(nextUrl);
+        final site = WebsiteSiteConfig(
+          id: siteUri.host,
+          name: widget.title,
+          startUrl: widget.url,
+          authenticationMode: WebsiteAuthenticationMode.interactiveWebView,
+          allowedHosts: [siteUri.host],
+          maxPages: 20,
+        );
+        if (uri == null || !site.allowsPage(uri) ||
+            _visitedPageUrls.contains(nextUrl)) {
+          continue;
+        }
+
+        try {
+          final pageLoaded = Completer<void>();
+          _pageLoadCompleter = pageLoaded;
+          await _controller.loadRequest(uri);
+          await pageLoaded.future.timeout(const Duration(seconds: 15));
+          _pageLoadCompleter = null;
+          if (!mounted) break;
+          await _scanCurrentPage(fromCrawler: true, showMessage: false);
+          visitedThisRun++;
+
+          for (final discoveredUrl in _discoveredPages.keys) {
+            if (!_visitedPageUrls.contains(discoveredUrl) &&
+                queued.add(discoveredUrl)) {
+              queue.add(discoveredUrl);
+            }
+          }
+        } catch (_) {
+          _pageLoadCompleter = null;
+          failedPages++;
+        }
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'اكتمل الفحص المحدود: زُرت $visitedThisRun صفحة، '
+          'والمجموع ${_visitedPageUrls.length} صفحة. '
+          'القنوات المكتشفة ${_discoveredPages.length}، '
+          'والروابط ${_entries.length}. '
+          '${failedPages > 0 ? "تعذر تحميل $failedPages صفحة." : ""}',
+        ),
+      ));
+    } finally {
+      _pageLoadCompleter = null;
+      if (mounted) setState(() => _crawling = false);
     }
   }
 
@@ -291,12 +377,19 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
           actions: [
             IconButton(
               tooltip: 'صفحات القنوات المكتشفة',
-              onPressed: _showDiscoveredPages,
+              onPressed: _crawling ? null : _showDiscoveredPages,
               icon: const Icon(Icons.list_alt),
             ),
             IconButton(
+              tooltip: 'فحص تلقائي محدود لصفحات القنوات',
+              onPressed: (_crawling || _scanning) ? null : _autoDiscoverPages,
+              icon: _crawling
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.playlist_add_check),
+            ),
+            IconButton(
               tooltip: 'فحص الصفحة واكتشاف روابط القنوات',
-              onPressed: _scanning ? null : _scanCurrentPage,
+              onPressed: (_scanning || _crawling) ? null : _scanCurrentPage,
               icon: _scanning
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.travel_explore),
@@ -321,7 +414,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
               color: AppTheme.background,
               child: Text(
-                'تصفّح صفحات القنوات المسموح لك بإعادة توزيعها واضغط فحص في كل صفحة. سنحتفظ بنتائج جميع الصفحات، ونجمع روابط كل صفحة كسيرفرات للقناة نفسها. لا تُقرأ كلمات المرور أو ملفات تعريف الارتباط ولا تُستخرج مفاتيح DRM.',
+                'سجّل الدخول يدوياً، ثم استخدم الفحص التلقائي المحدود (حتى 20 صفحة و90 ثانية) لاكتشاف صفحات القنوات ضمن نفس الموقع. يتم التنقل داخل جلسة WebView الحالية دون قراءة كلمات المرور أو ملفات تعريف الارتباط أو مفاتيح DRM. راجع صلاحية إعادة توزيع المحتوى قبل جمع روابط التشغيل.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.5),
               ),
