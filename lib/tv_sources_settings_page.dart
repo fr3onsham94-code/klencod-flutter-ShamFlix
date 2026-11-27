@@ -507,7 +507,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
   }
 
   Future<void> _openAuthenticatedWebsite(Map<String, dynamic> source) async {
-    if (!AuthService.isLoggedIn || !AuthService.isAdmin) {
+    if (!AuthService.isLoggedIn || !AuthService.isOwner) {
       _message('هذه الميزة مخصصة لصاحب التطبيق فقط', error: true);
       return;
     }
@@ -847,7 +847,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
               child: Row(
                 children: [
                   Expanded(child: Text(_lastStatus(source), style: TextStyle(color: source['last_error'] == null ? muted : Colors.orangeAccent, fontSize: 11))),
-                  if (isWebsite)
+                  if (isWebsite && AuthService.isOwner)
                     IconButton(
                       tooltip: 'تسجيل الدخول واستيراد القنوات',
                       onPressed: () => _openAuthenticatedWebsite(source),
