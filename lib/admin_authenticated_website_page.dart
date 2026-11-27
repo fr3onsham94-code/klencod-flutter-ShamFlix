@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'app_theme.dart';
+import 'website_engine/website_engine.dart';
 
 class AdminAuthenticatedWebsitePage extends StatefulWidget {
   final String url;
@@ -27,6 +28,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   String? _scannedPageUrl;
   String _pageTitle = '';
   final List<Map<String, String>> _entries = [];
+  final Map<String, WebsiteChannelCandidate> _discoveredPages = {};
+  final WebsiteEngine _websiteEngine = WebsiteEngine();
 
   static const String _scanScript = r'''
 (() => {
@@ -90,11 +93,32 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     performance.getEntriesByType('resource').forEach(entry => add(entry.name));
   } catch (_) {}
 
+  const links = [];
+  const seenLinks = new Set();
+  document.querySelectorAll('a[href]').forEach(el => {
+    try {
+      const u = new URL(el.href, location.href);
+      if (u.protocol !== 'https:' || u.origin !== location.origin) return;
+      if (!/\/(?:channel|channels|live|live-tv|tv|watch)(?:\/|$)/i.test(u.pathname)) return;
+      if (/(?:login|logout|register|signup|account|profile|subscribe|payment|privacy|terms|contact|search|category)/i.test(u.pathname)) return;
+      const label = (el.innerText || el.getAttribute('aria-label') || el.title || '').trim().replace(/\s+/g, ' ');
+      if (!label || seenLinks.has(u.href)) return;
+      seenLinks.add(u.href);
+      const image = el.querySelector('img');
+      links.push({
+        url: u.href,
+        label: label.slice(0, 120),
+        imageUrl: image ? (image.currentSrc || image.src || image.getAttribute('data-src') || '') : ''
+      });
+    } catch (_) {}
+  });
+
   return JSON.stringify({
     title: document.title || location.hostname,
     pageUrl: location.href,
     userAgent: navigator.userAgent || '',
     logoUrl,
+    links: links.slice(0, 250),
     media: Array.from(found.values()).slice(0, 60)
   });
 })()
@@ -139,6 +163,35 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       final pageUrl = decoded['pageUrl']?.toString() ?? '';
       _scannedPageUrl = pageUrl;
       _pageTitle = decoded['title']?.toString() ?? widget.title;
+      final siteUri = Uri.tryParse(widget.url);
+      final snapshot = WebsitePageSnapshot.fromJson({
+        'url': pageUrl,
+        'title': _pageTitle,
+        'links': decoded['links'] is List ? decoded['links'] : const [],
+        'media': decoded['media'] is List
+            ? (decoded['media'] as List).map((item) => {
+                'url': item is Map ? item['url'] : '',
+                'kind': 'hls',
+                'mimeType': 'application/vnd.apple.mpegurl',
+              }).toList()
+            : const [],
+      });
+      if (siteUri != null) {
+        final discovery = _websiteEngine.discover(
+          site: WebsiteSiteConfig(
+            id: siteUri.host,
+            name: widget.title,
+            startUrl: widget.url,
+            authenticationMode: WebsiteAuthenticationMode.interactiveWebView,
+            allowedHosts: [siteUri.host],
+            maxPages: 1,
+          ),
+          pages: [snapshot],
+        );
+        for (final channel in discovery.channels) {
+          _discoveredPages[channel.pageUrl] = channel;
+        }
+      }
       final media = decoded['media'] is List ? decoded['media'] as List : const [];
       var added = 0;
       for (final value in media.whereType<Map>()) {
@@ -162,7 +215,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(added > 0
             ? 'تم العثور على $added رابط جديد. الإجمالي: ${_entries.length}'
-            : 'لم نعثر على روابط HLS جديدة في الصفحة الحالية.'),
+            : 'لم نعثر على روابط HLS جديدة في الصفحة الحالية.') +
+            ' صفحات قنوات مكتشفة: ${_discoveredPages.length}',
       ));
     } catch (error) {
       if (mounted) {
@@ -175,10 +229,51 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     }
   }
 
+  Future<void> _showDiscoveredPages() async {
+    if (_discoveredPages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('افحص الصفحة الحالية أولاً لاكتشاف روابط القنوات')),
+      );
+      return;
+    }
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.background,
+        title: Text('صفحات القنوات المكتشفة (${_discoveredPages.length})',
+            style: TextStyle(color: AppTheme.primary)),
+        content: SizedBox(
+          width: 520,
+          child: ListView(
+            shrinkWrap: true,
+            children: _discoveredPages.values.map((channel) => ListTile(
+              leading: channel.logoUrl == null
+                  ? Icon(Icons.live_tv, color: AppTheme.primary)
+                  : Image.network(channel.logoUrl!, width: 42, height: 42,
+                      errorBuilder: (_, __, ___) => Icon(Icons.live_tv, color: AppTheme.primary)),
+              title: Text(channel.name, style: TextStyle(color: AppTheme.text)),
+              subtitle: Text(channel.pageUrl, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AppTheme.secondaryText, fontSize: 10)),
+              onTap: () => Navigator.pop(dialogContext, channel.pageUrl),
+            )).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق')),
+        ],
+      ),
+    );
+    if (selected != null && mounted) {
+      await _controller.loadRequest(Uri.parse(selected));
+    }
+  }
+
   void _finish() {
     Navigator.pop<Map<String, dynamic>>(context, {
       'entries': List<Map<String, String>>.from(_entries),
       'pageTitle': _pageTitle.isNotEmpty ? _pageTitle : widget.title,
+      'discoveredPageCount': _discoveredPages.length,
     });
   }
 
@@ -193,7 +288,12 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
           title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           actions: [
             IconButton(
-              tooltip: 'فحص روابط الصفحة',
+              tooltip: 'صفحات القنوات المكتشفة',
+              onPressed: _showDiscoveredPages,
+              icon: const Icon(Icons.list_alt),
+            ),
+            IconButton(
+              tooltip: 'فحص الصفحة واكتشاف روابط القنوات',
               onPressed: _scanning ? null : _scanCurrentPage,
               icon: _scanning
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
