@@ -3129,6 +3129,10 @@ class _DetailsPageState extends State<DetailsPage> {
     List<Map<String, dynamic>> episodeQueue = const [],
     int episodeIndex = -1,
   }) async {
+    if (contentType == 'movie' || contentType == 'episode') {
+      await showPlaybackWelcomeIfNeeded(context);
+      if (!mounted) return;
+    }
     if (contentType != 'episode') {
       await saveWatchRecord(contentType: contentType, item: widget.item, title: title,
         isSeries: widget.isSeries, isChannel: widget.isChannel);
@@ -3305,10 +3309,6 @@ class _DetailsPageState extends State<DetailsPage> {
         SnackBar(content: Text(appText('رابط التشغيل غير صالح', 'Invalid playback link', 'Geçersiz oynatma bağlantısı'))),
       );
       return;
-    }
-    if (contentType == 'movie' || contentType == 'episode') {
-      await showPlaybackWelcomeIfNeeded(context);
-      if (!mounted) return;
     }
     if (!_isDirectMediaUrl(url)) {
       if ((contentType == 'movie' || contentType == 'episode') &&
