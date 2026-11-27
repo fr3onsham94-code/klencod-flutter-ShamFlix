@@ -357,6 +357,27 @@ String formatWatchPosition(dynamic milliseconds) {
   return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
 }
 
+// Refresh managed movie/episode source links before reading the saved playback servers.
+// The refresh is best-effort: existing saved links remain usable if the source is unavailable.
+Future<void> refreshManagedPlaybackSource({
+  required String contentType,
+  required String contentId,
+}) async {
+  if ((contentType != 'movie' && contentType != 'episode') || contentId.trim().isEmpty) return;
+  try {
+    await Supabase.instance.client.functions.invoke(
+      'refresh-playback-link',
+      body: {
+        'contentType': contentType,
+        'contentId': contentId,
+        'mode': 'refresh_source',
+      },
+    );
+  } catch (_) {
+    // Do not block playback when the source site or refresh service is unavailable.
+  }
+}
+
 Future<void> saveWatchRecord({
   required String contentType,
   required Map<String, dynamic> item,
@@ -395,6 +416,9 @@ Future<void> openWatchRecord(BuildContext context, Map<String, dynamic> record) 
     }
     var servers = <Map<String, dynamic>>[];
     if (id.isNotEmpty) {
+      if (type == 'movie' || type == 'episode') {
+        await refreshManagedPlaybackSource(contentType: type, contentId: id);
+      }
       try {
         servers = await SupabaseService.getPlaybackServers(contentType: type, contentId: id);
       } catch (_) {
@@ -3109,6 +3133,10 @@ class _DetailsPageState extends State<DetailsPage> {
       await saveWatchRecord(contentType: contentType, item: widget.item, title: title,
         isSeries: widget.isSeries, isChannel: widget.isChannel);
     }
+    // Refresh the public source page on demand, then read the updated saved servers.
+    if (contentType == 'movie' || contentType == 'episode') {
+      await refreshManagedPlaybackSource(contentType: contentType, contentId: contentId);
+    }
     List<Map<String, dynamic>> servers = [];
     try {
       servers = await SupabaseService.getPlaybackServers(
@@ -4936,6 +4964,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     final title = valueOf(episode['title'], 'الحلقة $number');
     setState(() { opening = true; controlsVisible = false; error = null; });
     try {
+      await refreshManagedPlaybackSource(contentType: 'episode', contentId: id);
       final servers = await SupabaseService.getPlaybackServers(contentType: 'episode', contentId: id);
       if (!mounted) return;
       final playableServers = servers.where((server) =>
