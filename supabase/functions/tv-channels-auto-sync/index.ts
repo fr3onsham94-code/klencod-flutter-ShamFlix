@@ -191,7 +191,7 @@ function extinfNameSeparator(line: string): number {
 }
 
 function parseM3u(text: string, sourceId: string, sourceName: string) {
-  const result: Array<{sourceId:string;sourceName:string;key:string;name:string;nameEn:string;tvgId:string;logo:string;category:string;url:string;position:number;tvgLanguage:string;tvgCountry:string;groupTitle:string}> = [];
+  const result: Array<{sourceId:string;sourceName:string;key:string;name:string;nameEn:string;tvgId:string;logo:string;category:string;url:string;position:number;tvgLanguage:string;tvgCountry:string;groupTitle:string;pageUrl?:string;referer?:string;origin?:string}> = [];
   let pending: Record<string,string> | null = null;
   let displayName = "";
   let position = 0;
@@ -483,6 +483,9 @@ async function fetchGenericWebsite(source: PlaylistSource) {
         tvgLanguage: "",
         tvgCountry: "",
         groupTitle: "",
+        pageUrl: channel.pageUrl,
+        referer: channel.pageUrl,
+        origin: new URL(channel.pageUrl).origin,
       });
     }
   }
@@ -1034,6 +1037,9 @@ async function syncChannels(db: any) {
         source_failures: 0,
         is_active: true,
         ...(websitePlaybackHeaders.get(stream.sourceId) || {}),
+        ...(stream.pageUrl ? { source_page_url: stream.pageUrl } : {}),
+        ...(stream.referer ? { referer: stream.referer } : {}),
+        ...(stream.origin ? { origin: stream.origin } : {}),
         sort_order: stream.sourceId === "iptv-org" ? 0 : stream.sourceId === "nexus" ? 1 : 2,
       });
     }
