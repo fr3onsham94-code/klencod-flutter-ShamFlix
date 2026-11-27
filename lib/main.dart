@@ -21,6 +21,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 import 'app_theme.dart';
 import 'admin_auth_service.dart';
+import 'trial_mode.dart';
 import 'auth_page.dart';
 import 'admin_page.dart';
 import 'shamflix_cloud_service.dart';
@@ -295,7 +296,7 @@ class ShamFlixLocalStore {
 }
 
 Future<void> syncShamFlixCloudData() async {
-  if (!ShamFlixCloudService.isAvailable) return;
+  if (kShamFlixTrialMode || !ShamFlixCloudService.isAvailable) return;
   try {
     final prefs = await SharedPreferences.getInstance();
     final userId = AuthService.client.auth.currentUser?.id;
@@ -363,9 +364,9 @@ Future<void> refreshManagedPlaybackSource({
   required String contentType,
   required String contentId,
 }) async {
-  if ((contentType != 'movie' && contentType != 'episode') || contentId.trim().isEmpty) return;
+  if (kShamFlixTrialMode || (contentType != 'movie' && contentType != 'episode') || contentId.trim().isEmpty) return;
   try {
-    await Supabase.instance.client.functions.invoke(
+    await AuthService.client.functions.invoke(
       'refresh-playback-link',
       body: {
         'contentType': contentType,
@@ -4407,7 +4408,7 @@ Future<void> showPlaybackWelcomeIfNeeded(BuildContext context) async {
   var enabled = true;
   var message = defaultMessage;
   try {
-    final row = await Supabase.instance.client
+    final row = await AuthService.client
         .from('app_settings')
         .select('setting_value')
         .eq('setting_key', 'player_welcome')
@@ -5134,7 +5135,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
         controlsVisible = true;
       });
       try {
-        final response = await Supabase.instance.client.functions.invoke(
+        final response = await AuthService.client.functions.invoke(
           'refresh-playback-link',
           body: {
             'contentType': widget.contentType,
@@ -5242,7 +5243,7 @@ class _ShamFlixPlayerPageState extends State<ShamFlixPlayerPage> {
     if (checkKey.isEmpty || !_serverHealthCheckedKeys.add(checkKey)) return;
 
     try {
-      final response = await Supabase.instance.client.functions.invoke(
+      final response = await AuthService.client.functions.invoke(
         'refresh-playback-link',
         body: {
           'contentType': widget.contentType,
