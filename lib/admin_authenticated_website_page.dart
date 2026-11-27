@@ -251,7 +251,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     }
 
     setState(() => _crawling = true);
-    var visitedThisRun = 0;
+    var visitedThisRun = 1; // The current page is scanned before following links.
     var failedPages = 0;
     final stopwatch = Stopwatch()..start();
     try {
