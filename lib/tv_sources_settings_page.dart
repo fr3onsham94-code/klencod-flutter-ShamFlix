@@ -187,7 +187,7 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       }).select('id').single();
       insertedId = inserted['id'].toString();
       await AuthService.client.from('tv_channel_sources').update({
-        'source_key': _websiteSourceKey('auto', _websitePackageId, insertedId),
+        'source_key': _websiteSourceKey('auto', null, insertedId),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', insertedId);
       _websiteNameController.clear();
@@ -195,8 +195,11 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       setState(() { _websitePackageId = null; });
       await _loadSources();
       if (mounted) _message('تمت إضافة موقع البث؛ جارٍ استخراج القنوات...');
-      await _syncNow();
+      final synced = await _syncNow();
       await _loadSources();
+      if (synced && mounted) {
+        await _assignDiscoveredWebsiteChannels('website:auto:$insertedId');
+      }
     } catch (e) {
       if (insertedId != null) {
         try { await AuthService.client.from('tv_channel_sources').delete().eq('id', insertedId); } catch (_) {}
@@ -204,6 +207,138 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
       _message('تعذرت إضافة موقع البث: $e', error: true);
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _assignDiscoveredWebsiteChannels(String sourceId) async {
+    try {
+      final serverRows = await AuthService.client
+          .from('playback_servers')
+          .select('channel_id')
+          .eq('source_id', sourceId)
+          .eq('is_active', true);
+      final channelIds = serverRows
+          .map((row) => row['channel_id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
+      if (channelIds.isEmpty) {
+        if (mounted) _message('لم يُعثر على قنوات قابلة للاستيراد من هذا الموقع', error: true);
+        return;
+      }
+      final rows = await AuthService.client
+          .from('channels')
+          .select('id,name,logo_url')
+          .inFilter('id', channelIds)
+          .order('name');
+      final channels = rows.map((row) => Map<String, dynamic>.from(row)).toList();
+      if (channels.isEmpty || !mounted) return;
+
+      final selectedPackages = <String, String?>{
+        for (final channel in channels) channel['id'].toString(): null,
+      };
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            backgroundColor: AppTheme.panel,
+            title: Text('اختيار باقة لكل قناة', style: TextStyle(color: AppTheme.primary)),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'اكتشف شامفليكس ' + channels.length.toString() + ' قناة تلقائياً. اختر باقة مستقلة لكل قناة، أو اتركها بدون باقة.',
+                      style: TextStyle(color: AppTheme.secondaryText, fontSize: 12, height: 1.5),
+                    ),
+                    const SizedBox(height: 10),
+                    ...channels.map((channel) {
+                      final id = channel['id'].toString();
+                      return Card(
+                        color: AppTheme.background,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                channel['name']?.toString() ?? 'قناة بدون اسم',
+                                style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 6),
+                              DropdownButtonFormField<String?>(
+                                initialValue: selectedPackages[id],
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'باقة القناة',
+                                  isDense: true,
+                                ),
+                                items: [
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('بدون باقة'),
+                                  ),
+                                  ..._channelPackages.map((package) =>
+                                    DropdownMenuItem<String?>(
+                                      value: package['id'].toString(),
+                                      child: Text(
+                                        package['name'].toString(),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (value) => setDialogState(
+                                  () => selectedPackages[id] = value,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('لاحقاً'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
+                child: const Text('حفظ الباقات'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (confirmed != true) return;
+
+      var assigned = 0;
+      for (final entry in selectedPackages.entries) {
+        final packageId = entry.value;
+        if (packageId == null || packageId.isEmpty) continue;
+        await AuthService.client.from('content_package_items').upsert({
+          'package_id': packageId,
+          'content_type': 'channel',
+          'content_id': entry.key,
+        }, onConflict: 'package_id,content_type,content_id', ignoreDuplicates: true);
+        assigned++;
+      }
+      if (mounted) {
+        _message(assigned > 0
+            ? 'تم حفظ باقات $assigned قناة'
+            : 'تم اكتشاف القنوات؛ لم يتم تعيين باقات');
+      }
+    } catch (error) {
+      if (mounted) _message('تم الاكتشاف، لكن تعذر فتح اختيار الباقات: $error', error: true);
     }
   }
 
@@ -1025,14 +1160,11 @@ class _TvSourcesSettingsPageState extends State<TvSourcesSettingsPage> {
                 textDirection: TextDirection.ltr, style: TextStyle(color: AppTheme.text),
                 decoration: const InputDecoration(labelText: 'رابط الموقع', hintText: 'https://example.com')),
               const SizedBox(height: 10),
-              DropdownButtonFormField<String?>(
-                value: _websitePackageId, decoration: const InputDecoration(labelText: 'الباقة المستهدفة'),
-                items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('تصنيف تلقائي حسب البلد والفئة')),
-                  ..._channelPackages.map((p) => DropdownMenuItem<String?>(
-                    value: p['id'].toString(), child: Text(p['name'].toString(), overflow: TextOverflow.ellipsis))),
-                ],
-                onChanged: (value) => setDialogState(() => _websitePackageId = value),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: AppTheme.background, borderRadius: BorderRadius.circular(10)),
+                child: Text('بعد الاكتشاف ستختار باقة مستقلة لكل قناة، دون تصنيفات أو فتح صفحات القنوات يدوياً.',
+                  style: TextStyle(color: AppTheme.secondaryText, fontSize: 11, height: 1.4)),
               ),
               const SizedBox(height: 12),
               Container(
