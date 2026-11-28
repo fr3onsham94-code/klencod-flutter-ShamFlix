@@ -6,3 +6,9 @@ verify_jwt = false
 
 [functions.refresh-playback-link]
 verify_jwt = false
+
+[functions.movie-auto-monitor]
+verify_jwt = false
+
+[functions.content-monitor-trigger]
+verify_jwt = false
