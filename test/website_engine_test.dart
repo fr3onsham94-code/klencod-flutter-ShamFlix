@@ -72,6 +72,28 @@ void main() {
       );
     });
 
+    test('accepts safe DASH manifests and preserves their media kind', () {
+      final snapshot = WebsiteEngine.decodePageSnapshot({
+        'url': 'https://tv.example.com/channel/one',
+        'title': 'Channel One',
+        'media': [
+          {
+            'url': 'https://cdn.example.com/live/manifest.mpd',
+            'kind': 'dash',
+            'mimeType': 'application/dash+xml',
+          },
+          {
+            'url': 'https://cdn.example.com/live/unsafe.mpd?token=secret',
+            'kind': 'dash',
+          },
+        ],
+      });
+
+      expect(snapshot.media, hasLength(1));
+      expect(snapshot.media.single.kind, WebsiteMediaKind.dash);
+      expect(snapshot.media.single.mimeType, 'application/dash+xml');
+    });
+
     test('site allow-list rejects credentials in page URLs', () {
       const site = WebsiteSiteConfig(
         id: 'tv.example.com',
