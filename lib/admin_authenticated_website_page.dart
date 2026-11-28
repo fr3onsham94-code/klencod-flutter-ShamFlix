@@ -143,7 +143,6 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         },
         onPageStarted: (url) {
           if (_restrictCrawlerNavigation) {
-            if (!_crawlerPageStarted) return;
             final uri = Uri.tryParse(url);
             final host = _crawlerAllowedHost?.toLowerCase();
             _crawlerPageStarted = uri != null &&
