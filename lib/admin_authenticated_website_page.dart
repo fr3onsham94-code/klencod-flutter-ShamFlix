@@ -79,13 +79,13 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     if (!raw || typeof raw !== 'string') return;
     try {
       const u = new URL(raw.trim(), location.href);
-      if (u.protocol !== 'https:' || u.username || u.password || !/\\.(?:m3u8|mpd)$/i.test(u.pathname)) return;
+      if (u.protocol !== 'https:' || u.username || u.password || !/\.(?:m3u8|mpd)$/i.test(u.pathname)) return;
       for (const key of u.searchParams.keys()) {
         if (sensitive.test(key)) return;
       }
       u.hash = '';
       const url = u.href;
-      const isDash = /\\.mpd$/i.test(u.pathname);
+      const isDash = /\.mpd$/i.test(u.pathname);
       if (!found.has(url)) found.set(url, {
         url,
         kind: isDash ? 'dash' : 'hls',
