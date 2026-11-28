@@ -48,6 +48,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Run Flutter tests
+        run: flutter test
+
       - name: Analyze
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
