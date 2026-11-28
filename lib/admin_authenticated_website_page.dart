@@ -249,6 +249,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         if (_entries.any((item) => item['url'] == url)) continue;
         _entries.add({
           'url': url,
+          'kind': value['kind']?.toString() ?? 'hls',
+          'mimeType': value['mimeType']?.toString() ?? 'application/vnd.apple.mpegurl',
           'pageUrl': entryPageUrl,
           'userAgent': decoded['userAgent']?.toString() ?? '',
           'origin': Uri.tryParse(entryPageUrl)?.origin ?? '',
@@ -266,7 +268,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
           content: Text(
             (added > 0
                 ? 'تم العثور على $added رابط جديد. الإجمالي: ${_entries.length}'
-                : 'لم نعثر على روابط HLS جديدة في الصفحة الحالية.') +
+                : 'لم نعثر على روابط HLS أو DASH جديدة في الصفحة الحالية.') +
             ' صفحات قنوات مكتشفة: ${_discoveredPages.length}',
           ),
         ));
