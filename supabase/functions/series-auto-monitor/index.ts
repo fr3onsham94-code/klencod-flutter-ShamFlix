@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -250,37 +251,62 @@ async function replaceEpisodePageServers(db: any, episodeId: string, pageUrl: st
   return sources[0].url;
 }
 
+async function verifyAdminBearer(db: any, req: Request): Promise<boolean> {
+  const authorization = req.headers.get("authorization") || "";
+  const match = authorization.match(/^Bearer\\s+(.+)$/i);
+  if (!match) return false;
+  const { data, error } = await db.auth.getUser(match[1]);
+  if (error || !data?.user) return false;
+  const user = data.user as any;
+  return user.id === "dda16adb-3b6e-4244-a028-83df88b7801d" ||
+    ["admin", "manager"].includes(String(user.app_metadata?.role || ""));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok",{headers:corsHeaders});
   if (req.method !== "POST") return json({error:"Method not allowed"},405);
   const cronToken = req.headers.get("x-shamflix-monitor-secret") ?? "";
-  if (!cronToken) return json({error:"Unauthorized"},401);
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) return json({error:"Server configuration missing"},500);
   const db = createClient(supabaseUrl,serviceKey,{auth:{autoRefreshToken:false,persistSession:false}});
-  const {data:tokenValid,error:tokenError} = await db.rpc("verify_series_monitor_cron_secret",{candidate_secret:cronToken});
-  if (tokenError || tokenValid !== true) return json({error:"Unauthorized"},401);
-  // Avoid PostgREST embedded !inner relation filters here: in production they
-  // returned an empty monitor set despite active monitors and enabled series.
+  const {data:tokenValid,error:tokenError} = cronToken
+    ? await db.rpc("verify_series_monitor_cron_secret",{candidate_secret:cronToken})
+    : {data:false,error:null};
+  const adminAuthorized = tokenValid !== true && await verifyAdminBearer(db,req);
+  if ((tokenError || tokenValid !== true) && !adminAuthorized) return json({error:"Unauthorized"},401);
+  let body: Record<string,unknown> = {};
+  try { body = await req.json(); } catch {}
+  const force = adminAuthorized && body.force === true;
+  const runId = force && typeof body.run_id === "string" && /^[0-9a-f-]{36}$/i.test(body.run_id)
+    ? body.run_id : null;
   // Resolve enabled series IDs first, then query monitors by their FK directly.
   const {data:enabledSeries,error:enabledSeriesError} = await db.from("series")
     .select("id").eq("source_monitor_enabled",true);
   if (enabledSeriesError) return json({error:enabledSeriesError.message,stage:"enabled_series"},500);
   const enabledSeriesIds = (enabledSeries || []).map((row:any)=>row.id);
+  let monitorQuery = db.from("series_source_monitors")
+    .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at,last_run_id")
+    .eq("is_active",true).in("series_id",enabledSeriesIds)
+    .order("last_checked_at",{ascending:true,nullsFirst:true}).limit(5);
+  if (runId) monitorQuery = monitorQuery.neq("last_run_id",runId);
   const {data:monitors,error:listError} = enabledSeriesIds.length
-    ? await db.from("series_source_monitors")
-        .select("id,series_id,source_url,season_number,check_interval_minutes,last_checked_at")
-        .eq("is_active",true).in("series_id",enabledSeriesIds)
-        .order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100)
+    ? await monitorQuery
     : {data:[],error:null};
   if (listError) return json({error:listError.message,stage:"series_monitors"},500);
   const now = Date.now();
+  const runStartedAt = Date.now();
+  const runBudgetMs = 85000;
   const summary = {checked:0,added:0,skipped:0,failed:0,results:[] as unknown[]};
+  let processedSeriesMonitors = 0;
   for (const monitor of monitors ?? []) {
+    if (Date.now() - runStartedAt >= runBudgetMs || processedSeriesMonitors >= 5) break;
     const last = monitor.last_checked_at ? new Date(monitor.last_checked_at).getTime() : 0;
-    const interval = Math.max(30,Number(monitor.check_interval_minutes)||60)*60000;
-    if (last && now-last < interval) continue;
+    const interval = Math.max(15,Number(monitor.check_interval_minutes)||15)*60000;
+    if (!force && last && now-last < interval) continue;
+    processedSeriesMonitors++;
+    const startedAt = new Date().toISOString();
+    await db.from("series_source_monitors").update({last_status:"running",last_started_at:startedAt,last_error:null}).eq("id",monitor.id);
     let added = 0; let errorMessage: string | null = null;
     try {
       const source = validateUrl(monitor.source_url);
@@ -288,7 +314,7 @@ Deno.serve(async (req: Request) => {
       const visitedPages=new Set<string>();
       let nextPage:string|null=source.toString(),listingTitle="";
       let listingHtml="";
-      for(let pageNo=0;pageNo<100&&nextPage;pageNo++){
+      for(let pageNo=0;pageNo<3&&nextPage;pageNo++){
         if(visitedPages.has(nextPage))break;
         visitedPages.add(nextPage);
         const listing=await fetchHtml(nextPage,source.hostname);
@@ -297,7 +323,7 @@ Deno.serve(async (req: Request) => {
         nextPage=findSeriesNext(listing.html,listing.url);
       }
       const links=[...allLinks.values()].sort((a,b)=>a.number-b.number);
-      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة خلال أول 100 صفحة");
+      if (!links.length) throw new Error("لم يتم العثور على روابط حلقات عامة واضحة خلال أول 3 صفحات");
       const defaultSeason = parseSeason(listingTitle+" "+listingHtml,Number(monitor.season_number)||1);
       const seriesMeta = seriesMetadata(listingHtml,source,listingTitle,"","");
       const seriesUpdates: Record<string,unknown> = {source_page_checked_at:new Date().toISOString(),source_page_last_error:null};
@@ -308,7 +334,7 @@ Deno.serve(async (req: Request) => {
       if (seriesMeta.release_year) seriesUpdates.release_year = seriesMeta.release_year;
       const {error:seriesUpdateError} = await db.from("series").update(seriesUpdates).eq("id",monitor.series_id);
       if (seriesUpdateError) throw seriesUpdateError;
-      for (const link of links) {
+      for (const link of links.slice(-2)) {
         try {
           const episode = await inspectEpisode(link,source.hostname,defaultSeason);
           if (!episode.streamUrl) { summary.skipped++; continue; }
@@ -365,8 +391,11 @@ Deno.serve(async (req: Request) => {
       errorMessage = monitorError instanceof Error ? monitorError.message : "تعذر فحص صفحة المسلسل";
       summary.failed++;
     }
+    const finishedAt = new Date().toISOString();
     await db.from("series_source_monitors").update({
-      last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString(),
+      last_checked_at:finishedAt,last_error:errorMessage,last_added_count:added,
+      last_status:errorMessage ? (added > 0 ? "partial" : "failed") : (added > 0 ? "updated" : "no_new"),
+      last_run_id:runId || monitor.last_run_id,last_finished_at:finishedAt,updated_at:finishedAt,
     }).eq("id",monitor.id);
     await db.from("series").update({
       source_page_checked_at:new Date().toISOString(),source_page_last_error:errorMessage,
@@ -375,28 +404,33 @@ Deno.serve(async (req: Request) => {
     summary.results.push({monitor_id:monitor.id,added,error:errorMessage});
   }
 
-  const {data:sectionMonitors,error:sectionListError}=await db.from("series_section_monitors")
-    .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at")
-    .eq("is_active",true).order("last_checked_at",{ascending:true,nullsFirst:true}).limit(100);
+  let sectionQuery = db.from("series_section_monitors")
+    .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at,last_run_id")
+    .eq("is_active",true).order("last_checked_at",{ascending:true,nullsFirst:true}).limit(2);
+  if (runId) sectionQuery = sectionQuery.neq("last_run_id",runId);
+  const {data:sectionMonitors,error:sectionListError}=await sectionQuery;
   if(sectionListError)return json({error:sectionListError.message},500);
   for(const monitor of sectionMonitors||[]){
+    if (Date.now() - runStartedAt >= runBudgetMs) break;
     const last=monitor.last_checked_at?new Date(monitor.last_checked_at).getTime():0;
-    const interval=Math.max(30,Number(monitor.check_interval_minutes)||60)*60000;
-    if(last&&now-last<interval)continue;
+    const interval=Math.max(15,Number(monitor.check_interval_minutes)||15)*60000;
+    if(!force&&last&&now-last<interval)continue;
+    const startedAt = new Date().toISOString();
+    await db.from("series_section_monitors").update({last_status:"running",last_started_at:startedAt,last_error:null}).eq("id",monitor.id);
     let added=0,errorMessage:string|null=null;
     try{
       const source=validateUrl(monitor.source_url),cards=new Map<string,{url:string;title:string;poster:string}>(),visited=new Set<string>();
       let next:string|null=source.toString();
-      for(let pageNo=0;pageNo<100&&next&&cards.size<500;pageNo++){
+      for(let pageNo=0;pageNo<3&&next&&cards.size<100;pageNo++){
         if(visited.has(next))break;visited.add(next);
         const listing=await fetchHtml(next,source.hostname);
-        for(const card of extractSeriesCards(listing.html,listing.url)){cards.set(card.url,card);if(cards.size>=500)break;}
+        for(const card of extractSeriesCards(listing.html,listing.url)){cards.set(card.url,card);if(cards.size>=100)break;}
         next=findSeriesNext(listing.html,listing.url);
       }
       if(!cards.size)throw new Error("لم يتم العثور على روابط مسلسلات عامة واضحة في صفحة القسم");
       let processed=0;
       for(const card of cards.values()){
-        if(processed>=25)break;
+        if(processed>=5)break;
         try{
           const exists=await db.from("series").select("id").eq("source_page_url",card.url).maybeSingle();
           if(exists.error)throw exists.error;
@@ -439,7 +473,7 @@ Deno.serve(async (req: Request) => {
           const {error:pkg}=await db.from("content_package_items").upsert({package_id:monitor.package_id,content_type:"series",content_id:seriesId},{onConflict:"package_id,content_type,content_id",ignoreDuplicates:true});
           if(pkg)throw pkg;
           const links=extractEpisodeLinks(page.html,page.url);
-          for(const link of links){
+          for(const link of links.slice(-2)){
             try{
               const episode=await inspectEpisode(link,source.hostname,parseSeason(meta.title+" "+page.html,1));
               if(!episode.streamUrl){summary.skipped++;continue;}
@@ -473,10 +507,18 @@ Deno.serve(async (req: Request) => {
         }catch(e){summary.failed++;errorMessage=e instanceof Error?e.message:"تعذر استيراد مسلسل";}
       }
     }catch(e){errorMessage=e instanceof Error?e.message:"تعذر فحص قسم المسلسلات";summary.failed++;}
-    await db.from("series_section_monitors").update({last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString()}).eq("id",monitor.id);
+    const finishedAt = new Date().toISOString();
+    await db.from("series_section_monitors").update({
+      last_checked_at:finishedAt,last_error:errorMessage,last_added_count:added,
+      last_status:errorMessage ? (added > 0 ? "partial" : "failed") : (added > 0 ? "updated" : "no_new"),
+      last_run_id:runId || monitor.last_run_id,last_finished_at:finishedAt,updated_at:finishedAt,
+    }).eq("id",monitor.id);
     summary.checked++;summary.results.push({monitor_id:monitor.id,added,error:errorMessage,mode:"section"});
   }
 
+  // Saved episode pages remain on the normal scheduled cycle; the manual
+  // all-servers run checks the configured series sources above.
+  if (!force) {
   // Independently recheck saved episode pages, even if a provider removes
   // an episode from the current series listing.
   const {data:enabledSeasons,error:enabledSeasonsError}=enabledSeriesIds.length
@@ -525,5 +567,37 @@ Deno.serve(async (req: Request) => {
     }));
   }
 
-  return json({success:true,...summary});
+  }
+
+  let hasMore = false;
+  if (runId) {
+    const [remainingSeries,remainingSections] = await Promise.all([
+      db.from("series_source_monitors").select("id").eq("is_active",true)
+        .in("series_id",enabledSeriesIds).neq("last_run_id",runId).limit(1),
+      db.from("series_section_monitors").select("id").eq("is_active",true)
+        .neq("last_run_id",runId).limit(1),
+    ]);
+    if (remainingSeries.error) return json({error:remainingSeries.error.message},500);
+    if (remainingSections.error) return json({error:remainingSections.error.message},500);
+    hasMore = (remainingSeries.data || []).length > 0 || (remainingSections.data || []).length > 0;
+    if (hasMore) {
+      const headers = new Headers({"Content-Type":"application/json"});
+      const authorization = req.headers.get("authorization");
+      if (authorization) headers.set("Authorization",authorization);
+      EdgeRuntime.waitUntil(fetch(req.url,{
+        method:"POST",headers,body:JSON.stringify({force:true,run_id:runId}),
+      }).then(async response => {
+        if (!response.ok) throw new Error("Series monitor continuation HTTP " + response.status);
+      }).catch(async error => {
+        await db.from("content_monitor_runs").update({
+          series_done:true,series_error:error instanceof Error ? error.message : "تعذر متابعة فحص المسلسلات",
+        }).eq("id",runId);
+      }));
+    } else {
+      await db.from("content_monitor_runs").update({
+        series_done:true,series_error:summary.failed > 0 ? "يوجد مصدر أو أكثر تعذر فحصه؛ راجع حالة كل مصدر" : null,
+      }).eq("id",runId);
+    }
+  }
+  return json({success:true,...summary,has_more:hasMore,run_id:runId});
 });
