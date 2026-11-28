@@ -12,6 +12,23 @@ enum WebsiteMediaKind {
   dash,
 }
 
+/// Reject credentials and sensitive query parameters before a media URL can
+/// enter discovery results or be handed to the import flow.
+bool isSafeWebsiteMediaUrl(String raw) {
+  final uri = Uri.tryParse(raw.trim());
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty) {
+    return false;
+  }
+  final sensitiveQuery = RegExp(
+    r'token|auth|signature|sig|jwt|session|cookie|access[_-]?key|api[_-]?key|key[_-]?pair|policy|hdnea|hdnts|expires|expire',
+    caseSensitive: false,
+  );
+  return !uri.queryParameters.keys.any(sensitiveQuery.hasMatch);
+}
+
 class WebsiteSiteConfig {
   const WebsiteSiteConfig({
     required this.id,
@@ -32,7 +49,7 @@ class WebsiteSiteConfig {
   Uri get startUri => Uri.parse(startUrl);
 
   bool allowsPage(Uri uri) {
-    if (uri.scheme != 'https' || uri.host.isEmpty) return false;
+    if (uri.scheme != 'https' || uri.host.isEmpty || uri.userInfo.isNotEmpty) return false;
     final host = uri.host.toLowerCase();
     final allowed = allowedHosts.isEmpty
         ? <String>{startUri.host.toLowerCase()}
@@ -104,7 +121,7 @@ class WebsitePageSnapshot {
             mimeType: item['mimeType']?.toString(),
           );
         })
-        .where((item) => item.url.isNotEmpty)
+        .where((item) => item.url.isNotEmpty && isSafeWebsiteMediaUrl(item.url))
         .toList(growable: false);
     return WebsitePageSnapshot(
       url: json['url']?.toString() ?? '',
