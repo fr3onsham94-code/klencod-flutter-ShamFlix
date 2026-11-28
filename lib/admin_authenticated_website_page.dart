@@ -27,6 +27,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   bool _scanning = false;
   bool _crawling = false;
   Completer<void>? _pageLoadCompleter;
+  bool _restrictCrawlerNavigation = false;
+  String? _crawlerAllowedHost;
   final Set<String> _visitedPageUrls = <String>{};
   String? _pageError;
   String? _scannedPageUrl;
@@ -141,8 +143,30 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         onPageStarted: (_) {
           if (mounted) setState(() => _pageError = null);
         },
-        onPageFinished: (_) {
+        onNavigationRequest: (request) {
+          if (!_restrictCrawlerNavigation) return NavigationDecision.navigate;
+          final uri = Uri.tryParse(request.url);
+          final host = _crawlerAllowedHost?.toLowerCase();
+          final allowed = uri != null &&
+              uri.scheme == 'https' &&
+              uri.host.isNotEmpty &&
+              host != null &&
+              (uri.host.toLowerCase() == host ||
+                  uri.host.toLowerCase().endsWith('.$host'));
+          return allowed ? NavigationDecision.navigate : NavigationDecision.prevent;
+        },
+        onPageFinished: (url) {
           if (mounted) setState(() => _progress = 100);
+          if (_restrictCrawlerNavigation) {
+            final uri = Uri.tryParse(url);
+            final host = _crawlerAllowedHost?.toLowerCase();
+            final allowed = uri != null &&
+                uri.scheme == 'https' &&
+                host != null &&
+                (uri.host.toLowerCase() == host ||
+                    uri.host.toLowerCase().endsWith('.$host'));
+            if (!allowed) return;
+          }
           final completer = _pageLoadCompleter;
           if (completer != null && !completer.isCompleted) completer.complete();
         },
@@ -251,6 +275,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     }
 
     setState(() => _crawling = true);
+    _restrictCrawlerNavigation = true;
+    _crawlerAllowedHost = siteUri.host;
     var visitedThisRun = 1; // The current page is scanned before following links.
     var failedPages = 0;
     final stopwatch = Stopwatch()..start();
@@ -313,6 +339,8 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       ));
     } finally {
       _pageLoadCompleter = null;
+      _restrictCrawlerNavigation = false;
+      _crawlerAllowedHost = null;
       if (mounted) setState(() => _crawling = false);
     }
   }
