@@ -79,14 +79,17 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     if (!raw || typeof raw !== 'string') return;
     try {
       const u = new URL(raw.trim(), location.href);
-      if (u.protocol !== 'https:' || u.username || u.password || !/\.m3u8(?:$|[?#])/i.test(u.href)) return;
+      if (u.protocol !== 'https:' || u.username || u.password || !/\\.(?:m3u8|mpd)$/i.test(u.pathname)) return;
       for (const key of u.searchParams.keys()) {
         if (sensitive.test(key)) return;
       }
       u.hash = '';
       const url = u.href;
+      const isDash = /\\.mpd$/i.test(u.pathname);
       if (!found.has(url)) found.set(url, {
         url,
+        kind: isDash ? 'dash' : 'hls',
+        mimeType: isDash ? 'application/dash+xml' : 'application/vnd.apple.mpegurl',
         label: document.title || location.hostname,
         pageUrl: location.href
       });
@@ -214,8 +217,10 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         'media': decoded['media'] is List
             ? (decoded['media'] as List).map((item) => {
                 'url': item is Map ? item['url'] : '',
-                'kind': 'hls',
-                'mimeType': 'application/vnd.apple.mpegurl',
+                'kind': item is Map ? (item['kind'] ?? 'hls') : 'hls',
+                'mimeType': item is Map
+                    ? (item['mimeType'] ?? 'application/vnd.apple.mpegurl')
+                    : 'application/vnd.apple.mpegurl',
               }).toList()
             : const [],
       });
