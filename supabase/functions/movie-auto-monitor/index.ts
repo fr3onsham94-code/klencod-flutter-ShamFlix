@@ -1,13 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "content-type, x-shamflix-monitor-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const MAX_PAGES = 100;
-const MAX_ITEMS = 500;
-const MAX_NEW_PER_MONITOR = 100;
+const MAX_PAGES = 10;
+const MAX_ITEMS = 300;
+const MAX_NEW_PER_MONITOR = 10;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -289,19 +290,39 @@ async function replaceMoviePageServers(db: any, movieId: string, pageUrl: string
   return sources[0].url;
 }
 
+async function verifyAdminBearer(db: any, req: Request): Promise<boolean> {
+  const authorization = req.headers.get("authorization") || "";
+  const match = authorization.match(/^Bearer\\s+(.+)$/i);
+  if (!match) return false;
+  const { data, error } = await db.auth.getUser(match[1]);
+  if (error || !data?.user) return false;
+  const user = data.user as any;
+  return user.id === "dda16adb-3b6e-4244-a028-83df88b7801d" ||
+    ["admin", "manager"].includes(String(user.app_metadata?.role || ""));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok",{headers:corsHeaders});
   if (req.method !== "POST") return json({error:"Method not allowed"},405);
   const token = req.headers.get("x-shamflix-monitor-secret") || "";
-  if (!token) return json({error:"Unauthorized"},401);
   const url = Deno.env.get("SUPABASE_URL"), key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) return json({error:"Server configuration missing"},500);
   const db = createClient(url,key,{auth:{autoRefreshToken:false,persistSession:false}});
-  const {data:valid,error:authError} = await db.rpc("verify_series_monitor_cron_secret",{candidate_secret:token});
-  if (authError || valid !== true) return json({error:"Unauthorized"},401);
-  const {data:monitors,error} = await db.from("movie_source_monitors")
-    .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at")
-    .eq("is_active",true).order("created_at",{ascending:true}).limit(100);
+  const {data:valid,error:authError} = token
+    ? await db.rpc("verify_series_monitor_cron_secret",{candidate_secret:token})
+    : {data:false,error:null};
+  const adminAuthorized = valid !== true && await verifyAdminBearer(db,req);
+  if ((authError || valid !== true) && !adminAuthorized) return json({error:"Unauthorized"},401);
+  let body: Record<string,unknown> = {};
+  try { body = await req.json(); } catch {}
+  const force = adminAuthorized && body.force === true;
+  const runId = force && typeof body.run_id === "string" && /^[0-9a-f-]{36}$/i.test(body.run_id)
+    ? body.run_id : null;
+  let monitorQuery = db.from("movie_source_monitors")
+    .select("id,package_id,source_url,category,check_interval_minutes,last_checked_at,last_run_id")
+    .eq("is_active",true).order("last_checked_at",{ascending:true,nullsFirst:true}).limit(5);
+  if (runId) monitorQuery = monitorQuery.neq("last_run_id",runId);
+  const {data:monitors,error} = await monitorQuery;
   if (error) return json({error:error.message},500);
   const summary = {checked:0,added:0,linked:0,skipped:0,failed:0,results:[] as unknown[]};
   const now = Date.now();
@@ -336,7 +357,11 @@ Deno.serve(async (req: Request) => {
   for (const monitor of monitors || []) {
     const last = monitor.last_checked_at ? new Date(monitor.last_checked_at).getTime() : 0;
     const interval = Math.max(15,Number(monitor.check_interval_minutes)||15)*60000;
-    if (last && now-last < interval) continue;
+    if (!force && last && now-last < interval) continue;
+    const startedAt = new Date().toISOString();
+    await db.from("movie_source_monitors").update({
+      last_status:"running",last_started_at:startedAt,last_error:null,
+    }).eq("id",monitor.id);
     let added = 0, linked = 0, errorMessage: string | null = null;
     try {
       const source = validateUrl(monitor.source_url);
@@ -421,13 +446,18 @@ Deno.serve(async (req: Request) => {
       errorMessage = monitorError instanceof Error ? monitorError.message : "تعذر فحص قسم الأفلام";
       summary.failed++;
     }
+    const finishedAt = new Date().toISOString();
     await db.from("movie_source_monitors").update({
-      last_checked_at:new Date().toISOString(),last_error:errorMessage,last_added_count:added,updated_at:new Date().toISOString()
+      last_checked_at:finishedAt,last_error:errorMessage,last_added_count:added,
+      last_status:errorMessage ? ((added + linked) > 0 ? "partial" : "failed") : ((added + linked) > 0 ? "updated" : "no_new"),
+      last_run_id:runId || monitor.last_run_id,last_finished_at:finishedAt,updated_at:finishedAt,
     }).eq("id",monitor.id);
     summary.checked++;
     summary.results.push({monitor_id:monitor.id,added,linked,error:errorMessage});
   }
-  // Monitor every imported movie page independently of its category listing.
+  // Individual movie pages remain on the regular monitor cycle. The manual
+  // all-servers action targets the configured category/source servers above.
+  if (!force) {
   const {data:pageMovies,error:pageMoviesError} = await db.from("movies")
     .select("id,title,source_page_url,source_page_checked_at,source_monitor_interval_minutes")
     .eq("source_monitor_enabled",true).not("source_page_url","is",null)
@@ -473,5 +503,32 @@ Deno.serve(async (req: Request) => {
     summary.results.push({movie_id:movieRow.id,mode:"individual_page",error:pageError});
     }));
   }
-  return json({success:true,...summary});
+  }
+
+  let hasMore = false;
+  if (runId) {
+    const {data:remaining,error:remainingError} = await db.from("movie_source_monitors")
+      .select("id").eq("is_active",true).neq("last_run_id",runId).limit(1);
+    if (remainingError) return json({error:remainingError.message},500);
+    hasMore = (remaining || []).length > 0;
+    if (hasMore) {
+      const headers = new Headers({"Content-Type":"application/json"});
+      const authorization = req.headers.get("authorization");
+      if (authorization) headers.set("Authorization",authorization);
+      EdgeRuntime.waitUntil(fetch(req.url,{
+        method:"POST",headers,body:JSON.stringify({force:true,run_id:runId}),
+      }).then(async response => {
+        if (!response.ok) throw new Error("Movie monitor continuation HTTP " + response.status);
+      }).catch(async error => {
+        await db.from("content_monitor_runs").update({
+          movies_done:true,movies_error:error instanceof Error ? error.message : "تعذر متابعة فحص الأفلام",
+        }).eq("id",runId);
+      }));
+    } else {
+      await db.from("content_monitor_runs").update({
+        movies_done:true,movies_error:summary.failed > 0 ? "يوجد مصدر أو أكثر تعذر فحصه؛ راجع حالة كل مصدر" : null,
+      }).eq("id",runId);
+    }
+  }
+  return json({success:true,...summary,has_more:hasMore,run_id:runId});
 });
