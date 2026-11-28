@@ -11,9 +11,11 @@ on:
       - feature/supabase-usage-dashboard
       - feature/channel-playback-headers
       - test/bulk-website-channel-import
+      - fix/website-engine-media-url-safety-tests
   pull_request:
     branches:
       - main
+      - feature/universal-website-engine
   workflow_dispatch:
 
 permissions:
@@ -45,6 +47,9 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Run Flutter tests
+        run: flutter test
 
       - name: Analyze
         run: flutter analyze --no-fatal-warnings --no-fatal-infos

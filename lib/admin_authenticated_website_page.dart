@@ -46,7 +46,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     if (!raw || typeof raw !== 'string') return '';
     try {
       const u = new URL(raw.trim(), location.href);
-      if (u.protocol !== 'https:') return '';
+      if (u.protocol !== 'https:' || u.username || u.password) return '';
       for (const key of u.searchParams.keys()) if (sensitive.test(key)) return '';
       u.hash = '';
       return u.href;
@@ -79,7 +79,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
     if (!raw || typeof raw !== 'string') return;
     try {
       const u = new URL(raw.trim(), location.href);
-      if (u.protocol !== 'https:' || !/\.m3u8(?:$|[?#])/i.test(u.href)) return;
+      if (u.protocol !== 'https:' || u.username || u.password || !/\.m3u8(?:$|[?#])/i.test(u.href)) return;
       for (const key of u.searchParams.keys()) {
         if (sensitive.test(key)) return;
       }
@@ -240,7 +240,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       for (final value in media.whereType<Map>()) {
         final url = value['url']?.toString() ?? '';
         final entryPageUrl = value['pageUrl']?.toString() ?? pageUrl;
-        if (url.isEmpty || !url.startsWith('https://')) continue;
+        if (url.isEmpty || !isSafeWebsiteMediaUrl(url)) continue;
         if (_entries.any((item) => item['url'] == url)) continue;
         _entries.add({
           'url': url,
