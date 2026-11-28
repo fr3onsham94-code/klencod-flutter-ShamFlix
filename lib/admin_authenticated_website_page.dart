@@ -29,6 +29,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
   Completer<void>? _pageLoadCompleter;
   bool _restrictCrawlerNavigation = false;
   String? _crawlerAllowedHost;
+  bool _crawlerPageStarted = false;
   final Set<String> _visitedPageUrls = <String>{};
   String? _pageError;
   String? _scannedPageUrl;
@@ -140,11 +141,23 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
         onProgress: (value) {
           if (mounted) setState(() => _progress = value);
         },
-        onPageStarted: (_) {
+        onPageStarted: (url) {
+          if (_restrictCrawlerNavigation) {
+            if (!_crawlerPageStarted) return;
+            final uri = Uri.tryParse(url);
+            final host = _crawlerAllowedHost?.toLowerCase();
+            _crawlerPageStarted = uri != null &&
+                uri.scheme == 'https' &&
+                host != null &&
+                (uri.host.toLowerCase() == host ||
+                    uri.host.toLowerCase().endsWith('.$host'));
+          }
           if (mounted) setState(() => _pageError = null);
         },
         onNavigationRequest: (request) {
-          if (!_restrictCrawlerNavigation) return NavigationDecision.navigate;
+          if (!_restrictCrawlerNavigation || !request.isMainFrame) {
+            return NavigationDecision.navigate;
+          }
           final uri = Uri.tryParse(request.url);
           final host = _crawlerAllowedHost?.toLowerCase();
           final allowed = uri != null &&
@@ -308,6 +321,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
 
         try {
           final pageLoaded = Completer<void>();
+          _crawlerPageStarted = false;
           _pageLoadCompleter = pageLoaded;
           await _controller.loadRequest(uri);
           await pageLoaded.future.timeout(const Duration(seconds: 15));
@@ -341,6 +355,7 @@ class _AdminAuthenticatedWebsitePageState extends State<AdminAuthenticatedWebsit
       _pageLoadCompleter = null;
       _restrictCrawlerNavigation = false;
       _crawlerAllowedHost = null;
+      _crawlerPageStarted = false;
       if (mounted) setState(() => _crawling = false);
     }
   }
